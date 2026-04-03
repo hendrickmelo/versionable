@@ -1,0 +1,63 @@
+[workspace]
+authors = ["Hendrick Melo"]
+channels = ["conda-forge"]
+name = "versionable"
+platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
+description = "Serialization framework for Python dataclasses with schema versioning, migrations, and pluggable backends"
+version = "0.0.1"
+
+[tasks]
+ruff = "ruff check --fix ."
+ruff_check = { cmd = ["ruff", "check", "."] }
+format = { cmd = ["ruff", "format", "."] }
+format_check = { cmd = ["ruff", "format", "--check", "."] }
+mypy = "mypy src/"
+pyright = "npx pyright src/"
+prettier = "npx prettier --write '**/*.md'"
+prettier_check = "npx prettier --check '**/*.md'"
+mdlint = "npx markdownlint-cli2 --fix '**/*.md'"
+mdlint_check = "npx markdownlint-cli2 '**/*.md'"
+test = "pytest"
+cleanup = { depends-on = ["format", "ruff", "mypy", "pyright", "prettier", "mdlint"] }
+ci = { depends-on = ["format_check", "ruff_check", "mypy", "pyright", "prettier_check", "mdlint_check", "test"] }
+
+[dependencies]
+python = ">=3.12,<3.14"
+toml = ">=0.10"
+pyyaml = ">=6.0"
+numpy = ">=1.26"
+
+[feature.hdf5.dependencies]
+h5py = ">=3.10"
+
+[feature.hdf5.pypi-dependencies]
+hdf5plugin = ">=4.0"
+
+[pypi-dependencies]
+versionable = { path = "./", editable = true }
+
+[feature.dev.dependencies]
+pytest = ">=8.0"
+ruff = ">=0.4"
+nodejs = ">=20"
+ipython = ">=8"
+
+[feature.dev.pypi-dependencies]
+mypy = ">=1.10"
+
+[feature.docs.dependencies]
+sphinx = ">=7"
+furo = "*"
+
+[feature.docs.pypi-dependencies]
+myst-parser = ">=2"
+sphinx-autobuild = "*"
+
+[feature.docs.tasks]
+docs = "sphinx-build -b html docs docs/_build/html"
+docs-live = "sphinx-autobuild docs docs/_build/html"
+
+[environments]
+default = { features = ["dev", "hdf5"] }
+minimal = { features = ["dev"] }
+docs = { features = ["docs"] }

@@ -1,0 +1,95 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "versionable"
+version = "0.1.0"
+description = "Versioned persistence for Python dataclasses with hash validation, declarative migrations, and pluggable backends"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+authors = [
+    { name = "Hendrick Melo" },
+]
+keywords = ["serialization", "dataclass", "hdf5", "toml", "json", "schema", "migration"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "toml>=0.10",
+    "pyyaml>=6.0",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+hdf5 = ["h5py>=3.10", "hdf5plugin>=4.0"]
+dev = [
+    "pytest>=8.0",
+    "mypy>=1.10",
+    "ruff>=0.4",
+]
+
+[project.urls]
+Repository = "https://github.com/hendrickmelo/versionable"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/versionable"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "TC",
+    "RUF", "PLR", "PERF", "SLF", "RET",
+]
+ignore = [
+    "N802",     # camelCase function names (project convention)
+    "N803",     # camelCase argument names (project convention)
+    "N806",     # camelCase variable names (project convention)
+    "N807",     # dunder function name
+    "N812",     # lowercase imported as non-lowercase
+    "N815",     # camelCase in class scope (project convention)
+    "N816",     # camelCase in global scope (project convention)
+    "PLR0912",
+    "PLR0915",
+    "PLR0913",
+    "PERF203",
+    "TC001",
+    "TC003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/test_*py" = ["PLR2004"]  # magic values in assertions are expected in unit tests
+
+[tool.mypy]
+check_untyped_defs = true
+no_implicit_optional = true
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
+warn_return_any = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+module = ["h5py.*", "hdf5plugin.*", "toml.*", "yaml.*"]
+ignore_missing_imports = true
+
+
+[tool.pyright]
+include = ["src"]
+exclude = ["**/node_modules", "**/__pycache__", "**/.*", "src/versionable/_hdf5_backend.py", "src/versionable/_hdf5_compression.py", "src/versionable/_lazy.py"]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+reportAttributeAccessIssue = "warning"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

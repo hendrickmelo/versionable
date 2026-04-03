@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: cleanup
+        name: cleanup
+        entry: pixi run cleanup
+        language: system
+        pass_filenames: false
+        always_run: true

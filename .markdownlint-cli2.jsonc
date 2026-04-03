@@ -1,0 +1,14 @@
+{
+  "config": {
+    "line-length": { "line_length": 120 },
+    "no-duplicate-heading": false,
+    "no-inline-html": false,
+    "table-column-style": false
+  },
+  "ignores": [
+    ".*/**",
+    "docs/_build/**",
+    "docs/plans/**",
+    "node_modules/**"
+  ]
+}

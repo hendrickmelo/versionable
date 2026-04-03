@@ -1,0 +1,153 @@
+# versionable — Python 3.12+ Library
+
+## General Preferences
+
+- Do not add Claude attribution to commit messages or PRs
+- Keep PR summaries concise - avoid verbose explanations
+- Prefer better type hints over casting or `# type: ignore` or `# noqa:` comments
+- Documentation should be concise and to the point
+- If an implementation isn't working after a few iterations, stop and ask the user to intervene
+- Always specify a language tag on fenced code blocks in markdown (e.g., `python`, `bash`, `text`)
+- Do not fix markdown lint warnings during editing — they are distracting and cosmetic. If a clean pass is needed, run
+  it once at the end.
+
+## Shortcuts
+
+- "qreview" → Check for type errors, missing tests, security issues, unused imports
+- "ship it" → Run `pixi run cleanup`, fix any errors, then create a commit
+- "quick test" → Run `pixi run pytest -x` (stop on first failure)
+- "full check" → Run `pixi run cleanup && pixi run pytest`
+
+## Overview
+
+Serialization framework for Python dataclasses with schema versioning, hash validation, declarative migrations, type
+converters, and pluggable storage backends (JSON, TOML, HDF5).
+
+**Project Structure:**
+
+- `src/versionable/` — Package source (src layout)
+- `tests/` — pytest test suite
+- `README.md` — Usage guide and API documentation
+
+## Build System: Pixi
+
+**Use Pixi for all environment management. The package is also pip-installable via hatchling for consumers.**
+
+```bash
+pixi install              # Install all dependencies
+pixi add <package>        # Add new dependencies
+pixi shell                # Activate environment
+pixi run <task>           # Run defined tasks
+pixi run -- <cmd>         # Run arbitrary commands in the pixi environment
+```
+
+All new dependencies → [pixi.toml](pixi.toml)
+
+## Pre-Commit Checklist
+
+**CRITICAL: Always run cleanup before committing:**
+
+```bash
+pixi run cleanup          # Runs formatters, linters, and type checks
+```
+
+Fix all errors reported by cleanup before creating commits. Do not commit if cleanup fails.
+
+## PR Workflow
+
+- Default to creating draft PRs, unless asked otherwise.
+- When creating a PR, show the title and summary for review before actually creating it.
+- Never modify or update merged PRs.
+
+### Pull Request Format
+
+**Description:** Brief explanation of what and why
+
+**Changes:**
+
+- Bullet point of change 1
+- Bullet point of change 2
+
+**Tests performed:** (if applicable)
+
+- Test scenario 1
+- Test scenario 2
+
+## Python Coding Standards
+
+### Naming Conventions
+
+- **Functions/methods/variables**: `camelCase`
+    - Example: `def computeHash()`, `fieldType`, `nativeTypes`
+    - Variables that have units include the unit in the name (e.g., `frequency_Hz`)
+- **Classes/types**: `PascalCase`
+    - Example: `Versionable`, `Migration`, `JsonBackend`
+- **Constants**: `SCREAMING_SNAKE_CASE`
+    - Example: `_CANONICAL_NAMES`, `_UNHANDLED`
+- **Private members**: Leading underscore
+    - Example: `_registry`, `_ops`, `def _resolveFields()`
+- **Private modules**: Leading underscore
+    - Example: `_api.py`, `_types.py` (public API exposed only through `__init__.py`)
+- **Test functions**: `snake_case` with `test_` prefix (pytest convention)
+    - Example: `def test_roundtrip()`, `def test_changesOnFieldAdd()`
+
+### Type Annotations
+
+Use comprehensive type hints on all functions and instance variables:
+
+```python
+def computeHash(fields: dict[str, Any]) -> str:
+    ...
+```
+
+- Avoid using `Any` unless strictly necessary. If found to be necessary, add a short explanation.
+- Use modern typing features: `X | Y` unions, `list[T]`, `dict[K, V]`
+
+### Import Organization
+
+```python
+from __future__ import annotations
+
+# 1. Standard library
+import hashlib
+import logging
+from typing import Any
+
+# 2. Third-party
+import numpy as np
+
+# 3. Local
+from versionable.errors import VersionableError
+from versionable._hash import computeHash
+```
+
+Initialize logger: `logger = logging.getLogger(__name__)`
+
+### Docstrings
+
+- **Simple functions**: One-line docstrings
+- **Complex functions**: Google-style with Args/Returns/Raises sections
+- **Modules**: Module-level docstring explaining purpose
+
+### Error Handling
+
+- Custom exception hierarchy rooted at `VersionableError` (see `_errors.py`)
+- Reraise with context: `raise BackendError(...) from e`
+
+## Architecture
+
+- **`__init__.py`** — Public API re-exports with `__all__`
+- **`_base.py`** — `Versionable` base class using `__init_subclass__`, class registry, metadata
+- **`_hash.py`** — Deterministic schema hash computation
+- **`_types.py`** — Type converter registry, serialize/deserialize dispatch
+- **`_backend.py`** — Backend ABC, extension-based auto-detection
+- **`_json_backend.py`**, **`_toml_backend.py`**, **`_hdf5_backend.py`** — Storage backends
+- **`_migration.py`** — Declarative + imperative migration system
+- **`_lazy.py`** — Lazy HDF5 array loading via dynamic subclass
+- **`_api.py`** — `save()`, `load()`, `loadDynamic()` entry points
+
+Key design decisions:
+- `__init_subclass__` (not metaclass) for `Versionable`
+- Hash validated at class definition time (import time)
+- Versionable types use their serialization name (not module path) in hashes — stable across file moves
+- `save()`/`load()` accessed via qualified import (`import versionable`), not direct import
