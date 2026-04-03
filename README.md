@@ -38,14 +38,14 @@ drift out of sync.
 
 ### How does it compare?
 
-| Versionable Feature                        | pickle | dc libs¹ | protobuf | raw JSON | sidecars |
+| Versionable Features                       | pickle | dc libs¹ | protobuf | raw JSON | sidecars |
 | ------------------------------------------ | ------ | -------- | -------- | -------- | -------- |
 | ✅ Zero boilerplate                        | ✅     | ✅       | ❌       | ❌       | ❌       |
 | ✅ Versioning with declarative migrations  | ❌     | ❌       | ❌       | ❌       | ❌       |
 | ✅ Rich type support                       | ✅     | ✅       | 🔧       | ❌       | ❌       |
 | ✅ Nested objects, versioned independently | 🟠     | 🟠       | 🟠       | 🟠       | ❌       |
 | ✅ Native numpy / lazy HDF5                | 🟠     | ❌       | ❌       | ❌       | 🟠       |
-| ✅ JSON, YAML, TOML, HDF5                  | ❌     | 🟠       | 🟠       | 🟠       | ❌       |
+| ✅ Custom Backends                         | ❌     | 🟠       | 🟠       | 🟠       | ❌       |
 | ✅ Import-time validation                  | ❌     | ❌       | 🔧       | ❌       | ❌       |
 | ✅ Modern, type-safe Python                | ❌     | 🟠       | ✅       | ❌       | ❌       |
 
