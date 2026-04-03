@@ -49,7 +49,10 @@ drift out of sync.
 | ✅ Import-time validation                  | ❌     | ❌       | 🔧       | ❌       | ❌       |
 | ✅ Modern, type-safe Python                | ❌     | 🟠       | ✅       | ❌       | ❌       |
 
-¹ pydantic, dataclasses-json, etc. | 🔧 = requires manual effort / build step | 🟠 = partial
+¹ pydantic, dataclasses-json, etc.
+
+- 🔧 = requires manual effort / build step
+- 🟠 = partial
 
 ## Installation
 
