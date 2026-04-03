@@ -56,7 +56,7 @@ Common use cases:
 - **Multiple versions in one process** — if you need two definitions of the same schema (e.g. for migration testing),
   only one can be registered.
 
-Duplicate name detection: if two registered classes share the same serialization name, versionable raises a
+Duplicate name detection: if two registered classes share the same serialization name, **`versionable`** raises a
 `VersionableError` at class definition time with a suggested fix:
 
 ```text
@@ -123,7 +123,7 @@ class MyConfig(Versionable, version=1, hash="4b7866"):
 
 ## Reserved Keys
 
-The following dunder keys are used internally by versionable and must not be used as field names or as keys in
+The following dunder keys are used internally by **`versionable`** and must not be used as field names or as keys in
 user-provided dict values:
 
 | Key           | Purpose                                                   |
@@ -135,4 +135,4 @@ user-provided dict values:
 | `__ndarray__` | Marks a dict as a serialized numpy array                  |
 | `__json__`    | YAML-only wrapper for values with no native YAML encoding |
 
-⚠️ Using any of these as a field name or dict key will cause incorrect serialization or deserialization.
+> ⚠️ **Warning:** Using any of these as a field name or dict key will cause incorrect serialization or deserialization.

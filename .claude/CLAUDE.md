@@ -20,8 +20,8 @@
 
 ## Overview
 
-Serialization framework for Python dataclasses with schema versioning, hash validation, declarative migrations, type
-converters, and pluggable storage backends (JSON, TOML, HDF5).
+Versioned persistence framework for Python dataclasses with schema hash validation, declarative migrations, type
+converters, and pluggable storage backends (JSON, TOML, YAML, HDF5).
 
 **Project Structure:**
 
@@ -141,10 +141,12 @@ Initialize logger: `logger = logging.getLogger(__name__)`
 - **`_hash.py`** — Deterministic schema hash computation
 - **`_types.py`** — Type converter registry, serialize/deserialize dispatch
 - **`_backend.py`** — Backend ABC, extension-based auto-detection
-- **`_json_backend.py`**, **`_toml_backend.py`**, **`_hdf5_backend.py`** — Storage backends
+- **`_json_backend.py`**, **`_toml_backend.py`**, **`_yaml_backend.py`**, **`_hdf5_backend.py`** — Storage backends
 - **`_migration.py`** — Declarative + imperative migration system
 - **`_lazy.py`** — Lazy HDF5 array loading via dynamic subclass
 - **`_api.py`** — `save()`, `load()`, `loadDynamic()` entry points
+- **`errors.py`** — Exception hierarchy (`VersionableError` and subclasses)
+- **`hdf5.py`** — HDF5 submodule re-exports (compression presets)
 
 Key design decisions:
 - `__init_subclass__` (not metaclass) for `Versionable`

@@ -1,9 +1,9 @@
 # Backends
 
-versionable provides the option of several backends, each targeting a different trade-off between human-readability,
-interoperability with other tools, and performance with large binary data.
+**`versionable`** provides the option of several backends, each targeting a different trade-off between
+human-readability, interoperability with other tools, and performance with large binary data.
 
-You never have to instantiate a backend directly — versionable picks the right one automatically based on the file
+You never have to instantiate a backend directly — **`versionable`** picks the right one automatically based on the file
 extension you pass to `save()` / `load()`. If you use `.json`, you get JSON. If you use `.toml`, you get TOML. The same
 object can be saved and loaded with different backends just by changing the filename extension, which makes it easy to
 migrate between formats or write tests against a lighter-weight backend than you use in production.
@@ -309,10 +309,10 @@ block sizes are handled automatically.
 
 #### Compatibility note
 
-The default `BLOSC_DEFAULT` (and `ZSTD_*` presets) produce files that require `hdf5plugin` to be installed on the
-reading side as well — any environment with `versionable[hdf5]` has it, but external tools (MATLAB, HDFView, bare
-h5py without the plugin) may not. If your HDF5 files need to be read by software outside this library, use
-`GZIP_DEFAULT` instead — gzip is supported by every HDF5 implementation:
+The default `ZSTD_*` presents (and `BLOSC_DEFAULT`, ) produce files that require `hdf5plugin` to be installed on the
+reading side as well — any environment with `versionable[hdf5]` has it, but external tools (MATLAB, HDFView, bare h5py
+without the plugin) may not. If your HDF5 files need to be readable by tools outside the **`versionable`** ecosystem,
+use `GZIP_DEFAULT` instead — gzip is supported by every HDF5 implementation:
 
 ```python
 versionable.save(rec, "recording.h5", compression=GZIP_DEFAULT)

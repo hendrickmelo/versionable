@@ -8,15 +8,15 @@ Save and load Python dataclasses to files — with schema versioning, type conve
 
 **[Full documentation →](https://versionable.readthedocs.io)**
 
-## Why versionable?
+## Why **`versionable`** ?
 
-Serializing is a fancy way to say _turning an object into a file and back again_. With versionable, you define your
-data as a Python dataclass. versionable gives you a `save()` and a `load()` function that produce human-readable
-files (YAML, JSON, TOML) or binary-efficient ones (HDF5) — each carrying schema metadata so that a file written by v1 of
-your code 5 months ago loads cleanly into v5, automatically.
+Your data lives in files. Your code keeps changing. Without protection, old files silently load with missing fields,
+wrong types, or stale values — your data schemes against you.
 
-**The problem:** you save parameters to a file, refactor your code, and the old file no longer loads — or worse, loads
-silently with wrong data!
+**`versionable`** stops the scheming. Define your data as a Python dataclass, and get `save()` and `load()` functions
+that produce human-readable files (YAML, JSON, TOML) or binary-efficient ones (HDF5). Every file is stamped with a
+schema fingerprint and version number, so a file written by v1 of your code loads cleanly into v5 — automatically
+migrated, never silently broken.
 
 _What to use?_ `.pickle` is [unsafe](https://docs.python.org/3/library/pickle.html#restricting-globals). Pure `.json`
 and `.yaml` carry no schema and manual wrappers break the moment your schema changes. `.csv` and `.parquet` are great
@@ -28,30 +28,31 @@ drift out of sync.
 **What you get with versionable:**
 
 - **Zero boilerplate** — no schema files, no code generation, no build step. Just inherit from `Versionable`
+- **Simple versioning with declarative migrations** — rename, add, remove, or transform fields across versions
+- **Rich type support** — datetime, Path, UUID, Enum, numpy arrays, and more — easy to extend with your own
+- **Nested objects with independent versioning** — compose complex dataclasses from smaller `Versionable` pieces
+- **Native numpy array support** — with lazy HDF5 loading for large datasets
+- **JSON, YAML, TOML, HDF5** — or bring your own backend
 - **Import-time safety** — schema hash mismatches are caught when your module loads, not in production
-- **Declarative migrations** — rename, add, remove, or transform fields across versions
-- **Nested composition** — compose complex dataclasses from smaller `Versionable` pieces that version independently
-- **Pluggable backends** — YAML, JSON, TOML, HDF5 (with lazy loading for large arrays)
-- **Built-in type converters** — datetime, Path, UUID, Enum, numpy arrays, and more
-- **Human-readable output** — files you can inspect, diff, and hand-edit with any editor
 - **Modern, type-safe Python** — fully typed and compatible with mypy, pyright, and other static analyzers
 
 ### How does it compare?
 
-| Feature                      | versionable | pickle | JSON/YAML | protobuf | JSON libs\* | sidecars |
-| ---------------------------- | -------------- | ------ | --------- | -------- | ----------- | -------- |
-| Zero boilerplate             | ✅             | ✅     | ✅        | ❌       | ✅          | ❌       |
-| Import-time validation       | ✅             | ❌     | ❌        | 🔧       | ❌          | ❌       |
-| Schema versioning            | ✅             | ❌     | ❌        | 🔧       | ❌          | ❌       |
-| Automatic migrations         | ✅             | ❌     | ❌        | ❌       | ❌          | ❌       |
-| Nested composition           | ✅             | ✅     | ⚠️        | ✅       | ⚠️          | ❌       |
-| Large array support (HDF5)   | ✅             | ❌     | ❌        | ❌       | ❌          | ⚠️       |
-| Human-readable files         | ✅             | ❌     | ✅        | ❌       | ✅          | ⚠️       |
-| Type-safe                    | ✅             | ❌     | ❌        | ✅       | ⚠️          | ❌       |
-| Safe to load untrusted files | ✅             | ❌     | ✅        | ✅       | ✅          | ⚠️       |
-| Data + metadata in one file  | ✅             | ✅     | ✅        | ✅       | ✅          | ❌       |
+| Versionable Features                       | pickle | dc libs¹ | protobuf | raw JSON | sidecars |
+| ------------------------------------------ | ------ | -------- | -------- | -------- | -------- |
+| ✅ Zero boilerplate                        | ✅     | ✅       | ❌       | ❌       | ❌       |
+| ✅ Versioning with declarative migrations  | ❌     | ❌       | ❌       | ❌       | ❌       |
+| ✅ Rich type support                       | ✅     | ✅       | 🔧       | ❌       | ❌       |
+| ✅ Nested objects, versioned independently | 🟠     | 🟠       | 🟠       | 🟠       | ❌       |
+| ✅ Native numpy / lazy HDF5                | 🟠     | ❌       | ❌       | ❌       | 🟠       |
+| ✅ Custom Backends                         | ❌     | 🟠       | 🟠       | 🟠       | ❌       |
+| ✅ Import-time validation                  | ❌     | ❌       | 🔧       | ❌       | ❌       |
+| ✅ Modern, type-safe Python                | ❌     | 🟠       | ✅       | ❌       | ❌       |
 
-\* dataclasses-json, dacite, pydantic, cattrs, etc. · 🔧 = requires manual effort / build step · ⚠️ = partial
+¹ pydantic, dataclasses-json, etc.
+
+- 🔧 = requires manual effort / build step
+- 🟠 = partial
 
 ## Installation
 
@@ -115,9 +116,9 @@ For custom type converters, HDF5 support, and more, see the
 ## Acknowledgements
 
 The idea behind versionable started over 15 years ago in C++, where I first learned the approach from
-[Steve Araiza](https://github.com/saraiza). Over the years the idea evolved from using `CArchive` to make use of C++11,
-variadic macros, and other fun modern C++ features. Some version of serializable has been a part of every project I've
-worked on since those days.
+[Steve Araiza](https://github.com/saraiza). Over the years the idea of a Serializable / Versionable class evolved from
+using `CArchive` to make use of C++11, variadic macros, and other fun modern C++ features. Some version of this pattern
+has been a part of every project I've worked on since those days.
 
 This is the Python version of the idea. It is built using modern, type-safe Python with great fresh ideas from
 [Emma Powers](https://github.com/emmapowers/).

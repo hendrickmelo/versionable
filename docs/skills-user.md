@@ -35,8 +35,8 @@ versionable.save(SensorConfig(sampleRate_Hz=1000.0), "config.yaml")
 loaded = versionable.load(SensorConfig, "config.yaml")
 ```
 
-During development, call `ignoreHashErrors(True)` to get warnings instead of errors while you iterate on fields.
-Compute and set the final hash before shipping.
+During development, call `ignoreHashErrors(True)` to get warnings instead of errors while you iterate on fields. Compute
+and set the final hash before shipping.
 
 ## Defining Versionable Classes
 
@@ -96,19 +96,19 @@ obj = versionable.loadDynamic("config.yaml")
 
 ### Save Options
 
-| Option            | Backends       | Description                                     |
-| ----------------- | -------------- | ----------------------------------------------- |
-| `commentDefaults` | YAML, TOML     | Comment out fields matching class defaults       |
-| `compression`     | HDF5           | Compression config (see HDF5 section)            |
+| Option            | Backends   | Description                                |
+| ----------------- | ---------- | ------------------------------------------ |
+| `commentDefaults` | YAML, TOML | Comment out fields matching class defaults |
+| `compression`     | HDF5       | Compression config (see HDF5 section)      |
 
 ### Load Options
 
-| Option           | Backends | Description                                                |
-| ---------------- | -------- | ---------------------------------------------------------- |
-| `preload`        | HDF5     | `["field"]` or `"*"` — eager-load arrays instead of lazy   |
-| `metadataOnly`   | HDF5     | Skip arrays entirely (fastest for metadata scanning)        |
-| `upgradeInPlace` | All      | Allow migrations that rewrite the file                      |
-| `assumeVersion`  | All      | Override the version read from file metadata                |
+| Option           | Backends | Description                                              |
+| ---------------- | -------- | -------------------------------------------------------- |
+| `preload`        | HDF5     | `["field"]` or `"*"` — eager-load arrays instead of lazy |
+| `metadataOnly`   | HDF5     | Skip arrays entirely (fastest for metadata scanning)     |
+| `upgradeInPlace` | All      | Allow migrations that rewrite the file                   |
+| `assumeVersion`  | All      | Override the version read from file metadata             |
 
 ## Backends
 
@@ -142,15 +142,15 @@ loaded = versionable.load(MyClass, "data.h5", metadataOnly=True)
 
 **Compression presets** (from `versionable.hdf5`):
 
-| Preset         | Notes                                      |
-| -------------- | ------------------------------------------ |
-| `ZSTD_DEFAULT` | zstd level 3 — default, fast, good ratio   |
-| `ZSTD_FAST`    | zstd level 1 — fastest                     |
-| `ZSTD_BEST`    | zstd level 19 — best ratio, slow           |
-| `BLOSC_DEFAULT`| Blosc + zstd — fast for large arrays        |
-| `GZIP_DEFAULT` | gzip level 4 — universal compatibility      |
-| `LZF`          | LZF — fastest, no extra deps                |
-| `UNCOMPRESSED` | No compression                              |
+| Preset          | Notes                                    |
+| --------------- | ---------------------------------------- |
+| `ZSTD_DEFAULT`  | zstd level 3 — default, fast, good ratio |
+| `ZSTD_FAST`     | zstd level 1 — fastest                   |
+| `ZSTD_BEST`     | zstd level 19 — best ratio, slow         |
+| `BLOSC_DEFAULT` | Blosc + zstd — fast for large arrays     |
+| `GZIP_DEFAULT`  | gzip level 4 — universal compatibility   |
+| `LZF`           | LZF — fastest, no extra deps             |
+| `UNCOMPRESSED`  | No compression                           |
 
 zstd and blosc require `hdf5plugin` (included in `[hdf5]` extra). gzip and lzf work everywhere — use `GZIP_DEFAULT` if
 files must be readable by MATLAB or HDFView.
@@ -166,18 +166,18 @@ files must be readable by MATLAB or HDFView.
 
 **Stdlib types (auto-converted):**
 
-| Type               | Serialized As              |
-| ------------------ | -------------------------- |
-| `datetime.datetime`| ISO 8601 string            |
-| `datetime.date`    | ISO 8601 string            |
-| `datetime.time`    | ISO 8601 string            |
-| `datetime.timedelta` | Float (total seconds)    |
-| `pathlib.Path`     | String                     |
-| `uuid.UUID`        | String                     |
-| `decimal.Decimal`  | String                     |
-| `bytes`            | Base64 string              |
-| `complex`          | `[real, imag]`             |
-| `re.Pattern`       | Pattern string             |
+| Type                 | Serialized As         |
+| -------------------- | --------------------- |
+| `datetime.datetime`  | ISO 8601 string       |
+| `datetime.date`      | ISO 8601 string       |
+| `datetime.time`      | ISO 8601 string       |
+| `datetime.timedelta` | Float (total seconds) |
+| `pathlib.Path`       | String                |
+| `uuid.UUID`          | String                |
+| `decimal.Decimal`    | String                |
+| `bytes`              | Base64 string         |
+| `complex`            | `[real, imag]`        |
+| `re.Pattern`         | Pattern string        |
 
 **numpy arrays:** Native HDF5 datasets (compressed, lazy-loaded). Base64-compressed npz blobs in JSON/TOML/YAML.
 
@@ -267,17 +267,17 @@ class Config(Versionable, version=3, hash="x1y2z3"):
 
 **Available operations (chainable):**
 
-| Operation                                  | Description                          |
-| ------------------------------------------ | ------------------------------------ |
-| `.rename(old, new)`                        | Rename a field                       |
-| `.drop(field)`                             | Remove a field from old data         |
-| `.add(field, default=value)`               | Add field with default for old files |
-| `.convert(field, via=fn)`                  | Transform a field's value            |
-| `.derive(target, from_=source, via=fn)`    | Create new field from existing       |
-| `.split(field, into={...})`                | Split one field into multiple        |
-| `.merge(fields=[...], into=name, via=fn)`  | Merge multiple fields into one       |
-| `.requiresUpgrade()`                       | Mark as needing in-place rewrite     |
-| `.then(other_migration)`                   | Chain another migration              |
+| Operation                                 | Description                          |
+| ----------------------------------------- | ------------------------------------ |
+| `.rename(old, new)`                       | Rename a field                       |
+| `.drop(field)`                            | Remove a field from old data         |
+| `.add(field, default=value)`              | Add field with default for old files |
+| `.convert(field, via=fn)`                 | Transform a field's value            |
+| `.derive(target, from_=source, via=fn)`   | Create new field from existing       |
+| `.split(field, into={...})`               | Split one field into multiple        |
+| `.merge(fields=[...], into=name, via=fn)` | Merge multiple fields into one       |
+| `.requiresUpgrade()`                      | Mark as needing in-place rewrite     |
+| `.then(other_migration)`                  | Chain another migration              |
 
 Chain multiple operations: `Migration().rename("a", "b").drop("c").add("d", default=0)`
 

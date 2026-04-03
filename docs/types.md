@@ -1,8 +1,8 @@
 # Supported Types
 
-versionable handles a wide range of Python types out of the box. Primitives, collections, and common standard-library
-types all serialize automatically — no registration needed. For anything else, you can register a custom converter or
-implement the `VersionableValue` protocol.
+**`versionable`** handles a wide range of Python types out of the box. Primitives, collections, and common
+standard-library types all serialize automatically — no registration needed. For anything else, you can register a
+custom converter or implement the `VersionableValue` protocol.
 
 ## Primitives
 
@@ -85,7 +85,7 @@ class Shape(Versionable, version=1, hash="..."):
 
 ## Custom Converters
 
-If your dataclass uses a type that versionable doesn't handle natively, you have two options: register a converter
+If your dataclass uses a type that **`versionable`** doesn't handle natively, you have two options: register a converter
 (this section) or implement the `VersionableValue` protocol (next section).
 
 Use `registerConverter` when you need full control over serialization — for example, when the type comes from a
@@ -132,4 +132,4 @@ class UserId:
 ```
 
 Any class with both `toValue` and `fromValue` is automatically detected — no registration required. This is the simplest
-way to add serialization to your own types if you are not worried about version.
+way to add serialization support to your own types when versioning isn't needed.
