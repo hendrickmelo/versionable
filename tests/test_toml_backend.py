@@ -174,6 +174,20 @@ class TestTomlCommentDefaults:
         assert loaded.debug is False
         assert loaded.retries == 3
 
+    def test_nestedSectionHeadersNotCommented(self, tmp_path: Path) -> None:
+        """Nested Versionable section headers and their __meta__ stay uncommented."""
+        obj = WithNested(name="test", point=Inner(x=1.0, y=2.0))
+        p = tmp_path / "out.toml"
+        versionable.save(obj, p, commentDefaults=True)
+
+        text = p.read_text()
+        # Section headers must never be commented
+        assert "[point]" in text
+        assert "# [point]" not in text
+        # __meta__ values within nested sections must never be commented
+        assert '__OBJECT__ = "Inner"' in text
+        assert "# __OBJECT__" not in text
+
 
 class TestTomlLiteral:
     def test_literalRoundTrip(self, tmp_path: Path) -> None:

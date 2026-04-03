@@ -212,18 +212,36 @@ def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) 
 
             # Check if this block matches the default
             if key in defaultBlocks and key in originalBlocks and defaultBlocks[key] == originalBlocks[key]:
-                # Comment out this line and its continuation lines
-                result.append("# " + lines[i])
-                i += 1
-                while i < len(lines):
-                    line = lines[i]
+                # Peek ahead: if the block contains __OBJECT__, it's a nested
+                # Versionable — keep the key line and metadata uncommented,
+                # only comment field value lines.
+                blockLines: list[str] = []
+                j = i + 1
+                while j < len(lines):
+                    line = lines[j]
                     lineStripped = line.rstrip("\n")
-                    # Continuation: indented lines or bare list items
                     if lineStripped and (lineStripped[0].isspace() or lineStripped.startswith("- ")):
-                        result.append("# " + line)
-                        i += 1
+                        blockLines.append(line)
+                        j += 1
                     else:
                         break
+
+                hasNestedMeta = any("__OBJECT__" in bl for bl in blockLines)
+                if hasNestedMeta:
+                    # Keep key line uncommented
+                    result.append(lines[i])
+                    for bl in blockLines:
+                        blStripped = bl.strip()
+                        metaKey = blStripped.split(":")[0] if ":" in blStripped else ""
+                        if metaKey.startswith("__") and metaKey.endswith("__"):
+                            result.append(bl)
+                        else:
+                            result.append("# " + bl)
+                else:
+                    # Simple field — comment the whole block
+                    result.append("# " + lines[i])
+                    result.extend("# " + bl for bl in blockLines)
+                i = j
                 continue
 
         result.append(lines[i])
