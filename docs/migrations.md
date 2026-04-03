@@ -15,8 +15,8 @@ applied in order — v1 → v2 → v3 — before the object is constructed.
 
 ## Renaming a Class
 
-When you rename a `Versionable` class, existing files on disk still contain the old name in their `__OBJECT__`
-metadata. Use `old_names` to register the old name(s) so those files can still be loaded:
+When you rename a `Versionable` class, existing files on disk still contain the old name in their `__OBJECT__` metadata.
+Use `old_names` to register the old name(s) so those files can still be loaded:
 
 ```python
 # Was previously called "SensorReading"
@@ -104,8 +104,8 @@ A v1 file now goes through both migrations: `title` → `name`, then `debug` is 
 
 ### Add a Field
 
-When a new field has a dataclass default, no migration and no version bump are needed — versionable fills in the
-default automatically for any file that doesn't have the field. You only need to update the hash:
+When a new field has a dataclass default, no migration and no version bump are needed — versionable fills in the default
+automatically for any file that doesn't have the field. You only need to update the hash:
 
 ```python
 # still version=3 — only the hash changes because the fields changed

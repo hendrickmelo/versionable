@@ -85,8 +85,8 @@ class Shape(Versionable, version=1, hash="..."):
 
 ## Custom Converters
 
-If your dataclass uses a type that versionable doesn't handle natively, you have two options: register a converter
-(this section) or implement the `VersionableValue` protocol (next section).
+If your dataclass uses a type that versionable doesn't handle natively, you have two options: register a converter (this
+section) or implement the `VersionableValue` protocol (next section).
 
 Use `registerConverter` when you need full control over serialization — for example, when the type comes from a
 third-party library you can't modify, or when the serialized representation doesn't map cleanly to a single primitive
@@ -132,4 +132,4 @@ class UserId:
 ```
 
 Any class with both `toValue` and `fromValue` is automatically detected — no registration required. This is the simplest
-way to add serialization to your own types if you are not worried about version.
+way to add serialization support to your own types when versioning isn't needed.

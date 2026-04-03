@@ -135,4 +135,4 @@ user-provided dict values:
 | `__ndarray__` | Marks a dict as a serialized numpy array                  |
 | `__json__`    | YAML-only wrapper for values with no native YAML encoding |
 
-⚠️ Using any of these as a field name or dict key will cause incorrect serialization or deserialization.
+> ⚠️ **Warning:** Using any of these as a field name or dict key will cause incorrect serialization or deserialization.

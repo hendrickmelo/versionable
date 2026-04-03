@@ -310,8 +310,8 @@ block sizes are handled automatically.
 #### Compatibility note
 
 The default `BLOSC_DEFAULT` (and `ZSTD_*` presets) produce files that require `hdf5plugin` to be installed on the
-reading side as well — any environment with `versionable[hdf5]` has it, but external tools (MATLAB, HDFView, bare
-h5py without the plugin) may not. If your HDF5 files need to be read by software outside this library, use
+reading side as well — any environment with `versionable[hdf5]` has it, but external tools (MATLAB, HDFView, bare h5py
+without the plugin) may not. If your HDF5 files need to be readable by tools outside the versionable ecosystem, use
 `GZIP_DEFAULT` instead — gzip is supported by every HDF5 implementation:
 
 ```python
