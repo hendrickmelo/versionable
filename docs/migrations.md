@@ -4,38 +4,14 @@ Serialized files are long-lived. A config written today may be loaded by code si
 been renamed, added, or removed. Without a migration story, you'd be forced to either keep old field names forever, or
 break all existing files on every schema change.
 
-versionable solves this with versioned migrations. When you change a schema, you:
+**`versionable`** solves this with versioned migrations. When you change a schema, you:
 
 1. Bump `version`
 2. Recompute `hash` (via `MyClass.hash()`)
-3. Add a `Migrate` inner class that tells versionable how to transform old data into the new shape
+3. Add a `Migrate` inner class that tells **`versionable`** how to transform old data into the new shape
 
 When `load()` reads a file, it checks `__VERSION__` in the metadata. If it's behind the current version, migrations are
 applied in order — v1 → v2 → v3 — before the object is constructed.
-
-## Renaming a Class
-
-When you rename a `Versionable` class, existing files on disk still contain the old name in their `__OBJECT__` metadata.
-Use `old_names` to register the old name(s) so those files can still be loaded:
-
-```python
-# Was previously called "SensorReading"
-@dataclass
-class Measurement(
-    Versionable, version=1, hash="...", name="Measurement", old_names=["SensorReading"]
-):
-    timestamp: datetime
-    value: float
-```
-
-With this declaration:
-
-- New files are saved with `__OBJECT__: "Measurement"`
-- Files saved with `__OBJECT__: "SensorReading"` can still be loaded via `loadDynamic()`
-- Multiple old names are supported: `old_names=["SensorReading", "DataPoint"]`
-
-If another class already owns one of the old names, class definition raises `VersionableError` instead of silently
-reusing or overwriting that registry entry.
 
 ## Declarative Operations
 
@@ -104,8 +80,8 @@ A v1 file now goes through both migrations: `title` → `name`, then `debug` is 
 
 ### Add a Field
 
-When a new field has a dataclass default, no migration and no version bump are needed — versionable fills in the default
-automatically for any file that doesn't have the field. You only need to update the hash:
+When a new field has a dataclass default, no migration and no version bump are needed — **`versionable`** fills in the
+default automatically for any file that doesn't have the field. You only need to update the hash:
 
 ```python
 # still version=3 — only the hash changes because the fields changed
@@ -184,8 +160,8 @@ This is equivalent to declaring `v1` and `v2` separately — choose whichever re
 
 ## Multi-Version Chains
 
-The full `WorkerConfig` history in one place — versionable applies every migration from the file's version up to the
-class's current version, in ascending order:
+The full `WorkerConfig` history in one place — **`versionable`** applies every migration from the file's version up to
+the class's current version, in ascending order:
 
 ```python
 @dataclass
@@ -243,6 +219,30 @@ If the source field was removed in the new schema, chain a `drop` to clean it up
 ```python
 v1 = Migration().derive("timestamps", from_="raw_data", via=lambda d: d[:, 0]).drop("raw_data")
 ```
+
+## Renaming a Class
+
+When you rename a `Versionable` class, existing files on disk still contain the old name in their `__OBJECT__` metadata.
+Use `old_names` to register the old name(s) so those files can still be loaded:
+
+```python
+# Was previously called "SensorReading"
+@dataclass
+class Measurement(
+    Versionable, version=1, hash="...", name="Measurement", old_names=["SensorReading"]
+):
+    timestamp: datetime
+    value: float
+```
+
+With this declaration:
+
+- New files are saved with `__OBJECT__: "Measurement"`
+- Files saved with `__OBJECT__: "SensorReading"` can still be loaded via `loadDynamic()`
+- Multiple old names are supported: `old_names=["SensorReading", "DataPoint"]`
+
+If another class already owns one of the old names, class definition raises `VersionableError` instead of silently
+reusing or overwriting that registry entry.
 
 ## Imperative Migrations
 

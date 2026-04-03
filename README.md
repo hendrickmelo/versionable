@@ -8,15 +8,15 @@ Save and load Python dataclasses to files — with schema versioning, type conve
 
 **[Full documentation →](https://versionable.readthedocs.io)**
 
-## Why versionable?
+## Why **`versionable`** ?
 
 Your data lives in files. Your code keeps changing. Without protection, old files silently load with missing fields,
 wrong types, or stale values — your data schemes against you.
 
-versionable stops the scheming. Define your data as a Python dataclass, and get `save()` and `load()` functions that
-produce human-readable files (YAML, JSON, TOML) or binary-efficient ones (HDF5). Every file is stamped with a schema
-fingerprint and version number, so a file written by v1 of your code loads cleanly into v5 — automatically migrated,
-never silently broken.
+**`versionable`** stops the scheming. Define your data as a Python dataclass, and get `save()` and `load()` functions
+that produce human-readable files (YAML, JSON, TOML) or binary-efficient ones (HDF5). Every file is stamped with a
+schema fingerprint and version number, so a file written by v1 of your code loads cleanly into v5 — automatically
+migrated, never silently broken.
 
 _What to use?_ `.pickle` is [unsafe](https://docs.python.org/3/library/pickle.html#restricting-globals). Pure `.json`
 and `.yaml` carry no schema and manual wrappers break the moment your schema changes. `.csv` and `.parquet` are great

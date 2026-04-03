@@ -20,9 +20,10 @@ Serialized files outlive your code. If you rename a field, change a type, or add
 old version of your class will silently load with wrong values — or worse, load without error while corrupting
 downstream logic.
 
-The `hash` parameter is a 6-character fingerprint of your class's field names and types. versionable recomputes it every
-time your module is imported and raises `HashMismatchError` immediately if the class definition no longer matches what
-was declared. You find out at startup, not buried in a production bug.
+The `hash` parameter is a 6-character fingerprint of your class's field names and types. **`versionable`** recomputes it
+every time your module is imported and raises `HashMismatchError` immediately after you change your code if the class
+definition no longer matches what was declared. You find out at first startup, when you're changing the code, not buried
+in a production bug.
 
 ### Computing the hash for a new class
 
@@ -86,8 +87,8 @@ class MyConfig(Versionable, version=1, hash="4b7866"):  # ← hash still matches
 ```
 
 Without hash validation, `versionable.load(MyConfig, "config.yaml")` would silently return an object where `magnitude`
-is unset (or a default), and the `value = 9.81` from the file would be silently discarded. versionable catches this
-before you ever call `load`:
+is unset (or a default), and the `value = 9.81` from the file would be silently discarded. **`versionable`** catches
+this before you ever call `load`:
 
 ```text
 HashMismatchError: MyConfig — declared hash '4b7866' does not match computed 'a70249'

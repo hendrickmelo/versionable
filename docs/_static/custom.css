@@ -1,0 +1,6 @@
+.project-name {
+    color: #16a34a;
+    font-weight: 700;
+    font-family: var(--font-stack--monospace);
+    font-size: 0.875em;
+}
