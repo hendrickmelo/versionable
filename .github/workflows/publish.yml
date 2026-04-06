@@ -90,7 +90,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   bump-dev-version:
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' && !github.event.release.prerelease
     needs: publish
     runs-on: ubuntu-latest
     permissions:

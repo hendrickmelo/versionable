@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "versionable"
-version = "0.0.1.dev2"
+version = "0.0.1.dev3"
 description = "Versioned persistence for Python dataclasses with hash validation, declarative migrations, and pluggable backends"
 readme = "README.md"
 license = "MIT"
