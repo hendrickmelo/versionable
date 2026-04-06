@@ -5068,14 +5068,17 @@ packages:
   timestamp: 1767320173250
 - pypi: ./
   name: versionable
-  version: 0.1.0
-  sha256: 549eccbeccf7e73b0894f2b90d813c400549cf96c98b5e5eb973d688ab6ac12b
+  version: 0.0.1.dev0
+  sha256: 9c9f40e689a30f0209df0861f9249c0019b19c0401c612beb9863b9e48c678b1
   requires_dist:
   - toml>=0.10
   - pyyaml>=6.0
   - numpy>=1.26
   - h5py>=3.10 ; extra == 'hdf5'
   - hdf5plugin>=4.0 ; extra == 'hdf5'
+  - sphinx>=7 ; extra == 'docs'
+  - myst-parser>=2 ; extra == 'docs'
+  - furo ; extra == 'docs'
   - pytest>=8.0 ; extra == 'dev'
   - mypy>=1.10 ; extra == 'dev'
   - ruff>=0.4 ; extra == 'dev'

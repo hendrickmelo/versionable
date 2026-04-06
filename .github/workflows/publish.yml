@@ -1,0 +1,87 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
+
+      - run: pip install build
+      - run: python -m build
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  bump-dev-version:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Compute next dev version
+        id: next
+        run: |
+          RELEASED="${GITHUB_REF_NAME#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$RELEASED"
+          NEXT_DEV="${MAJOR}.${MINOR}.$((PATCH + 1)).dev0"
+          echo "version=$NEXT_DEV" >> "$GITHUB_OUTPUT"
+
+      - name: Update pyproject.toml
+        env:
+          NEXT_DEV: ${{ steps.next.outputs.version }}
+        run: sed -i "s/^version = .*/version = \"$NEXT_DEV\"/" pyproject.toml
+
+      - name: Create PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEXT_DEV: ${{ steps.next.outputs.version }}
+        run: |
+          BRANCH="chore/bump-${NEXT_DEV}"
+          git checkout -b "$BRANCH"
+          git add pyproject.toml
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Bump version to ${NEXT_DEV}"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "Bump version to ${NEXT_DEV}" \
+            --body "Automated post-release version bump after publishing ${GITHUB_REF_NAME}." \
+            --base main \
+            --head "$BRANCH"

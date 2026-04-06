@@ -7,12 +7,18 @@ if TYPE_CHECKING:
 
 project = "versionable"
 author = "Hendrick Melo"
-release = "0.0.1"
+try:
+    from importlib.metadata import version as _getVersion
+
+    release = _getVersion("versionable")
+except Exception:
+    release = "dev"
 
 extensions = ["myst_parser"]
 
 exclude_patterns = ["_build", "plans/**"]
 
+html_favicon = "images/favicon-192.png"
 html_theme = "furo"
 html_static_path = ["_static", "images"]
 html_css_files = ["custom.css"]

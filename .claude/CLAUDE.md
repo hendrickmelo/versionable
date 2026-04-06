@@ -43,6 +43,24 @@ pixi run -- <cmd>         # Run arbitrary commands in the pixi environment
 
 All new dependencies → [pixi.toml](pixi.toml)
 
+## Versioning
+
+The version lives in `pyproject.toml` (`version = "X.Y.Z"` or `"X.Y.Z.dev0"`).
+
+**Release cycle:**
+
+1. Between releases, `pyproject.toml` has a dev version (e.g., `0.0.2.dev0`)
+2. To release: update `pyproject.toml` to the release version (e.g., `0.0.2`), merge, tag `v0.0.2`
+3. The publish workflow (`publish.yml`) overrides the version from the git tag and publishes to PyPI
+4. Immediately after tagging, bump `pyproject.toml` to the next dev version (e.g., `0.0.3.dev0`)
+
+**Rules:**
+
+- Never leave a release version (without `.devN`) on `main` after a release — always bump to the next dev version
+- Each PR to `main` must increment the dev number (e.g., `0.0.2.dev3` → `0.0.2.dev4`) so source installs are distinguishable
+- The `pixi.lock` depends on this version being stable between releases; `.devN` versions keep it stable
+- `__version__` is read at runtime via `importlib.metadata` — it reflects whatever is installed
+
 ## Pre-Commit Checklist
 
 **CRITICAL: Always run cleanup before committing:**

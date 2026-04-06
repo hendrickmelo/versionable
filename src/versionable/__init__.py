@@ -21,6 +21,8 @@ Usage::
 
 from __future__ import annotations
 
+from importlib.metadata import version as _version
+
 from versionable._api import load, loadDynamic, save
 from versionable._backend import Backend, registerBackend
 from versionable._base import (
@@ -33,6 +35,8 @@ from versionable._base import (
 )
 from versionable._migration import Migration, MigrationContext, migration
 from versionable._types import VersionableValue, literalFallback, registerConverter
+
+__version__ = _version("versionable")
 from versionable.errors import (
     ArrayNotLoadedError,
     BackendError,
@@ -61,6 +65,7 @@ __all__ = [
     "VersionableError",
     "VersionableMetadata",
     "VersionableValue",
+    "__version__",
     "getVersionableFields",
     "ignoreHashErrors",
     "literalFallback",

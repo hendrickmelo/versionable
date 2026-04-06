@@ -23,6 +23,7 @@ migrations
 backends
 types
 reference
+ai-agents
 ```
 
 ```{include} ../README.md
