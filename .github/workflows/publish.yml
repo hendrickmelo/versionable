@@ -25,6 +25,7 @@ jobs:
           python-version: "3.12"
 
       - name: Set version from tag or input
+        if: github.event_name != 'pull_request'
         env:
           INPUT_VERSION: ${{ inputs.version || '' }}
         run: |
