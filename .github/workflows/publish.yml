@@ -23,6 +23,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Fix relative image paths in README for PyPI
+        run: |
+          sed -i 's|src="docs/|src="https://raw.githubusercontent.com/hendrickmelo/versionable/main/docs/|g' README.md
+          sed -i 's|(docs/|(https://raw.githubusercontent.com/hendrickmelo/versionable/main/docs/|g' README.md
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
