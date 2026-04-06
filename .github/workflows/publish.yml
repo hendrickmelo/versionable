@@ -3,6 +3,11 @@ name: Publish to PyPI
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (e.g., 0.0.1-test). Publishes to TestPyPI only."
+        required: true
 
 permissions:
   id-token: write
@@ -17,10 +22,17 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Set version from tag
+      - name: Set version from tag or input
+        env:
+          INPUT_VERSION: ${{ inputs.version || '' }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
           sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
+          echo "Building version: $VERSION"
 
       - run: pip install build
       - run: python -m build
@@ -30,7 +42,25 @@ jobs:
           name: dist
           path: dist/
 
+  test-publish:
+    if: github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
   publish:
+    if: github.event_name == 'release'
     needs: build
     runs-on: ubuntu-latest
     environment: pypi
@@ -45,6 +75,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   bump-dev-version:
+    if: github.event_name == 'release'
     needs: publish
     runs-on: ubuntu-latest
     permissions:
