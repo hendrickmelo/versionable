@@ -33,6 +33,10 @@ jobs:
           INPUT_VERSION: ${{ inputs.version || '' }}
         run: |
           if [ -n "$INPUT_VERSION" ]; then
+            if ! echo "$INPUT_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+([.a-zA-Z0-9-]+)?$'; then
+              echo "::error::Invalid version format: $INPUT_VERSION"
+              exit 1
+            fi
             VERSION="$INPUT_VERSION"
           else
             VERSION="${GITHUB_REF_NAME#v}"
@@ -96,7 +100,13 @@ jobs:
         id: next
         run: |
           RELEASED="${GITHUB_REF_NAME#v}"
+          RELEASED="${RELEASED%%-*}"
+          RELEASED="${RELEASED%%+*}"
           IFS='.' read -r MAJOR MINOR PATCH <<< "$RELEASED"
+          if ! [[ "$MAJOR" =~ ^[0-9]+$ && "$MINOR" =~ ^[0-9]+$ && "$PATCH" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid version format in tag: ${GITHUB_REF_NAME}"
+            exit 1
+          fi
           NEXT_DEV="${MAJOR}.${MINOR}.$((PATCH + 1)).dev0"
           echo "version=$NEXT_DEV" >> "$GITHUB_OUTPUT"
 
