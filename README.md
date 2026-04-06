@@ -57,10 +57,16 @@ drift out of sync.
 ## Installation
 
 ```bash
-pip install git+https://github.com/hendrickmelo/versionable.git
+pip install versionable
 
 # With HDF5 backend support (h5py + hdf5plugin)
-pip install "versionable[hdf5] @ git+https://github.com/hendrickmelo/versionable.git"
+pip install "versionable[hdf5]"
+```
+
+Or install from source:
+
+```bash
+pip install git+https://github.com/hendrickmelo/versionable.git
 ```
 
 ## Quick Start
@@ -109,6 +115,12 @@ Want to see how old files get upgraded automatically when your schema changes?
 
 - **[See migrations](docs/migrations.md)** in action
 - Explore the available **[backends](docs/backends.md)**
+
+### For AI Agents
+
+If you're an AI agent working with versionable, see **[AGENT.md](docs/AGENT.md)** for a condensed API reference.
+
+### Complete Documentation
 
 For custom type converters, HDF5 support, and more, see the
 **[full documentation](https://versionable.readthedocs.io)**.

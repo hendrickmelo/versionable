@@ -3,13 +3,13 @@
 ## Installation
 
 ```bash
-pip install git+https://github.com/hendrickmelo/versionable.git
+pip install versionable
 ```
 
 With HDF5 support (needed for saving large arrays to `.h5` files — [see why](backends.md#hdf5)):
 
 ```bash
-pip install "versionable[hdf5] @ git+https://github.com/hendrickmelo/versionable.git"
+pip install "versionable[hdf5]"
 ```
 
 ## The Hash

@@ -1,0 +1,134 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (e.g., 0.0.1-test). Publishes to TestPyPI only."
+        required: true
+
+permissions:
+  id-token: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set version from tag or input
+        if: github.event_name != 'pull_request'
+        env:
+          INPUT_VERSION: ${{ inputs.version || '' }}
+        run: |
+          if [ -n "$INPUT_VERSION" ]; then
+            if ! echo "$INPUT_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+([.a-zA-Z0-9-]+)?$'; then
+              echo "::error::Invalid version format: $INPUT_VERSION"
+              exit 1
+            fi
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
+          echo "Building version: $VERSION"
+
+      - run: pip install build
+      - run: python -m build
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: dist
+          path: dist/
+
+  test-publish:
+    if: github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  bump-dev-version:
+    if: github.event_name == 'release'
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Compute next dev version
+        id: next
+        run: |
+          RELEASED="${GITHUB_REF_NAME#v}"
+          RELEASED="${RELEASED%%-*}"
+          RELEASED="${RELEASED%%+*}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$RELEASED"
+          if ! [[ "$MAJOR" =~ ^[0-9]+$ && "$MINOR" =~ ^[0-9]+$ && "$PATCH" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid version format in tag: ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+          NEXT_DEV="${MAJOR}.${MINOR}.$((PATCH + 1)).dev0"
+          echo "version=$NEXT_DEV" >> "$GITHUB_OUTPUT"
+
+      - name: Update pyproject.toml
+        env:
+          NEXT_DEV: ${{ steps.next.outputs.version }}
+        run: sed -i "s/^version = .*/version = \"$NEXT_DEV\"/" pyproject.toml
+
+      - name: Create PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEXT_DEV: ${{ steps.next.outputs.version }}
+        run: |
+          BRANCH="chore/bump-${NEXT_DEV}"
+          git checkout -b "$BRANCH"
+          git add pyproject.toml
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Bump version to ${NEXT_DEV}"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "Bump version to ${NEXT_DEV}" \
+            --body "Automated post-release version bump after publishing ${GITHUB_REF_NAME}." \
+            --base main \
+            --head "$BRANCH"

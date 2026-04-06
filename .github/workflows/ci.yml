@@ -4,7 +4,29 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
+  version-bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check version was bumped
+        run: |
+          PR_VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          git checkout origin/main -- pyproject.toml
+          MAIN_VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          git checkout HEAD -- pyproject.toml
+          if [ "$PR_VERSION" = "$MAIN_VERSION" ]; then
+            echo "::error::Version in pyproject.toml ($PR_VERSION) was not bumped. Each PR must increment the dev version."
+            exit 1
+          fi
+          echo "Version bumped: $MAIN_VERSION -> $PR_VERSION"
+
   ci:
     runs-on: ubuntu-latest
     strategy:
