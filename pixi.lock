@@ -5068,8 +5068,8 @@ packages:
   timestamp: 1767320173250
 - pypi: ./
   name: versionable
-  version: 0.0.1.dev1
-  sha256: 9a3925ecf84bcc9314646e9da08fbb03284cdf5b5cca745e356affccba5591d1
+  version: 0.0.1.dev2
+  sha256: 80cebdfa0a3ca33222cfdfb42288d4a6c2f2cf4712fa4b77e0480bce24f585ff
   requires_dist:
   - toml>=0.10
   - pyyaml>=6.0
