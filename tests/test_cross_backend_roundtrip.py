@@ -111,6 +111,7 @@ except ImportError:
     _HDF5_BACKENDS = []
 
 _ALL_BACKENDS = [*_DICT_BACKENDS, *_HDF5_BACKENDS]
+_NONE_SAFE_BACKENDS = [".json", ".yaml", *_HDF5_BACKENDS]  # TOML omits None
 
 
 def _roundtrip(cls: type, obj: Versionable, tmp_path: Path, ext: str) -> Versionable:
@@ -292,7 +293,7 @@ class TestKitchenSinkRoundtrip:
 class TestOptionalFieldsRoundtrip:
     """None handling across backends."""
 
-    @pytest.mark.parametrize("ext", [".json", ".yaml", ".h5"])
+    @pytest.mark.parametrize("ext", _NONE_SAFE_BACKENDS)
     def test_noneValues(self, tmp_path: Path, ext: str) -> None:
         """None fields roundtrip correctly."""
         obj = _WithOptional(name="test", label=None, count=None)
@@ -300,7 +301,7 @@ class TestOptionalFieldsRoundtrip:
         assert loaded.label is None, f"[{ext}] label should be None"
         assert loaded.count is None, f"[{ext}] count should be None"
 
-    @pytest.mark.parametrize("ext", [".json", ".yaml", ".h5"])
+    @pytest.mark.parametrize("ext", _NONE_SAFE_BACKENDS)
     def test_noneVsNonNone(self, tmp_path: Path, ext: str) -> None:
         """Mix of None and non-None in optional fields."""
         obj = _WithOptional(name="test", label="hello", count=None)
