@@ -134,21 +134,22 @@ class LazyArrayDict:
         self,
         filePath: Path,
         groupPath: str,
-        keys: list[str],
+        keys: list[Any],
         hdf5Keys: list[str] | None = None,
     ) -> None:
         self.filePath = filePath
         self.groupPath = groupPath
         self._keys = keys
+        self._keySet: set[Any] = set(keys)
         # hdf5Keys are the raw (possibly percent-encoded) names in the file
-        self._hdf5Keys = hdf5Keys or keys
-        self._keyToHdf5: dict[str, str] = dict(zip(self._keys, self._hdf5Keys, strict=True))
-        self._cache: dict[str, np.ndarray] = {}
+        self._hdf5Keys = hdf5Keys or [str(k) for k in keys]
+        self._keyToHdf5: dict[Any, str] = dict(zip(self._keys, self._hdf5Keys, strict=True))
+        self._cache: dict[Any, np.ndarray] = {}
 
     def __len__(self) -> int:
         return len(self._keys)
 
-    def __getitem__(self, key: str) -> np.ndarray:
+    def __getitem__(self, key: Any) -> np.ndarray:
         if key not in self._cache:
             if key not in self._keyToHdf5:
                 raise KeyError(key)
@@ -159,18 +160,18 @@ class LazyArrayDict:
         return self._cache[key]
 
     def __contains__(self, key: object) -> bool:
-        return key in self._keys
+        return key in self._keySet
 
     def __iter__(self) -> Any:
         return iter(self._keys)
 
-    def keys(self) -> list[str]:
+    def keys(self) -> list[Any]:
         return list(self._keys)
 
     def values(self) -> list[np.ndarray]:
         return [self[k] for k in self._keys]
 
-    def items(self) -> list[tuple[str, np.ndarray]]:
+    def items(self) -> list[tuple[Any, np.ndarray]]:
         return [(k, self[k]) for k in self._keys]
 
     def __repr__(self) -> str:

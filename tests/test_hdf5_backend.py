@@ -318,6 +318,37 @@ class TestHdf5Errors:
         with pytest.raises(BackendError):
             versionable.load(SimpleConfig, tmp_path / "nonexistent.h5")
 
+    def test_unregisteredClassInLoad(self, tmp_path: Path) -> None:
+        """load() raises when the file's __OBJECT__ isn't in the registry."""
+        from versionable._hdf5_backend import Hdf5Backend
+
+        # Write a file with a class name that won't be in the registry
+        p = tmp_path / "unknown.h5"
+        with h5py.File(p, "w") as f:
+            meta = f.create_group("__versionable__")
+            meta.attrs["__OBJECT__"] = "NonexistentClass"
+            meta.attrs["__VERSION__"] = 1
+            meta.attrs["__HASH__"] = "abc123"
+
+        be = Hdf5Backend()
+        with pytest.raises(BackendError, match="Unknown Versionable type"):
+            be.load(p)
+
+    def test_unregisteredClassInLoadLazy(self, tmp_path: Path) -> None:
+        """loadLazy() raises when cls is None and __OBJECT__ isn't registered."""
+        from versionable._hdf5_backend import Hdf5Backend
+
+        p = tmp_path / "unknown_lazy.h5"
+        with h5py.File(p, "w") as f:
+            meta = f.create_group("__versionable__")
+            meta.attrs["__OBJECT__"] = "NonexistentClass"
+            meta.attrs["__VERSION__"] = 1
+            meta.attrs["__HASH__"] = "abc123"
+
+        be = Hdf5Backend()
+        with pytest.raises(BackendError, match="Unknown Versionable type"):
+            be.loadLazy(p)
+
     def test_dictKeyWithSlash(self, tmp_path: Path) -> None:
         """Dict keys containing '/' roundtrip correctly (percent-encoded in HDF5)."""
         h = computeHash({"data": dict[str, int]})

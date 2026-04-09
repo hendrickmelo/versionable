@@ -116,7 +116,12 @@ class Hdf5Backend(Backend):
                 meta = _readMeta(f)
                 if cls is None:
                     cls = _resolveClass(meta["__OBJECT__"])
-                fieldTypes = _resolveFields(cls) if cls is not None else {}
+                if cls is None:
+                    raise BackendError(
+                        f"Unknown Versionable type {meta['__OBJECT__']!r} in {path}. "
+                        f"Ensure the class is imported and registered."
+                    )
+                fieldTypes = _resolveFields(cls)
 
                 fields, lazyFields = _readFields(f, fieldTypes, ctx)
 
