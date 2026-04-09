@@ -35,23 +35,38 @@ human-readable in HDFView / h5dump and accessible from any HDF5-compatible tool.
 
 ## Native Type Mapping
 
-| Python type | HDF5 representation | Notes |
+The write/read paths use **fully recursive type dispatch**. Any value is classified into one of
+three categories, and collections recurse for their elements:
+
+| Category | Types | HDF5 representation |
 |---|---|---|
-| `int` | Scalar attribute (int64) | |
-| `float` | Scalar attribute (float64) | |
-| `bool` | Scalar attribute (bool) | h5py handles this natively |
-| `str` | Scalar attribute (variable-length string) | |
-| `np.ndarray` | Dataset (with compression) | Unchanged from today |
-| `list[int]`, `list[float]` | 1-D dataset | Numeric lists stored as arrays |
-| `list[bool]` | 1-D dataset (bool) | |
-| `list[str]` | 1-D dataset (variable-length string) | h5py supports this |
-| `list[np.ndarray]` | Group of numbered datasets | `traces/0`, `traces/1`, … |
-| `dict[str, np.ndarray]` | Group of named datasets | `channels/ch0`, `channels/ch1`, … |
-| Nested `Versionable` | Subgroup with `__versionable__` child group | |
-| `list[Versionable]` | Group of numbered subgroups, each with `__versionable__` | |
-| `Enum` | Attribute (store `.value`) | Value is int or str |
-| `None` | Attribute with `h5py.Empty("f")` | Native HDF5 null; detected via `isinstance` on read |
-| Converted types (datetime, Path, etc.) | Attribute (converter output) | String or numeric |
+| Scalar | `int`, `float`, `bool`, `str`, `Enum`, converted types, `None` | Attribute |
+| Array | `np.ndarray` | Dataset (compressed) |
+| Scalar sequence | `list[scalar]`, `set[scalar]`, `tuple[scalar, ...]`, `frozenset[scalar]` | 1-D dataset |
+| Collection of non-scalars | `list[T]`, `set[T]`, `tuple[T, ...]`, `frozenset[T]` | Group with integer keys, recurse for each element |
+| Dict | `dict[K, V]` | Group with string-converted keys, recurse for each value |
+| Versionable | Nested `Versionable` | Subgroup with `__versionable__` metadata group, recurse for fields |
+
+`None` is stored as `h5py.Empty("f")` — a native HDF5 null.
+
+### Dict Key Conversion
+
+HDF5 group keys are always strings. Non-string dict keys are converted to strings on write and
+back to the original type on read using the type annotation:
+
+- `int` → `str(42)` → `int("42")`
+- `float` → `str(3.14)` → `float("3.14")`
+- `Enum` → `str(value)` → reconstruct from value
+- Converted types (UUID, Path, etc.) → use the converter registry
+- `str` → identity
+
+### Recursive Nesting
+
+Because the dispatch is recursive, arbitrarily nested structures work naturally:
+
+- `dict[str, list[float]]` — group of 1-D datasets
+- `list[dict[str, int]]` — group of subgroups, each with int attributes
+- `dict[int, dict[str, Versionable]]` — groups all the way down
 
 ### Distinguishing Groups
 
@@ -60,23 +75,10 @@ Groups are used for three purposes, distinguished by the presence of a `__versio
 | Has `__versionable__` child group? | Meaning |
 |---|---|
 | Yes | Versionable object; `__versionable__` holds `__OBJECT__`, `__VERSION__`, `__HASH__` (+ `__FORMAT__` reserved for future versionable versioning) |
-| No | Collection group (list or dict); type determined from the parent class's field annotations |
+| No | Collection group (list, set, tuple, frozenset, or dict); type determined from the parent class's field annotations |
 
 No type marker attributes are stored on collection groups. The deserializer always has the class's type
-annotations available and uses them to determine how to reconstruct the group (numbered entries → `list`,
-named entries → `dict`).
-
-### Unsupported Types
-
-Some types don't have clean HDF5 representations:
-
-- `dict[str, list[float]]` — group of datasets (each value is a 1-D dataset)
-- `list[dict[str, int]]` — no natural mapping; would need compound datasets or nested groups
-- Deeply nested mixed collections — arbitrarily complex trees
-
-**Approach:** Support the common cases in the mapping table above. For unsupported types, raise a clear
-error at save time pointing the user to restructure their data or use a dict-based backend (JSON/YAML).
-We can expand support incrementally based on real usage.
+annotations available and uses them to determine how to reconstruct the group.
 
 ## Target File Layout
 

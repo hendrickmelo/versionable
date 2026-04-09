@@ -39,39 +39,13 @@ class IntPriority(Enum):
 
 
 @dataclass
-class _Inner(Versionable, version=1, hash=computeHash({"x": float, "y": float}), name="CrossInner"):
+class _Inner(Versionable, version=1, hash="e37514", name="CrossInner"):
     x: float
     y: float
 
 
-_h_kitchen_sink = computeHash(
-    {
-        "name": str,
-        "count": int,
-        "rate": float,
-        "debug": bool,
-        "color": Color,
-        "intPriority": IntPriority,
-        "createdAt": datetime.datetime,
-        "createdAtTz": datetime.datetime,
-        "today": datetime.date,
-        "elapsed": datetime.timedelta,
-        "filePath": Path,
-        "posixPath": PurePosixPath,
-        "uid": UUID,
-        "mode": Literal["fast", "slow"],
-        "tags": list[str],
-        "scores": list[float],
-        "counts": list[int],
-        "flags": list[bool],
-        "nested": _Inner,
-        "points": list[_Inner],
-    }
-)
-
-
 @dataclass
-class _KitchenSink(Versionable, version=1, hash=_h_kitchen_sink, register=False):
+class _KitchenSink(Versionable, version=1, hash="3b5a61", register=False):
     name: str
     count: int
     rate: float
@@ -90,39 +64,25 @@ class _KitchenSink(Versionable, version=1, hash=_h_kitchen_sink, register=False)
     scores: list[float]
     counts: list[int]
     flags: list[bool]
+    uniqueTags: set[str]
+    frozenIds: frozenset[int]
+    coords: tuple[float, ...]
+    metadata: dict[str, int]
+    indexedLabels: dict[int, str]
     nested: _Inner
     points: list[_Inner]
-
-
-_h_with_optional = computeHash(
-    {
-        "name": str,
-        "label": str | None,
-        "count": int | None,
-    }
-)
+    channelData: dict[str, list[float]]
 
 
 @dataclass
-class _WithOptional(Versionable, version=1, hash=_h_with_optional, register=False):
+class _WithOptional(Versionable, version=1, hash="c599a5", register=False):
     name: str
     label: str | None = None
     count: int | None = None
 
 
-_h_with_arrays = computeHash(
-    {
-        "name": str,
-        "data": npt.NDArray[np.float64],
-        "matrix": npt.NDArray[np.int32],
-        "traces": list[npt.NDArray[np.float64]],
-        "channels": dict[str, npt.NDArray[np.float64]],
-    }
-)
-
-
 @dataclass
-class _WithArrays(Versionable, version=1, hash=_h_with_arrays, register=False):
+class _WithArrays(Versionable, version=1, hash="e9fc06", register=False):
     name: str
     data: npt.NDArray[np.float64]
     matrix: npt.NDArray[np.int32]
@@ -130,17 +90,8 @@ class _WithArrays(Versionable, version=1, hash=_h_with_arrays, register=False):
     channels: dict[str, npt.NDArray[np.float64]]
 
 
-_h_empty_collections = computeHash(
-    {
-        "tags": list[str],
-        "scores": list[float],
-        "counts": list[int],
-    }
-)
-
-
 @dataclass
-class _EmptyCollections(Versionable, version=1, hash=_h_empty_collections, register=False):
+class _EmptyCollections(Versionable, version=1, hash="6c8e40", register=False):
     tags: list[str] = field(default_factory=list)
     scores: list[float] = field(default_factory=list)
     counts: list[int] = field(default_factory=list)
@@ -249,8 +200,14 @@ class TestKitchenSinkRoundtrip:
             scores=[1.0, 2.5, 3.7],
             counts=[10, 20, 30],
             flags=[True, False, True],
+            uniqueTags={"x", "y", "z"},
+            frozenIds=frozenset({10, 20, 30}),
+            coords=(1.0, 2.0, 3.0),
+            metadata={"width": 100, "height": 200},
+            indexedLabels={0: "first", 1: "second"},
             nested=_Inner(x=1.5, y=-2.5),
             points=[_Inner(x=0.0, y=0.0), _Inner(x=1.0, y=1.0)],
+            channelData={"ch0": [1.0, 2.0, 3.0], "ch1": [4.0, 5.0]},
         )
 
     @pytest.mark.parametrize("ext", _ALL_BACKENDS)
@@ -282,9 +239,15 @@ class TestKitchenSinkRoundtrip:
         assert isinstance(loaded.scores, list), f"[{ext}] scores type"
         assert isinstance(loaded.counts, list), f"[{ext}] counts type"
         assert isinstance(loaded.flags, list), f"[{ext}] flags type"
+        assert isinstance(loaded.uniqueTags, set), f"[{ext}] uniqueTags type"
+        assert isinstance(loaded.frozenIds, frozenset), f"[{ext}] frozenIds type"
+        assert isinstance(loaded.coords, tuple), f"[{ext}] coords type"
+        assert isinstance(loaded.metadata, dict), f"[{ext}] metadata type"
+        assert isinstance(loaded.indexedLabels, dict), f"[{ext}] indexedLabels type"
         assert isinstance(loaded.nested, _Inner), f"[{ext}] nested type"
         assert isinstance(loaded.points, list), f"[{ext}] points type"
         assert all(isinstance(p, _Inner) for p in loaded.points), f"[{ext}] points element type"
+        assert isinstance(loaded.channelData, dict), f"[{ext}] channelData type"
 
     @pytest.mark.parametrize("ext", _ALL_BACKENDS)
     def test_listElementTypes(self, obj: _KitchenSink, tmp_path: Path, ext: str) -> None:
@@ -299,6 +262,23 @@ class TestKitchenSinkRoundtrip:
             assert type(count) is int, f"[{ext}] count element type: {type(count)}"
         for flag in loaded.flags:
             assert type(flag) is bool, f"[{ext}] flag element type: {type(flag)}"
+        for tag in loaded.uniqueTags:
+            assert type(tag) is str, f"[{ext}] uniqueTags element type: {type(tag)}"
+        for val in loaded.frozenIds:
+            assert type(val) is int, f"[{ext}] frozenIds element type: {type(val)}"
+        for val in loaded.coords:
+            assert type(val) is float, f"[{ext}] coords element type: {type(val)}"
+        for k, v in loaded.metadata.items():
+            assert type(k) is str, f"[{ext}] metadata key type: {type(k)}"
+            assert type(v) is int, f"[{ext}] metadata value type: {type(v)}"
+        for k, v in loaded.indexedLabels.items():
+            assert type(k) is int, f"[{ext}] indexedLabels key type: {type(k)}"
+            assert type(v) is str, f"[{ext}] indexedLabels value type: {type(v)}"
+        for k, v in loaded.channelData.items():
+            assert type(k) is str, f"[{ext}] channelData key type: {type(k)}"
+            assert isinstance(v, list), f"[{ext}] channelData value type: {type(v)}"
+            for elem in v:
+                assert type(elem) is float, f"[{ext}] channelData element type: {type(elem)}"
 
 
 class TestOptionalFieldsRoundtrip:

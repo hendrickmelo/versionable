@@ -180,10 +180,10 @@ def _writeFields(
 
     for name, value in fields.items():
         fieldType = fieldTypes.get(name)
-        _writeField(group, name, value, fieldType, datasetKwargs, comp)
+        _writeValue(group, name, value, fieldType, datasetKwargs, comp)
 
 
-def _writeField(
+def _writeValue(
     group: h5py.Group,
     name: str,
     value: Any,
@@ -191,7 +191,10 @@ def _writeField(
     datasetKwargs: dict[str, Any],
     comp: Hdf5Compression,
 ) -> None:
-    """Write a single field to the group."""
+    """Write a single value to the group using recursive type dispatch.
+
+    Scalars → attributes, arrays → datasets, collections → groups (recursive).
+    """
     # None → h5py.Empty
     if value is None:
         group.attrs[name] = h5py.Empty("f")
@@ -223,18 +226,19 @@ def _writeField(
         group.attrs[name] = conv.serialize(value)
         return
 
-    # Collections — need to inspect fieldType
+    # Collections — recurse based on fieldType
     origin = typing.get_origin(fieldType)
     args = typing.get_args(fieldType)
 
-    if isinstance(value, list) and origin is list and args:
+    if isinstance(value, (list, set, frozenset, tuple)) and origin in (list, set, frozenset, tuple) and args:
         elemType = args[0]
-        _writeList(group, name, value, elemType, datasetKwargs, comp)
+        items = sorted(value, key=repr) if isinstance(value, (set, frozenset)) else list(value)
+        _writeSequence(group, name, items, elemType, datasetKwargs, comp)
         return
 
     if isinstance(value, dict) and origin is dict and args:
-        _valType = args[1]
-        _writeDict(group, name, value, _valType, datasetKwargs, comp)
+        valType = args[1]
+        _writeDict(group, name, value, valType, datasetKwargs, comp)
         return
 
     # Fallback: try as attribute (will raise if h5py can't store it)
@@ -247,7 +251,12 @@ def _writeField(
         ) from e
 
 
-def _writeList(
+def _isScalarType(elemType: Any) -> bool:
+    """Check if an element type is a scalar (storable as a dataset element)."""
+    return elemType in (int, float, str, bool)
+
+
+def _writeSequence(
     group: h5py.Group,
     name: str,
     values: list[Any],
@@ -255,61 +264,50 @@ def _writeList(
     datasetKwargs: dict[str, Any],
     comp: Hdf5Compression,
 ) -> None:
-    """Write a list field to the group."""
-    # list[np.ndarray] → group of integer-keyed datasets
-    if elemType is np.ndarray or (typing.get_origin(elemType) is not None and _isNdarrayType(elemType)):
-        subgroup = group.create_group(name)
-        for i, arr in enumerate(values):
-            subgroup.create_dataset(str(i), data=arr, **datasetKwargs)
+    """Write a sequence (list/set/tuple/frozenset) to the group.
+
+    Scalar elements → 1-D dataset. Non-scalar elements → group with
+    integer keys, each value written recursively.
+    """
+    if _isScalarType(elemType):
+        # Scalar sequence → 1-D dataset
+        if len(values) == 0:
+            dtype = _dtypeForElementType(elemType)
+            group.create_dataset(name, shape=(0,), dtype=dtype)
+        elif elemType is str:
+            group.create_dataset(name, data=values, dtype=h5py.string_dtype())
+        else:
+            group.create_dataset(name, data=values)
         return
 
-    # list[Versionable] → group of integer-keyed subgroups
-    concreteElem = typing.get_origin(elemType) or elemType
-    if isinstance(concreteElem, type) and issubclass(concreteElem, Versionable):
-        subgroup = group.create_group(name)
-        for i, item in enumerate(values):
-            _writeVersionable(subgroup, str(i), item, comp)
-        return
-
-    # list[numeric] / list[str] / list[bool] → 1-D dataset
-    if len(values) == 0:
-        dtype = _dtypeForElementType(elemType)
-        group.create_dataset(name, shape=(0,), dtype=dtype)
-    elif isinstance(values[0], str):
-        dt = h5py.string_dtype()
-        group.create_dataset(name, data=values, dtype=dt)
-    else:
-        group.create_dataset(name, data=values)
+    # Non-scalar → group with integer keys, recurse
+    subgroup = group.create_group(name)
+    for i, item in enumerate(values):
+        _writeValue(subgroup, str(i), item, elemType, datasetKwargs, comp)
 
 
 def _writeDict(
     group: h5py.Group,
     name: str,
-    values: dict[str, Any],
+    values: dict[Any, Any],
     valType: Any,
     datasetKwargs: dict[str, Any],
     comp: Hdf5Compression,
 ) -> None:
-    """Write a dict field to the group."""
-    # dict[str, np.ndarray] → group of named datasets
-    if valType is np.ndarray or _isNdarrayType(valType):
-        subgroup = group.create_group(name)
-        for key, arr in values.items():
-            subgroup.create_dataset(key, data=arr, **datasetKwargs)
-        return
+    """Write a dict to the group. Keys are converted to strings; values are recursive."""
+    subgroup = group.create_group(name)
+    for key, val in values.items():
+        strKey = _keyToStr(key)
+        _writeValue(subgroup, strKey, val, valType, datasetKwargs, comp)
 
-    # dict[str, Versionable] → group of named subgroups
-    concreteVal = typing.get_origin(valType) or valType
-    if isinstance(concreteVal, type) and issubclass(concreteVal, Versionable):
-        subgroup = group.create_group(name)
-        for key, item in values.items():
-            _writeVersionable(subgroup, key, item, comp)
-        return
 
-    raise BackendError(
-        f"Cannot store field '{name}' of type dict[str, {valType}] in HDF5. "
-        f"Consider restructuring your data or using a dict-based backend (JSON/YAML)."
-    )
+def _keyToStr(key: Any) -> str:
+    """Convert a dict key to a string for use as an HDF5 group/dataset name."""
+    if isinstance(key, str):
+        return key
+    if isinstance(key, Enum):
+        return str(key.value)
+    return str(key)
 
 
 def _writeVersionable(
@@ -380,8 +378,8 @@ def _readDataset(dataset: h5py.Dataset, fieldType: Any) -> Any:
     """Read a dataset, returning ndarray or list based on field type."""
     data = dataset[()]
 
-    # If the field type is a list, convert to Python list
-    if _isListField(fieldType):
+    # If the field type is a sequence of scalars, convert to Python list
+    if _isScalarSequenceField(fieldType):
         result = data.tolist() if isinstance(data, np.ndarray) else list(data)
         # h5py returns bytes for string datasets — decode to str
         if result and isinstance(result[0], bytes):
@@ -392,25 +390,26 @@ def _readDataset(dataset: h5py.Dataset, fieldType: Any) -> Any:
 
 
 def _readGroup(group: h5py.Group, fieldType: Any) -> Any:
-    """Read a group, dispatching based on whether it's a Versionable or collection."""
+    """Read a group using recursive type dispatch."""
     # Versionable group: has __versionable__ child
     if _VERSIONABLE_GROUP in group:
         return _readVersionableGroup(group)
 
-    # Collection group: list or dict, determined by field type
+    # Collection group: determined by field type
     origin = typing.get_origin(fieldType)
     args = typing.get_args(fieldType)
 
-    if origin is list and args:
+    if origin in (list, set, frozenset, tuple) and args:
         elemType = args[0]
-        return _readListGroup(group, elemType)
+        return _readSequenceGroup(group, elemType)
 
     if origin is dict and args:
+        keyType = args[0]
         valType = args[1]
-        return _readDictGroup(group, valType)
+        return _readDictGroup(group, keyType, valType)
 
-    # Fallback: try as dict of arrays
-    return _readDictGroup(group, None)
+    # Fallback: try as dict of arrays (unknown type)
+    return _readDictGroup(group, str, None)
 
 
 def _readVersionableGroup(group: h5py.Group) -> dict[str, Any]:
@@ -431,42 +430,76 @@ def _readVersionableGroup(group: h5py.Group) -> dict[str, Any]:
     return result
 
 
-def _readListGroup(group: h5py.Group, elemType: Any) -> list[Any]:
-    """Read a list from a group with integer-keyed children."""
-    keys = sorted(group.keys(), key=int)
+def _readSequenceGroup(group: h5py.Group, elemType: Any) -> list[Any]:
+    """Read a sequence from a group with integer-keyed children (recursive).
 
-    concreteElem = typing.get_origin(elemType) or elemType
-    isVersionableElem = isinstance(concreteElem, type) and issubclass(concreteElem, Versionable)
+    Children may be datasets, groups, or attributes (for scalar elements).
+    """
+    # Collect all keys from both children and attributes
+    childKeys = set(group.keys())
+    attrKeys = set(group.attrs.keys())
+    allKeys = sorted(childKeys | attrKeys, key=int)
 
     result: list[Any] = []
-    for key in keys:
-        item = group[key]
-        if isVersionableElem and isinstance(item, h5py.Group):
-            result.append(_readVersionableGroup(item))
-        elif isinstance(item, h5py.Dataset):
-            result.append(item[()])
-        elif isinstance(item, h5py.Group):
-            result.append(_readGroup(item, elemType))
+    for key in allKeys:
+        if key in childKeys:
+            result.append(_readChild(group[key], elemType))
+        else:
+            result.append(_readAttr(group.attrs[key]))
     return result
 
 
-def _readDictGroup(group: h5py.Group, valType: Any) -> dict[str, Any]:
-    """Read a dict from a group with named children."""
-    concreteVal = typing.get_origin(valType) or valType if valType is not None else None
-    isVersionableVal = isinstance(concreteVal, type) and issubclass(concreteVal, Versionable)
+def _readDictGroup(group: h5py.Group, keyType: Any, valType: Any) -> dict[Any, Any]:
+    """Read a dict from a group (recursive). Keys are converted from strings."""
+    result: dict[Any, Any] = {}
 
-    result: dict[str, Any] = {}
-    for key in group:
-        if key == _VERSIONABLE_GROUP:
+    # Read child items (datasets and groups)
+    for strKey in group:
+        if strKey == _VERSIONABLE_GROUP:
             continue
-        item = group[key]
-        if isVersionableVal and isinstance(item, h5py.Group):
-            result[key] = _readVersionableGroup(item)
-        elif isinstance(item, h5py.Dataset):
-            result[key] = item[()]
-        elif isinstance(item, h5py.Group):
-            result[key] = _readGroup(item, valType)
+        key = _strToKey(strKey, keyType)
+        result[key] = _readChild(group[strKey], valType)
+
+    # Read attributes (scalar dict values are stored as attrs on the subgroup)
+    for strKey in group.attrs:
+        key = _strToKey(strKey, keyType)
+        result[key] = _readAttr(group.attrs[strKey])
+
     return result
+
+
+def _readChild(item: h5py.Dataset | h5py.Group, elemType: Any) -> Any:
+    """Read a single child item (dataset or group) with recursive dispatch."""
+    if isinstance(item, h5py.Dataset):
+        return _readDataset(item, elemType)
+    if isinstance(item, h5py.Group):
+        if _VERSIONABLE_GROUP in item:
+            return _readVersionableGroup(item)
+        return _readGroup(item, elemType)
+    return None
+
+
+def _strToKey(strKey: str, keyType: Any) -> Any:
+    """Convert a string HDF5 key back to the original dict key type."""
+    if keyType is str or keyType is None:
+        return strKey
+    if keyType is int:
+        return int(strKey)
+    if keyType is float:
+        return float(strKey)
+    if keyType is bool:
+        return strKey == "True"
+    if isinstance(keyType, type) and issubclass(keyType, Enum):
+        # Try to match by value
+        for member in keyType:
+            if str(member.value) == strKey:
+                return member
+        return strKey
+    # Try converter registry
+    conv = _registry.get(keyType)
+    if conv is not None:
+        return conv.deserialize(strKey, keyType)
+    return strKey
 
 
 def _readAttr(value: Any) -> Any:
@@ -560,12 +593,15 @@ def _isNdarrayType(fieldType: Any) -> bool:
     return False
 
 
-def _isListField(fieldType: Any) -> bool:
-    """Check if a field type is a list type."""
+def _isScalarSequenceField(fieldType: Any) -> bool:
+    """Check if a field type is a sequence of scalars (stored as a 1-D dataset)."""
     if fieldType is None:
         return False
     origin = typing.get_origin(fieldType)
-    return origin is list
+    if origin not in (list, set, frozenset, tuple):
+        return False
+    args = typing.get_args(fieldType)
+    return bool(args) and _isScalarType(args[0])
 
 
 def _dtypeForElementType(elemType: Any) -> np.dtype[Any] | Any:
