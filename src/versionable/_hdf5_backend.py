@@ -35,6 +35,7 @@ import numpy as np
 from versionable._backend import Backend, registerBackend
 from versionable._base import Versionable, _resolveFields, metadata
 from versionable._hdf5_compression import ZSTD_DEFAULT, Hdf5Compression
+from versionable._lazy import ArrayNotLoaded, LazyArray, LazyContext
 from versionable._types import _registry
 from versionable.errors import BackendError
 
@@ -85,7 +86,7 @@ class Hdf5Backend(Backend):
                         f"Ensure the class is imported and registered."
                     )
                 fieldTypes = _resolveFields(cls)
-                fields = _readFields(f, fieldTypes)
+                fields, _ = _readFields(f, fieldTypes)
             return fields, meta
         except OSError as e:
             raise BackendError(f"Failed to read HDF5 from {path}: {e}") from e
@@ -103,12 +104,12 @@ class Hdf5Backend(Backend):
         Returns:
             Tuple of (fields_dict, metadata_dict, lazy_field_names).
             Array fields not in *preload* are returned as ``LazyArray``
-            sentinels.
+            sentinels.  Lazy loading is recursive — arrays inside nested
+            Versionable objects also get lazy sentinels.
         """
-        from versionable._lazy import ArrayNotLoaded, LazyArray
-
         preloadAll = preload == "*"
         preloadSet = set(preload) if isinstance(preload, list) else set()
+        ctx = LazyContext(path=path, preloadAll=preloadAll, preloadSet=preloadSet, metadataOnly=metadataOnly)
 
         try:
             with h5py.File(path, "r") as f:
@@ -117,53 +118,7 @@ class Hdf5Backend(Backend):
                     cls = _resolveClass(meta["__OBJECT__"])
                 fieldTypes = _resolveFields(cls) if cls is not None else {}
 
-                fields: dict[str, Any] = {}
-                lazyFields: set[str] = set()
-
-                for key in f:
-                    if key == _VERSIONABLE_GROUP:
-                        continue
-
-                    item = f[key]
-                    fieldType = fieldTypes.get(key)
-
-                    if isinstance(item, h5py.Dataset):
-                        if _isArrayField(fieldType):
-                            # np.ndarray field — lazy loading applies
-                            if metadataOnly:
-                                fields[key] = ArrayNotLoaded(key)
-                                lazyFields.add(key)
-                            elif preloadAll or key in preloadSet:
-                                fields[key] = item[()]
-                            else:
-                                fields[key] = LazyArray(path, key)
-                                lazyFields.add(key)
-                        else:
-                            # list[numeric], list[str], etc. — always eager
-                            fields[key] = _readDataset(item, fieldType)
-                    elif isinstance(item, h5py.Group):
-                        if _VERSIONABLE_GROUP in item:
-                            # Nested Versionable — always eager
-                            fields[key] = _readGroup(item, fieldType)
-                        elif _isArrayCollectionField(fieldType):
-                            # list[ndarray] or dict[str, ndarray] — lazy per-element
-                            if metadataOnly:
-                                fields[key] = ArrayNotLoaded(key)
-                                lazyFields.add(key)
-                            elif preloadAll or key in preloadSet:
-                                fields[key] = _readGroup(item, fieldType)
-                            else:
-                                fields[key] = _makeLazyCollection(path, item, fieldType)
-                                lazyFields.add(key)
-                        else:
-                            # Other groups (list[Versionable], etc.) — eager
-                            fields[key] = _readGroup(item, fieldType)
-
-                # Read scalar attributes
-                for attrName in f.attrs:
-                    if attrName == _VERSIONABLE_GROUP:
-                        continue
-                    fields[attrName] = _readAttr(f.attrs[attrName])
+                fields, lazyFields = _readFields(f, fieldTypes, ctx)
 
             return fields, meta, lazyFields
         except OSError as e:
@@ -374,9 +329,19 @@ def _readMeta(group: h5py.Group) -> dict[str, Any]:
     return {"__OBJECT__": "", "__VERSION__": 1, "__HASH__": ""}
 
 
-def _readFields(group: h5py.Group, fieldTypes: dict[str, Any]) -> dict[str, Any]:
-    """Read all fields from an HDF5 group (eager)."""
+def _readFields(
+    group: h5py.Group,
+    fieldTypes: dict[str, Any],
+    ctx: LazyContext | None = None,
+) -> tuple[dict[str, Any], set[str]]:
+    """Read all fields from an HDF5 group.
+
+    Returns:
+        Tuple of (fields_dict, lazy_field_names).  When *ctx* is ``None``
+        all fields are eager and the lazy set is empty.
+    """
     fields: dict[str, Any] = {}
+    lazyFields: set[str] = set()
 
     # Read child items (datasets and groups)
     for key in group:
@@ -386,15 +351,41 @@ def _readFields(group: h5py.Group, fieldTypes: dict[str, Any]) -> dict[str, Any]
         fieldType = fieldTypes.get(key)
 
         if isinstance(item, h5py.Dataset):
-            fields[key] = _readDataset(item, fieldType)
+            if ctx is not None and _isArrayField(fieldType):
+                # np.ndarray field — lazy loading applies
+                datasetPath = item.name.lstrip("/")
+                if ctx.metadataOnly:
+                    fields[key] = ArrayNotLoaded(key)
+                    lazyFields.add(key)
+                elif ctx.preloadAll or key in ctx.preloadSet:
+                    fields[key] = item[()]
+                else:
+                    fields[key] = LazyArray(ctx.path, datasetPath)
+                    lazyFields.add(key)
+            else:
+                fields[key] = _readDataset(item, fieldType)
         elif isinstance(item, h5py.Group):
-            fields[key] = _readGroup(item, fieldType)
+            if _VERSIONABLE_GROUP in item:
+                # Nested Versionable — recurse with lazy context
+                fields[key] = _readVersionableGroup(item, fieldType, ctx)
+            elif ctx is not None and _isArrayCollectionField(fieldType):
+                # list[ndarray] or dict[str, ndarray] — lazy per-element
+                if ctx.metadataOnly:
+                    fields[key] = ArrayNotLoaded(key)
+                    lazyFields.add(key)
+                elif ctx.preloadAll or key in ctx.preloadSet:
+                    fields[key] = _readGroup(item, fieldType)
+                else:
+                    fields[key] = _makeLazyCollection(ctx.path, item, fieldType)
+                    lazyFields.add(key)
+            else:
+                fields[key] = _readGroup(item, fieldType, ctx)
 
-    # Read scalar attributes
+    # Read scalar attributes (always eager)
     for attrName in group.attrs:
         fields[attrName] = _readAttr(group.attrs[attrName])
 
-    return fields
+    return fields, lazyFields
 
 
 def _readDataset(dataset: h5py.Dataset, fieldType: Any) -> Any:
@@ -412,11 +403,11 @@ def _readDataset(dataset: h5py.Dataset, fieldType: Any) -> Any:
     return data
 
 
-def _readGroup(group: h5py.Group, fieldType: Any) -> Any:
+def _readGroup(group: h5py.Group, fieldType: Any, ctx: LazyContext | None = None) -> Any:
     """Read a group using recursive type dispatch."""
     # Versionable group: has __versionable__ child
     if _VERSIONABLE_GROUP in group:
-        return _readVersionableGroup(group, fieldType)
+        return _readVersionableGroup(group, fieldType, ctx)
 
     # Collection group: determined by field type
     origin = typing.get_origin(fieldType)
@@ -424,23 +415,29 @@ def _readGroup(group: h5py.Group, fieldType: Any) -> Any:
 
     if origin in (list, set, frozenset, tuple) and args:
         elemType = args[0]
-        return _readSequenceGroup(group, elemType)
+        return _readSequenceGroup(group, elemType, ctx)
 
     if origin is dict and args:
         keyType = args[0]
         valType = args[1]
-        return _readDictGroup(group, keyType, valType)
+        return _readDictGroup(group, keyType, valType, ctx)
 
     # Fallback: try as dict of arrays (unknown type)
-    return _readDictGroup(group, str, None)
+    return _readDictGroup(group, str, None, ctx)
 
 
-def _readVersionableGroup(group: h5py.Group, declaredType: Any = None) -> dict[str, Any]:
+def _readVersionableGroup(
+    group: h5py.Group, declaredType: Any = None, ctx: LazyContext | None = None
+) -> dict[str, Any]:
     """Read a nested Versionable subgroup as a dict with metadata.
 
     If *declaredType* is a Versionable subclass (e.g., from the parent's field
     annotation), use it directly to resolve field types. Otherwise fall back to
     looking up the class by the ``__OBJECT__`` name from file metadata.
+
+    When *ctx* is provided, array fields inside the nested object get lazy
+    sentinels. The set of lazy field names is stored under ``__lazy__`` so
+    ``_deserializeVersionable`` can apply ``makeLazyInstance``.
     """
     metaGroup = group[_VERSIONABLE_GROUP]
     objectName = str(metaGroup.attrs.get("__OBJECT__", ""))
@@ -458,11 +455,14 @@ def _readVersionableGroup(group: h5py.Group, declaredType: Any = None) -> dict[s
     else:
         cls = _resolveClass(objectName)
     nestedFieldTypes = _resolveFields(cls) if cls is not None else {}
-    result.update(_readFields(group, nestedFieldTypes))
+    nestedFields, lazyFields = _readFields(group, nestedFieldTypes, ctx)
+    result.update(nestedFields)
+    if lazyFields:
+        result["__lazy__"] = lazyFields
     return result
 
 
-def _readSequenceGroup(group: h5py.Group, elemType: Any) -> list[Any]:
+def _readSequenceGroup(group: h5py.Group, elemType: Any, ctx: LazyContext | None = None) -> list[Any]:
     """Read a sequence from a group with integer-keyed children (recursive).
 
     Children may be datasets, groups, or attributes (for scalar elements).
@@ -475,13 +475,13 @@ def _readSequenceGroup(group: h5py.Group, elemType: Any) -> list[Any]:
     result: list[Any] = []
     for key in allKeys:
         if key in childKeys:
-            result.append(_readChild(group[key], elemType))
+            result.append(_readChild(group[key], elemType, ctx))
         else:
             result.append(_readAttr(group.attrs[key]))
     return result
 
 
-def _readDictGroup(group: h5py.Group, keyType: Any, valType: Any) -> dict[Any, Any]:
+def _readDictGroup(group: h5py.Group, keyType: Any, valType: Any, ctx: LazyContext | None = None) -> dict[Any, Any]:
     """Read a dict from a group (recursive). Keys are converted from strings."""
     result: dict[Any, Any] = {}
 
@@ -490,7 +490,7 @@ def _readDictGroup(group: h5py.Group, keyType: Any, valType: Any) -> dict[Any, A
         if strKey == _VERSIONABLE_GROUP:
             continue
         key = _strToKey(strKey, keyType)
-        result[key] = _readChild(group[strKey], valType)
+        result[key] = _readChild(group[strKey], valType, ctx)
 
     # Read attributes (scalar dict values are stored as attrs on the subgroup)
     for strKey in group.attrs:
@@ -500,14 +500,14 @@ def _readDictGroup(group: h5py.Group, keyType: Any, valType: Any) -> dict[Any, A
     return result
 
 
-def _readChild(item: h5py.Dataset | h5py.Group, elemType: Any) -> Any:
+def _readChild(item: h5py.Dataset | h5py.Group, elemType: Any, ctx: LazyContext | None = None) -> Any:
     """Read a single child item (dataset or group) with recursive dispatch."""
     if isinstance(item, h5py.Dataset):
         return _readDataset(item, elemType)
     if isinstance(item, h5py.Group):
         if _VERSIONABLE_GROUP in item:
-            return _readVersionableGroup(item, elemType)
-        return _readGroup(item, elemType)
+            return _readVersionableGroup(item, elemType, ctx)
+        return _readGroup(item, elemType, ctx)
     return None
 
 

@@ -16,6 +16,7 @@ The mechanism uses a dynamically created subclass that overrides
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, overload
 
@@ -27,6 +28,25 @@ if TYPE_CHECKING:
 from versionable.errors import ArrayNotLoadedError
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class LazyContext:
+    """Controls lazy loading behavior during HDF5 reads.
+
+    Passed through the recursive read path so every level of the object
+    tree applies the same lazy/eager/metadataOnly policy.
+    """
+
+    path: Path
+    preloadAll: bool = False
+    preloadSet: set[str] = field(default_factory=set)
+    metadataOnly: bool = False
+
+
+def isLazySentinel(value: Any) -> bool:
+    """Check if *value* is a lazy loading sentinel that should skip deserialization."""
+    return isinstance(value, (LazyArray, LazyArrayList, LazyArrayDict, ArrayNotLoaded))
 
 
 class LazyArray:

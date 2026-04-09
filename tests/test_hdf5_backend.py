@@ -73,6 +73,25 @@ class _Experiment(Versionable, version=1, hash=_h_experiment, register=False):
     measurements: list[_Measurement]
 
 
+# Deeply nested: Sensor has list[ndarray], Lab has dict[str, Sensor]
+_h_sensor = computeHash({"name": str, "traces": list[npt.NDArray[np.float64]]})
+
+
+@dataclass
+class _Sensor(Versionable, version=1, hash=_h_sensor, name="Sensor"):
+    name: str
+    traces: list[npt.NDArray[np.float64]]
+
+
+_h_lab = computeHash({"title": str, "sensors": dict[str, _Sensor]})
+
+
+@dataclass
+class _Lab(Versionable, version=1, hash=_h_lab, register=False):
+    title: str
+    sensors: dict[str, _Sensor]
+
+
 class TestHdf5RoundTrip:
     def test_simpleScalars(self, tmp_path: Path) -> None:
         obj = SimpleConfig(name="test", debug=True, retries=5)
@@ -852,35 +871,106 @@ class TestLazyArrayCollections:
         np.testing.assert_array_equal(loaded.data["c"], np.array([2.0]))
         assert len(raw._cache) == 2  # noqa: SLF001
 
-    def test_nestedVersionableEagerArrays(self, tmp_path: Path) -> None:
-        """Nested Versionable groups are eagerly loaded (including their arrays).
+    def test_nestedVersionableLazyArrays(self, tmp_path: Path) -> None:
+        """Arrays inside nested Versionables are lazily loaded."""
+        from versionable._lazy import LazyArray
 
-        Lazy loading currently only applies to top-level array fields and
-        top-level array collection fields. Arrays inside nested Versionable
-        objects are loaded eagerly when the parent group is read.
-        """
         measurements = [
             _Measurement(label="a", data=np.array([1.0, 2.0])),
             _Measurement(label="b", data=np.array([3.0, 4.0, 5.0])),
         ]
         obj = _Experiment(name="exp", measurements=measurements)
-        p = tmp_path / "nested_eager.h5"
+        p = tmp_path / "nested_lazy.h5"
         versionable.save(obj, p)
 
         loaded = versionable.load(_Experiment, p)
 
-        # Scalars are available
+        # Scalars are eagerly available
         assert loaded.name == "exp"
         assert loaded.measurements[0].label == "a"
         assert loaded.measurements[1].label == "b"
 
-        # Arrays inside nested Versionables are eagerly loaded (not lazy)
+        # Arrays inside nested Versionables should be lazy (not loaded yet)
         rawData0 = object.__getattribute__(loaded.measurements[0], "data")
-        assert isinstance(rawData0, np.ndarray), "expected eager ndarray, not LazyArray"
+        assert isinstance(rawData0, LazyArray), f"expected LazyArray, got {type(rawData0).__name__}"
 
-        # Data is correct
+        # Accessing the array triggers lazy load and returns correct data
         np.testing.assert_array_equal(loaded.measurements[0].data, np.array([1.0, 2.0]))
         np.testing.assert_array_equal(loaded.measurements[1].data, np.array([3.0, 4.0, 5.0]))
+
+        # After access, it's cached as ndarray
+        rawData0After = object.__getattribute__(loaded.measurements[0], "data")
+        assert isinstance(rawData0After, np.ndarray)
+
+    def test_nestedVersionablePreloadAll(self, tmp_path: Path) -> None:
+        """preload='*' eagerly loads arrays inside nested Versionables."""
+        measurements = [
+            _Measurement(label="a", data=np.array([1.0, 2.0])),
+        ]
+        obj = _Experiment(name="exp", measurements=measurements)
+        p = tmp_path / "nested_preload.h5"
+        versionable.save(obj, p)
+
+        loaded = versionable.load(_Experiment, p, preload="*")
+
+        # With preload="*", arrays should be eagerly loaded
+        rawData0 = object.__getattribute__(loaded.measurements[0], "data")
+        assert isinstance(rawData0, np.ndarray), f"expected ndarray, got {type(rawData0).__name__}"
+        np.testing.assert_array_equal(loaded.measurements[0].data, np.array([1.0, 2.0]))
+
+    def test_deeplyNestedDictVersionableLazy(self, tmp_path: Path) -> None:
+        """dict[str, Versionable] where each Versionable has list[ndarray] — all lazy."""
+        from versionable._lazy import LazyArrayList
+
+        sensors = {
+            "accel": _Sensor(name="accel", traces=[np.array([1.0, 2.0]), np.array([3.0])]),
+            "gyro": _Sensor(name="gyro", traces=[np.array([4.0, 5.0, 6.0])]),
+        }
+        obj = _Lab(title="lab-1", sensors=sensors)
+        p = tmp_path / "deep_lazy.h5"
+        versionable.save(obj, p)
+
+        loaded = versionable.load(_Lab, p)
+
+        # Top-level scalar is eager
+        assert loaded.title == "lab-1"
+
+        # dict[str, Versionable] — sensors are eagerly reconstructed (not lazy)
+        assert isinstance(loaded.sensors, dict)
+        assert set(loaded.sensors.keys()) == {"accel", "gyro"}
+
+        # Nested Versionable scalars are eager
+        assert loaded.sensors["accel"].name == "accel"
+        assert loaded.sensors["gyro"].name == "gyro"
+
+        # list[ndarray] inside each nested Versionable should be lazy
+        rawTraces = object.__getattribute__(loaded.sensors["accel"], "traces")
+        assert isinstance(rawTraces, LazyArrayList), f"expected LazyArrayList, got {type(rawTraces).__name__}"
+        assert len(rawTraces._cache) == 0  # noqa: SLF001 — testing lazy internals
+
+        # Accessing individual elements triggers lazy load
+        np.testing.assert_array_equal(loaded.sensors["accel"].traces[0], np.array([1.0, 2.0]))
+        assert len(rawTraces._cache) == 1  # noqa: SLF001
+
+        np.testing.assert_array_equal(loaded.sensors["accel"].traces[1], np.array([3.0]))
+        np.testing.assert_array_equal(loaded.sensors["gyro"].traces[0], np.array([4.0, 5.0, 6.0]))
+
+    def test_deeplyNestedDictVersionablePreload(self, tmp_path: Path) -> None:
+        """dict[str, Versionable] with preload='*' eagerly loads everything."""
+        sensors = {
+            "accel": _Sensor(name="accel", traces=[np.array([1.0, 2.0])]),
+        }
+        obj = _Lab(title="lab-1", sensors=sensors)
+        p = tmp_path / "deep_preload.h5"
+        versionable.save(obj, p)
+
+        loaded = versionable.load(_Lab, p, preload="*")
+
+        # With preload="*", traces should be a regular list (not LazyArrayList)
+        assert isinstance(loaded.sensors["accel"].traces, list)
+        rawTraces = object.__getattribute__(loaded.sensors["accel"], "traces")
+        assert isinstance(rawTraces, list), f"expected list, got {type(rawTraces).__name__}"
+        np.testing.assert_array_equal(loaded.sensors["accel"].traces[0], np.array([1.0, 2.0]))
 
 
 def _assertNoJsonAttrs(group: h5py.Group) -> None:
