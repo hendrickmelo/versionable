@@ -101,9 +101,9 @@ class TestTomlMetadata:
         versionable.save(obj, p)
 
         data = toml.loads(p.read_text())
-        assert "__meta__" in data
-        assert data["__meta__"]["__OBJECT__"] == "SimpleConfig"
-        assert data["__meta__"]["__VERSION__"] == 1
+        assert "__versionable__" in data
+        assert data["__versionable__"]["__OBJECT__"] == "SimpleConfig"
+        assert data["__versionable__"]["__VERSION__"] == 1
 
     def test_nestedUsesNativeTable(self, tmp_path: Path) -> None:
         """Nested Versionable should use TOML table syntax, not JSON wrapper."""
@@ -149,9 +149,9 @@ class TestTomlCommentDefaults:
         # "debug" and "retries" are at defaults — should be commented
         assert "# debug = false" in text
         assert "# retries = 3" in text
-        # __meta__ should NOT be commented
-        assert "[__meta__]" in text
-        assert "# [__meta__]" not in text
+        # __versionable__ should NOT be commented
+        assert "[__versionable__]" in text
+        assert "# [__versionable__]" not in text
 
     def test_nonDefaultsNotCommented(self, tmp_path: Path) -> None:
         obj = SimpleConfig(name="test", debug=True, retries=10)
@@ -190,7 +190,7 @@ class TestTomlLiteral:
         p.write_text(
             toml.dumps(
                 {
-                    "__meta__": {"__OBJECT__": "WithLiteral", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"__OBJECT__": "WithLiteral", "__VERSION__": 1, "__HASH__": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -206,7 +206,7 @@ class TestTomlLiteral:
         p.write_text(
             toml.dumps(
                 {
-                    "__meta__": {"__OBJECT__": "WithLiteral", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"__OBJECT__": "WithLiteral", "__VERSION__": 1, "__HASH__": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -218,7 +218,7 @@ class TestTomlLiteral:
 
 class TestTomlMissingVersion:
     def test_noVersionDefaultsToCurrentVersion(self, tmp_path: Path) -> None:
-        """A TOML file with no __meta__ should load as the current version."""
+        """A TOML file with no __versionable__ should load as the current version."""
         p = tmp_path / "plain.toml"
         p.write_text('name = "test"\ndebug = true\nretries = 5\n')
         loaded = versionable.load(SimpleConfig, p)
@@ -227,7 +227,7 @@ class TestTomlMissingVersion:
         assert loaded.retries == 5
 
     def test_noVersionLogsWarning(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
-        """A TOML file with no __meta__ should log a warning."""
+        """A TOML file with no __versionable__ should log a warning."""
         p = tmp_path / "plain.toml"
         p.write_text('name = "test"\ndebug = false\nretries = 3\n')
         with caplog.at_level("WARNING"):

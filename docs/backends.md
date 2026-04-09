@@ -51,7 +51,7 @@ channels:
   - 0
   - 1
   - 2
-__meta__:
+__versionable__:
   __OBJECT__: SensorConfig
   __VERSION__: 1
   __HASH__: 9d6951
@@ -59,8 +59,8 @@ __meta__:
 
 Both `.yaml` and `.yml` extensions are supported.
 
-Metadata is stored in a `__meta__` mapping at the end of the file — your data comes first, schema metadata stays out of
-the way.
+Metadata is stored in a `__versionable__` mapping at the end of the file — your data comes first, schema metadata stays
+out of the way.
 
 ### Missing fields
 
@@ -83,7 +83,7 @@ sampleRate_Hz: 120000
 # - 0
 # - 1
 # - 2
-__meta__:
+__versionable__:
   __OBJECT__: SensorConfig
   __VERSION__: 1
   __HASH__: 9d6951
@@ -131,7 +131,7 @@ name = "probe-A"
 sampleRate_Hz = 120000
 channels = [0, 1, 2]
 
-[__meta__]
+[__versionable__]
 __OBJECT__ = "SensorConfig"
 __VERSION__ = 1
 __HASH__ = "9d6951"
@@ -176,7 +176,7 @@ The saved TOML looks like:
 ```toml
 name = "worker"
 
-[__meta__]
+[__versionable__]
 __OBJECT__ = "WorkerConfig"
 __VERSION__ = 1
 __HASH__ = "8bdfa7"
@@ -203,7 +203,7 @@ name = "probe-A"
 sampleRate_Hz = 120000
 # channels = [0, 1, 2]
 
-[__meta__]
+[__versionable__]
 __OBJECT__ = "SensorConfig"
 __VERSION__ = 1
 __HASH__ = "9d6951"

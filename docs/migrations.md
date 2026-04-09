@@ -37,7 +37,7 @@ A v1 file on disk:
 title: batch-processor
 debug: false
 retries: 5
-__meta__:
+__versionable__:
   __OBJECT__: WorkerConfig
   __VERSION__: 1
   __HASH__: 5556c8

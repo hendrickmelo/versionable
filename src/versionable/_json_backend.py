@@ -1,8 +1,7 @@
 """JSON storage backend.
 
 Stores Versionable objects as pretty-printed JSON with metadata
-envelope (``__VERSION__``, ``__HASH__``, ``__OBJECT__``).  Numpy arrays
-are serialized inline as base64-compressed npz.
+envelope.  Numpy arrays are serialized inline as base64-compressed npz.
 """
 
 from __future__ import annotations
@@ -35,9 +34,11 @@ class JsonBackend(Backend):
         fields = {k: serialize(v, fieldTypes[k], nativeTypes=self.nativeTypes) for k, v in fields.items()}
 
         data = {
-            "__OBJECT__": meta["name"],
-            "__VERSION__": meta["version"],
-            "__HASH__": meta["hash"],
+            "__versionable__": {
+                "__OBJECT__": meta["name"],
+                "__VERSION__": meta["version"],
+                "__HASH__": meta["hash"],
+            },
             **fields,
         }
         try:
@@ -55,13 +56,15 @@ class JsonBackend(Backend):
         if not isinstance(data, dict):
             raise BackendError(f"Expected JSON object in {path}, got {type(data).__name__}")
 
+        metaTable = data.pop("__versionable__", {})
+        if not isinstance(metaTable, dict):
+            raise BackendError(f"Missing or invalid __versionable__ metadata in {path}")
+
         meta = {
-            "__OBJECT__": data.pop("__OBJECT__", ""),
-            "__VERSION__": data.pop("__VERSION__", None),
-            "__HASH__": data.pop("__HASH__", ""),
+            "__OBJECT__": metaTable.get("__OBJECT__", ""),
+            "__VERSION__": metaTable.get("__VERSION__"),
+            "__HASH__": metaTable.get("__HASH__", ""),
         }
-        # Also remove __COMPAT__ if present
-        data.pop("__COMPAT__", None)
 
         return data, meta
 

@@ -128,13 +128,13 @@ user-provided dict values:
 
 | Key               | Purpose                                                   |
 | ----------------- | --------------------------------------------------------- |
+| `__ndarray__`     | Marks a dict as a serialized numpy array (JSON/YAML/TOML) |
+| `__json__`        | YAML-only wrapper for values with no native YAML encoding |
+| `__versionable__` | Versionable metadata envelope                             |
 | `__OBJECT__`      | Serialization class name (stored in metadata)             |
 | `__VERSION__`     | Schema version (stored in metadata)                       |
 | `__HASH__`        | Schema hash (stored in metadata)                          |
-| `__meta__`        | Metadata mapping in YAML and TOML files                   |
-| `__versionable__` | HDF5 metadata child group (holds `__OBJECT__`, etc.)      |
 | `__FORMAT__`      | Reserved for future versionable versioning                |
-| `__ndarray__`     | Marks a dict as a serialized numpy array (JSON/YAML/TOML) |
-| `__json__`        | YAML-only wrapper for values with no native YAML encoding |
+| `__FORMAT_BE__`   | Reserved for future backend versioning                    |
 
-> ⚠️ **Warning:** Using any of these as a field name or dict key will cause incorrect serialization or deserialization.
+> ⚠️ **Warning:** Using any of these as a field name or dict key may cause incorrect serialization or deserialization.

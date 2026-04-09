@@ -125,8 +125,8 @@ class TestYamlMetadata:
         versionable.save(obj, p)
 
         data = yaml.safe_load(p.read_text())
-        assert "__meta__" in data
-        meta = data["__meta__"]
+        assert "__versionable__" in data
+        meta = data["__versionable__"]
         assert meta["__OBJECT__"] == "SimpleConfig"
         assert meta["__VERSION__"] == 1
         assert "__HASH__" in meta
@@ -174,9 +174,9 @@ class TestYamlCommentDefaults:
         # "debug" and "retries" are at defaults — should be commented
         assert "# debug:" in text
         assert "# retries:" in text
-        # __meta__ should NOT be commented
-        assert "\n__meta__:\n" in text or text.startswith("__meta__:\n")
-        assert "# __meta__:" not in text
+        # __versionable__ should NOT be commented
+        assert "\n__versionable__:\n" in text or text.startswith("__versionable__:\n")
+        assert "# __versionable__:" not in text
 
     def test_nonDefaultsNotCommented(self, tmp_path: Path) -> None:
         obj = SimpleConfig(name="test", debug=True, retries=10)
@@ -215,7 +215,7 @@ class TestYamlCommentDefaults:
 
 class TestYamlMissingVersion:
     def test_noMetaDefaultsToCurrentVersion(self, tmp_path: Path) -> None:
-        """A file with no __meta__ should load as the current version (no migrations)."""
+        """A file with no __versionable__ should load as the current version (no migrations)."""
         p = tmp_path / "plain.yaml"
         p.write_text("name: test\ndebug: true\nretries: 5\n")
         loaded = versionable.load(SimpleConfig, p)
@@ -224,7 +224,7 @@ class TestYamlMissingVersion:
         assert loaded.retries == 5
 
     def test_noMetaLogsWarning(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
-        """A file with no __meta__ should log a warning."""
+        """A file with no __versionable__ should log a warning."""
         p = tmp_path / "plain.yaml"
         p.write_text("name: test\ndebug: false\nretries: 3\n")
         with caplog.at_level("WARNING"):
@@ -255,7 +255,7 @@ class TestYamlLiteral:
         p.write_text(
             yaml.dump(
                 {
-                    "__meta__": {"__OBJECT__": "WithLiteral", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"__OBJECT__": "WithLiteral", "__VERSION__": 1, "__HASH__": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -269,7 +269,7 @@ class TestYamlLiteral:
         p.write_text(
             yaml.dump(
                 {
-                    "__meta__": {"__OBJECT__": "WithLiteral", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"__OBJECT__": "WithLiteral", "__VERSION__": 1, "__HASH__": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -283,7 +283,7 @@ class TestYamlLiteral:
         p.write_text(
             yaml.dump(
                 {
-                    "__meta__": {"__OBJECT__": "WithLiteralNoValidation", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"__OBJECT__": "WithLiteralNoValidation", "__VERSION__": 1, "__HASH__": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -298,7 +298,7 @@ class TestYamlLiteral:
         p.write_text(
             yaml.dump(
                 {
-                    "__meta__": {"__OBJECT__": "WithLiteralFallback", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"__OBJECT__": "WithLiteralFallback", "__VERSION__": 1, "__HASH__": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -329,7 +329,7 @@ class TestYamlErrors:
         p.write_text(
             yaml.dump(
                 {
-                    "__meta__": {
+                    "__versionable__": {
                         "__OBJECT__": "SimpleConfig",
                         "__VERSION__": 1,
                         "__HASH__": "",
@@ -351,7 +351,7 @@ class TestYamlErrors:
         p.write_text(
             yaml.dump(
                 {
-                    "__meta__": {
+                    "__versionable__": {
                         "__OBJECT__": "SimpleConfig",
                         "__VERSION__": 999,
                         "__HASH__": "",

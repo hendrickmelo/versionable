@@ -1,7 +1,7 @@
 """YAML storage backend.
 
 Stores Versionable objects as YAML files.  Metadata is stored in a
-``__meta__`` mapping to avoid conflicts with field names, matching the
+``__versionable__`` mapping to avoid conflicts with field names, matching the
 TOML backend convention::
 
     name: probe-A
@@ -10,7 +10,7 @@ TOML backend convention::
     - 0
     - 1
     - 2
-    __meta__:
+    __versionable__:
       __OBJECT__: SensorConfig
       __VERSION__: 1
       __HASH__: 9d6951
@@ -53,7 +53,7 @@ class YamlBackend(Backend):
         for key, value in fields.items():
             data[key] = _toYamlSafe(value)
 
-        data["__meta__"] = {
+        data["__versionable__"] = {
             "__OBJECT__": meta["name"],
             "__VERSION__": meta["version"],
             "__HASH__": meta["hash"],
@@ -79,9 +79,9 @@ class YamlBackend(Backend):
         if not isinstance(data, dict):
             raise BackendError(f"Expected YAML mapping in {path}, got {type(data).__name__}")
 
-        metaTable = data.pop("__meta__", {})
+        metaTable = data.pop("__versionable__", {})
         if not isinstance(metaTable, dict):
-            raise BackendError(f"Expected __meta__ to be a mapping in {path}, got {type(metaTable).__name__}")
+            raise BackendError(f"Expected __versionable__ to be a mapping in {path}, got {type(metaTable).__name__}")
         meta = {
             "__OBJECT__": metaTable.get("__OBJECT__", ""),
             "__VERSION__": metaTable.get("__VERSION__"),
@@ -157,7 +157,7 @@ def _findClass(objectName: str) -> type | None:
 def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) -> str:
     """Comment out YAML lines for fields whose values match the class defaults.
 
-    The ``__meta__`` block is always kept uncommented (required for
+    The ``__versionable__`` block is always kept uncommented (required for
     deserialization).  Multi-line values (lists, nested mappings) are
     handled by commenting out the entire indented block under a top-level
     key.
@@ -206,9 +206,9 @@ def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) 
         if stripped and not stripped[0].isspace() and ":" in stripped:
             key = stripped.split(":")[0]
 
-            # Never comment out __meta__
-            if key == "__meta__":
-                # Pass through __meta__ block
+            # Never comment out __versionable__
+            if key == "__versionable__":
+                # Pass through __versionable__ block
                 result.append(lines[i])
                 i += 1
                 while i < len(lines) and lines[i].rstrip("\n") and lines[i][0].isspace():

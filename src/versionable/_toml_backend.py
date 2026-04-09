@@ -1,11 +1,11 @@
 """TOML storage backend.
 
 Stores Versionable objects as TOML files.  Metadata is stored in a
-``[__meta__]`` table to avoid conflicts with field names.
+``[__versionable__]`` table to avoid conflicts with field names.
 
 Nested Versionable objects use native TOML table syntax::
 
-    [__meta__]
+    [__versionable__]
     __OBJECT__ = "Config"
     __VERSION__ = 1
 
@@ -61,7 +61,7 @@ class TomlBackend(Backend):
         commentDefaults: bool = kwargs.get("commentDefaults", False)
 
         data: dict[str, Any] = {
-            "__meta__": {
+            "__versionable__": {
                 "__OBJECT__": meta["name"],
                 "__VERSION__": meta["version"],
                 "__HASH__": meta["hash"],
@@ -91,9 +91,9 @@ class TomlBackend(Backend):
         if not isinstance(data, dict):
             raise BackendError(f"Expected TOML table in {path}, got {type(data).__name__}")
 
-        metaTable = data.pop("__meta__", {})
+        metaTable = data.pop("__versionable__", {})
         if not isinstance(metaTable, dict):
-            raise BackendError(f"Expected __meta__ to be a table in {path}, got {type(metaTable).__name__}")
+            raise BackendError(f"Expected __versionable__ to be a table in {path}, got {type(metaTable).__name__}")
         meta = {
             "__OBJECT__": metaTable.get("__OBJECT__", ""),
             "__VERSION__": metaTable.get("__VERSION__"),
@@ -150,7 +150,7 @@ def _fromTomlSafe(value: Any) -> Any:
 def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) -> str:
     """Comment out TOML value lines that match the class defaults.
 
-    The ``[__meta__]`` section is always kept uncommented (required for
+    The ``[__versionable__]`` section is always kept uncommented (required for
     deserialization).  Section headers whose children are *all* defaults
     are also commented out.
     """
@@ -210,7 +210,7 @@ def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) 
             if sectionIdx is not None and sectionAllDefault:
                 result[sectionIdx] = "# " + result[sectionIdx]
 
-            inMetaSection = stripped == "[__meta__]"
+            inMetaSection = stripped == "[__versionable__]"
             sectionIdx = len(result)
             sectionAllDefault = True
             result.append(line)
@@ -221,7 +221,7 @@ def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) 
             result.append(line)
             continue
 
-        # __meta__ section — always keep uncommented
+        # __versionable__ section — always keep uncommented
         if inMetaSection:
             sectionAllDefault = False
             result.append(line)
