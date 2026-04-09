@@ -2,7 +2,7 @@
 
 ## Problem
 
-The HDF5 backend currently bundles all non-array fields into a single `__scalars__` JSON attribute:
+The HDF5 backend previously bundled all non-array fields into a single `__scalars__` JSON attribute:
 
 ```python
 # Current _writeGroup behavior
@@ -18,7 +18,7 @@ if scalars:
     group.attrs["__scalars__"] = json.dumps(scalars)   # ← one big JSON blob
 ```
 
-This defeats the purpose of using HDF5:
+This defeated the purpose of using HDF5:
 
 - **No individual field access** — can't read or update one scalar without parsing the whole blob.
 - **No type fidelity** — `float` becomes JSON `number`, `int` becomes JSON `number`, bools and
@@ -99,7 +99,7 @@ experiment.h5
 
 ## Serialization Architecture
 
-### Current Flow (Problem)
+### Previous Flow (Problem)
 
 ```text
 save(obj, path)
@@ -107,11 +107,11 @@ save(obj, path)
   → backend.save(serializedDict, meta, path)            # backend gets pre-serialized data
 ```
 
-The backend receives a flat dict of already-serialized values. It doesn't know the original field types,
-so it can't distinguish `list[np.ndarray]` (→ group of datasets) from `list[dict]` (→ unsupported). It
-just sees a Python list and dumps it to JSON.
+The backend received a flat dict of already-serialized values. It didn't know the original field types,
+so it couldn't distinguish `list[np.ndarray]` (→ group of datasets) from `list[dict]` (→ unsupported). It
+just saw a Python list and dumped it to JSON.
 
-### Proposed Flow
+### New Flow
 
 ```text
 save(obj, path)
@@ -164,34 +164,36 @@ the HDF5 backend uses it for native type dispatch.
 
 ### 2. Write Path (`_hdf5_backend.py`)
 
-- Resolve field types from `cls` and dispatch each field to the appropriate HDF5 construct.
-- Rewrite `_writeGroup()` to dispatch on field type:
-  - Primitives → `group.attrs[name] = value`
-  - `np.ndarray` → `group.create_dataset(name, data=value, **comp)`
-  - `None` → `group.attrs[name] = h5py.Empty("f")`
-  - `list[numeric]` / `list[str]` / `list[bool]` → `group.create_dataset(name, data=value)`
-  - `list[np.ndarray]` → create subgroup with integer-keyed datasets (`0`, `1`, …)
-  - `dict[str, np.ndarray]` → create subgroup with named datasets
-  - `Versionable` → create subgroup with a `__versionable__` child group holding metadata attrs
-  - `list[Versionable]` → create subgroup with integer-keyed subgroups, each with `__versionable__`
-  - Enum → `group.attrs[name] = value.value`
-  - Converted types → apply converter, write attribute
-- **Recursive write:** The write path operates on live Versionable instances, not pre-serialized
-  dicts. When a field is a nested Versionable, the writer resolves its metadata and field types
-  from the class, then recursively writes each of its fields as native HDF5 constructs. The same
-  applies to `list[Versionable]` — each element is a live instance whose fields must be
-  recursively written. This handles arbitrarily deep nesting (e.g., a Versionable containing a
-  `list[Versionable]` where each element contains arrays, nested Versionables, etc.).
-- Write metadata (`__OBJECT__`, `__VERSION__`, `__HASH__`) into a `__versionable__` child group at the root.
-- Remove all `json.dumps` from write path.
+- `_writeValue()` does fully recursive type dispatch on each field:
+  - `None` → `h5py.Empty("f")` attribute
+  - `np.ndarray` → dataset with compression
+  - `Versionable` → subgroup with `__versionable__` metadata, recurse for fields
+  - `Enum` → attribute (`.value`)
+  - Scalar primitives (`int`, `float`, `str`, `bool`) → attribute
+  - Converted types (datetime, Path, etc.) → apply converter, write attribute
+  - `list`/`set`/`frozenset`/`tuple` of scalars → 1-D dataset
+  - `list`/`set`/`frozenset`/`tuple` of non-scalars → group with integer keys, recurse
+  - `dict[K, V]` → group with percent-encoded keys, recurse for values
+- Dict keys are percent-encoded via `_keyToStr()`: `/` → `%2F`, `%` → `%25`,
+  bare `.` → `%2E`. Null bytes and empty keys are rejected. Decoded on read via
+  `urllib.parse.unquote()`.
+- Nested Versionable writes operate on live instances, not pre-serialized dicts.
+  Recursion handles arbitrarily deep nesting (e.g., `dict[str, Versionable]`
+  where each Versionable contains `list[np.ndarray]`).
+- Metadata into `__versionable__` child group. No `json.dumps` anywhere.
 
 ### 3. Read Path (`_hdf5_backend.py`)
 
-- Reconstruct fields from attributes + datasets + groups:
-  - Scalar attributes → field values directly.
-  - Datasets → `np.ndarray` or `list[numeric]` (distinguished by the class's field type).
-  - Groups with `__versionable__` child → nested Versionable; read `__versionable__` attrs for metadata, recurse for fields.
-  - Groups without `__versionable__` → collection; the class's field type determines `list` vs `dict` reconstruction.
+- `_readFields()` reconstructs fields with recursive type dispatch:
+  - Scalar attributes → Python primitives (`np.int64` → `int`, etc. via `_readAttr()`)
+  - Datasets → `np.ndarray` or `list[scalar]` (via `_readDataset()`, type from class annotation)
+  - Groups with `__versionable__` → `_readVersionableGroup()`, which resolves the class from the
+    declared type annotation first, falling back to `_resolveClass()` by `__OBJECT__` name
+  - Groups without `__versionable__` → `_readGroup()` with recursive dispatch through
+    `_readSequenceGroup()`, `_readDictGroup()`, `_readChild()`
+- Dict keys are decoded from percent-encoding via `_strToKey()` using `urllib.parse.unquote()`
+  and converted back to the original type (int, float, Enum, etc.) from the type annotation.
+- `load()` and `loadLazy()` both raise `BackendError` when `_resolveClass()` returns `None`.
 
 ### 4. Lazy Loading Updates
 
@@ -239,9 +241,10 @@ helpers** lazy-aware when building those dicts:
 
 #### Sentinel recognition
 
-`_types.py` shouldn't import `_lazy.py` directly (to avoid coupling). Instead, check for a
-`_isLazySentinel` attribute or use a simple type check against a base class / protocol. The
-simplest approach: `_lazy.py` adds a `isLazySentinel(value)` function that `_types.py` calls.
+`_types.py` must not import `_lazy.py` at module level (it would pull in `h5py` on systems
+without it). Instead, each sentinel class has `_isLazySentinel = True`. Detection is via
+`getattr(value, "_isLazySentinel", False)`. The `makeLazyInstance` import is deferred inside
+the `if lazyFields:` block that only runs in HDF5 paths.
 
 #### What stays the same
 
@@ -272,14 +275,25 @@ simplest approach: `_lazy.py` adds a `isLazySentinel(value)` function that `_typ
 
 ### 8. Tests
 
-- Roundtrip for every type in the mapping table.
-- `list[np.ndarray]` with varying shapes and dtypes.
-- `dict[str, np.ndarray]` roundtrip.
-- `list[Versionable]` roundtrip.
-- Lazy loading: per-element lazy for `list[np.ndarray]`.
-- Error case: unsupported nested type raises clear error.
-- Compression still works with all new storage patterns.
-- Nested Versionable containing array collections.
+- **Cross-backend kitchen sink** — every common type (str, int, float, bool, Enum, datetime,
+  date, timedelta, Path, UUID, Literal, set, frozenset, tuple, dict with int/str keys, nested
+  dict[str, list[float]], nested Versionable, list[Versionable]) roundtripped through all 4
+  backends with exact type and value assertions.
+- **Numpy dtypes** — 13 dtypes × 4 backends, plus 2D, 3D, and empty array shape preservation.
+- **HDF5-specific** — native attribute storage (no `__scalars__`), `__versionable__` metadata
+  layout, compression algorithms, file extensions.
+- **Lazy loading** — per-element lazy for `list[np.ndarray]` (`LazyArrayList`) and
+  `dict[str, np.ndarray]` (`LazyArrayDict`), preload, metadataOnly, slicing, iteration,
+  lazy dict with percent-encoded keys and cache state verification.
+- **Recursive lazy loading** — arrays inside nested Versionables get `LazyArray` sentinels;
+  deeply nested `dict[str, Versionable]` with `list[np.ndarray]` fields verified lazy at
+  two levels deep; `preload="*"` eagerly loads everything.
+- **Dict key edge cases** — `/`, `%2F` literal, `.` all roundtrip correctly via percent-encoding.
+- **Error cases** — missing file, unregistered class in `load()` and `loadLazy()`.
+- **None handling** — `None` vs default, optional fields, TOML omit behavior.
+- **Empty collections** — empty lists, empty `list[np.ndarray]`, empty `dict[str, np.ndarray]`.
+- **No JSON anywhere** — recursive assertion that no attribute in the file contains JSON strings.
+- **CI** — all tests gated on HDF5 availability for minimal (no h5py) environments.
 
 ## Design Decisions
 
@@ -295,3 +309,11 @@ simplest approach: `_lazy.py` adds a `isLazySentinel(value)` function that `_typ
    the attribute would fall back to the dataclass default, which may not be `None`.
    (`skipDefaults` still works: if the default is `None` and the value is `None`, the field is
    omitted entirely — no empty attribute written.)
+
+4. **Dict key percent-encoding.** HDF5 interprets `/` as a path separator and `.` as the current
+   group. Keys are encoded on write (`/` → `%2F`, `%` → `%25`, bare `.` → `%2E`) and decoded
+   on read via `urllib.parse.unquote()`. Null bytes and empty keys are rejected.
+
+5. **Strict class resolution.** Both `load()` and `loadLazy()` raise `BackendError` when the
+   file's `__OBJECT__` class can't be resolved. Silently falling back to `fieldTypes = {}` would
+   cause arrays to be misinterpreted as lists and vice versa.
