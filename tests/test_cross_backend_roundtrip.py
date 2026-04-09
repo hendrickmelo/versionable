@@ -53,6 +53,7 @@ _h_kitchen_sink = computeHash(
         "color": Color,
         "intPriority": IntPriority,
         "createdAt": datetime.datetime,
+        "createdAtTz": datetime.datetime,
         "today": datetime.date,
         "elapsed": datetime.timedelta,
         "filePath": Path,
@@ -78,6 +79,7 @@ class _KitchenSink(Versionable, version=1, hash=_h_kitchen_sink, register=False)
     color: Color
     intPriority: IntPriority
     createdAt: datetime.datetime
+    createdAtTz: datetime.datetime
     today: datetime.date
     elapsed: datetime.timedelta
     filePath: Path
@@ -236,6 +238,7 @@ class TestKitchenSinkRoundtrip:
             color=Color.GREEN,
             intPriority=IntPriority.HIGH,
             createdAt=datetime.datetime(2024, 6, 15, 14, 30, 0),
+            createdAtTz=datetime.datetime(2024, 6, 15, 14, 30, 0, tzinfo=datetime.UTC),
             today=datetime.date(2024, 6, 15),
             elapsed=datetime.timedelta(hours=2, minutes=30, seconds=15),
             filePath=Path("/data/results"),
@@ -267,6 +270,8 @@ class TestKitchenSinkRoundtrip:
         assert isinstance(loaded.color, Color), f"[{ext}] color type"
         assert isinstance(loaded.intPriority, IntPriority), f"[{ext}] intPriority type"
         assert isinstance(loaded.createdAt, datetime.datetime), f"[{ext}] createdAt type"
+        assert isinstance(loaded.createdAtTz, datetime.datetime), f"[{ext}] createdAtTz type"
+        assert loaded.createdAtTz.tzinfo is not None, f"[{ext}] createdAtTz should be timezone-aware"
         assert isinstance(loaded.today, datetime.date), f"[{ext}] today type"
         assert isinstance(loaded.elapsed, datetime.timedelta), f"[{ext}] elapsed type"
         assert isinstance(loaded.filePath, Path), f"[{ext}] filePath type"

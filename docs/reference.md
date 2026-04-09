@@ -126,13 +126,15 @@ class MyConfig(Versionable, version=1, hash="4b7866"):
 The following dunder keys are used internally by **`versionable`** and must not be used as field names or as keys in
 user-provided dict values:
 
-| Key           | Purpose                                                   |
-| ------------- | --------------------------------------------------------- |
-| `__OBJECT__`  | Serialization class name (stored in metadata)             |
-| `__VERSION__` | Schema version (stored in metadata)                       |
-| `__HASH__`    | Schema hash (stored in metadata)                          |
-| `__meta__`    | Metadata mapping in YAML and TOML files                   |
-| `__ndarray__` | Marks a dict as a serialized numpy array                  |
-| `__json__`    | YAML-only wrapper for values with no native YAML encoding |
+| Key               | Purpose                                                   |
+| ----------------- | --------------------------------------------------------- |
+| `__OBJECT__`      | Serialization class name (stored in metadata)             |
+| `__VERSION__`     | Schema version (stored in metadata)                       |
+| `__HASH__`        | Schema hash (stored in metadata)                          |
+| `__meta__`        | Metadata mapping in YAML and TOML files                   |
+| `__versionable__` | HDF5 metadata child group (holds `__OBJECT__`, etc.)      |
+| `__FORMAT__`      | Reserved for future versionable versioning                |
+| `__ndarray__`     | Marks a dict as a serialized numpy array (JSON/YAML/TOML) |
+| `__json__`        | YAML-only wrapper for values with no native YAML encoding |
 
 > ⚠️ **Warning:** Using any of these as a field name or dict key will cause incorrect serialization or deserialization.

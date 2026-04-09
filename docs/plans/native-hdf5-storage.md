@@ -59,7 +59,7 @@ Groups are used for three purposes, distinguished by the presence of a `__versio
 
 | Has `__versionable__` child group? | Meaning |
 |---|---|
-| Yes | Versionable object; `__versionable__` holds `__OBJECT__`, `__VERSION__`, `__HASH__` (+ `__FORMAT__` reserved for future use) |
+| Yes | Versionable object; `__versionable__` holds `__OBJECT__`, `__VERSION__`, `__HASH__` (+ `__FORMAT__` reserved for future versionable versioning) |
 | No | Collection group (list or dict); type determined from the parent class's field annotations |
 
 No type marker attributes are stored on collection groups. The deserializer always has the class's type
