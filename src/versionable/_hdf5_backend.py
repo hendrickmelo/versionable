@@ -416,7 +416,7 @@ def _readGroup(group: h5py.Group, fieldType: Any) -> Any:
     """Read a group using recursive type dispatch."""
     # Versionable group: has __versionable__ child
     if _VERSIONABLE_GROUP in group:
-        return _readVersionableGroup(group)
+        return _readVersionableGroup(group, fieldType)
 
     # Collection group: determined by field type
     origin = typing.get_origin(fieldType)
@@ -435,8 +435,13 @@ def _readGroup(group: h5py.Group, fieldType: Any) -> Any:
     return _readDictGroup(group, str, None)
 
 
-def _readVersionableGroup(group: h5py.Group) -> dict[str, Any]:
-    """Read a nested Versionable subgroup as a dict with metadata."""
+def _readVersionableGroup(group: h5py.Group, declaredType: Any = None) -> dict[str, Any]:
+    """Read a nested Versionable subgroup as a dict with metadata.
+
+    If *declaredType* is a Versionable subclass (e.g., from the parent's field
+    annotation), use it directly to resolve field types. Otherwise fall back to
+    looking up the class by the ``__OBJECT__`` name from file metadata.
+    """
     metaGroup = group[_VERSIONABLE_GROUP]
     objectName = str(metaGroup.attrs.get("__OBJECT__", ""))
 
@@ -446,8 +451,12 @@ def _readVersionableGroup(group: h5py.Group) -> dict[str, Any]:
         "__HASH__": str(metaGroup.attrs.get("__HASH__", "")),
     }
 
-    # Resolve field types from the class for nested reading
-    cls = _resolveClass(objectName)
+    # Use declared type if available, otherwise resolve by name
+    cls: type | None = None
+    if isinstance(declaredType, type) and issubclass(declaredType, Versionable):
+        cls = declaredType
+    else:
+        cls = _resolveClass(objectName)
     nestedFieldTypes = _resolveFields(cls) if cls is not None else {}
     result.update(_readFields(group, nestedFieldTypes))
     return result
@@ -497,7 +506,7 @@ def _readChild(item: h5py.Dataset | h5py.Group, elemType: Any) -> Any:
         return _readDataset(item, elemType)
     if isinstance(item, h5py.Group):
         if _VERSIONABLE_GROUP in item:
-            return _readVersionableGroup(item)
+            return _readVersionableGroup(item, elemType)
         return _readGroup(item, elemType)
     return None
 
@@ -586,12 +595,15 @@ def _makeLazyCollection(path: Path, group: h5py.Group, fieldType: Any) -> Any:
     groupPath = group.name.lstrip("/")
 
     origin = typing.get_origin(fieldType)
+    args = typing.get_args(fieldType)
     if origin is list:
         keys = sorted(group.keys(), key=int)
         return LazyArrayList(path, groupPath, keys)
     if origin is dict:
-        keys = list(group.keys())
-        return LazyArrayDict(path, groupPath, keys)
+        keyType = args[0] if args else str
+        hdf5Keys = list(group.keys())
+        decodedKeys = [_strToKey(k, keyType) for k in hdf5Keys]
+        return LazyArrayDict(path, groupPath, decodedKeys, hdf5Keys=hdf5Keys)
     # Shouldn't get here — _isArrayCollectionField guards the call
     return _readGroup(group, fieldType)
 

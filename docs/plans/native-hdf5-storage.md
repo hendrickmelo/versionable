@@ -195,10 +195,60 @@ the HDF5 backend uses it for native type dispatch.
 
 ### 4. Lazy Loading Updates
 
-- `loadLazy` needs to handle the new group types:
-  - `list[np.ndarray]` group → could return a `LazyList` where each element is a `LazyArray`.
-  - Individual scalar attributes → always eagerly loaded (they're tiny).
-  - `list[float]` dataset → eagerly loaded (small) or lazy like any other dataset.
+Lazy loading is **recursive** — it applies at every level of the object tree, not just the root.
+
+#### Current architecture
+
+`loadLazy` returns a flat `(fields, meta, lazyFields)` tuple. `_api.py` skips `deserialize()` for
+fields in `lazyFields` and wraps the instance with `makeLazyInstance`, which installs a
+`__getattribute__` override that resolves `LazyArray` sentinels on first access.
+
+The problem: nested Versionable groups are read eagerly via `_readGroup` → `_readVersionableGroup`,
+which loads everything including arrays. Lazy loading only applies to top-level fields.
+
+#### Design
+
+The read path already reconstructs nested Versionables as dicts with `__OBJECT__` metadata (which
+`_deserializeVersionable` in `_types.py` turns into instances). The fix is to make the **HDF5 read
+helpers** lazy-aware when building those dicts:
+
+1. **`_readFields` accepts a lazy context** — a `_LazyContext` dataclass holding `path`,
+   `preloadAll`, `preloadSet`, and `metadataOnly`. When `None`, everything is eager (used by
+   `Backend.load()`). When present, the same lazy logic that `loadLazy` applies to the root is
+   applied recursively at every level.
+
+2. **`_readVersionableGroup` propagates the lazy context** — it passes the context down to
+   `_readFields`, so nested Versionable objects get the same lazy treatment as the root.
+
+3. **`_readFields` with lazy context** classifies each child the same way `loadLazy` does today:
+   - `np.ndarray` dataset → `LazyArray(path, fullDatasetPath)` (uses the full HDF5 path)
+   - Scalar dataset (`list[float]`, etc.) → eager
+   - `list[np.ndarray]` / `dict[str, np.ndarray]` group → `LazyArrayList` / `LazyArrayDict`
+   - Nested Versionable group → recurse with the same lazy context
+   - Scalar attributes → eager
+
+4. **`_api.py` deserialization handles lazy sentinels at any depth** — `_deserializeVersionable`
+   in `_types.py` already iterates fields and calls `deserialize()`. It needs to:
+   - Skip deserialization for `LazyArray` / `LazyArrayList` / `LazyArrayDict` / `ArrayNotLoaded`
+     sentinels (pass them through as-is)
+   - Call `makeLazyInstance` on the nested instance if it has lazy fields
+
+5. **`loadLazy` simplifies** — instead of duplicating the field classification logic, it calls
+   `_readFields(group, fieldTypes, lazyContext)` and collects `lazyFields` from the result.
+   The root-level lazy field tracking is just for the `makeLazyInstance` call in `_api.py`.
+
+#### Sentinel recognition
+
+`_types.py` shouldn't import `_lazy.py` directly (to avoid coupling). Instead, check for a
+`_isLazySentinel` attribute or use a simple type check against a base class / protocol. The
+simplest approach: `_lazy.py` adds a `isLazySentinel(value)` function that `_types.py` calls.
+
+#### What stays the same
+
+- `LazyArray`, `LazyArrayList`, `LazyArrayDict`, `ArrayNotLoaded` — unchanged
+- `makeLazyInstance` / `_getLazyClass` — unchanged, just applied at every Versionable level
+- `preload` / `metadataOnly` semantics — unchanged, just applied recursively
+- The write path — unchanged (lazy loading is read-only)
 
 ### 5. Deserialization
 

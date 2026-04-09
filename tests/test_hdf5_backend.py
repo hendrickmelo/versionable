@@ -822,6 +822,66 @@ class TestLazyArrayCollections:
         loaded = versionable.load(_WithChannels, p)
         assert set(loaded.channels.keys()) == {"ch0", "ch1"}
 
+    def test_lazyDictWithEncodedKeys(self, tmp_path: Path) -> None:
+        """LazyArrayDict decodes percent-encoded keys and loads on access."""
+        from versionable._lazy import LazyArrayDict
+
+        h = computeHash({"data": dict[str, npt.NDArray[np.float64]]})
+
+        @dataclass
+        class WithSlashChannels(Versionable, version=1, hash=h, register=False):
+            data: dict[str, npt.NDArray[np.float64]]
+
+        obj = WithSlashChannels(data={"a/b": np.array([1.0]), "c": np.array([2.0])})
+        p = tmp_path / "lazy_encoded.h5"
+        versionable.save(obj, p)
+
+        loaded = versionable.load(WithSlashChannels, p)
+        raw = object.__getattribute__(loaded, "data")
+        assert isinstance(raw, LazyArrayDict)
+
+        # Keys should be decoded before any data is loaded
+        assert "a/b" in raw
+        assert "c" in raw
+        assert len(raw._cache) == 0  # noqa: SLF001 — testing lazy internals
+
+        # Accessing a key loads only that element
+        np.testing.assert_array_equal(loaded.data["a/b"], np.array([1.0]))
+        assert len(raw._cache) == 1  # noqa: SLF001
+
+        np.testing.assert_array_equal(loaded.data["c"], np.array([2.0]))
+        assert len(raw._cache) == 2  # noqa: SLF001
+
+    def test_nestedVersionableEagerArrays(self, tmp_path: Path) -> None:
+        """Nested Versionable groups are eagerly loaded (including their arrays).
+
+        Lazy loading currently only applies to top-level array fields and
+        top-level array collection fields. Arrays inside nested Versionable
+        objects are loaded eagerly when the parent group is read.
+        """
+        measurements = [
+            _Measurement(label="a", data=np.array([1.0, 2.0])),
+            _Measurement(label="b", data=np.array([3.0, 4.0, 5.0])),
+        ]
+        obj = _Experiment(name="exp", measurements=measurements)
+        p = tmp_path / "nested_eager.h5"
+        versionable.save(obj, p)
+
+        loaded = versionable.load(_Experiment, p)
+
+        # Scalars are available
+        assert loaded.name == "exp"
+        assert loaded.measurements[0].label == "a"
+        assert loaded.measurements[1].label == "b"
+
+        # Arrays inside nested Versionables are eagerly loaded (not lazy)
+        rawData0 = object.__getattribute__(loaded.measurements[0], "data")
+        assert isinstance(rawData0, np.ndarray), "expected eager ndarray, not LazyArray"
+
+        # Data is correct
+        np.testing.assert_array_equal(loaded.measurements[0].data, np.array([1.0, 2.0]))
+        np.testing.assert_array_equal(loaded.measurements[1].data, np.array([3.0, 4.0, 5.0]))
+
 
 def _assertNoJsonAttrs(group: h5py.Group) -> None:
     """Recursively verify no attributes contain JSON strings."""

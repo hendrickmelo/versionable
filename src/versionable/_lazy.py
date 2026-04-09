@@ -101,10 +101,19 @@ class LazyArrayDict:
     and iteration.  Each value is loaded and cached on first access.
     """
 
-    def __init__(self, filePath: Path, groupPath: str, keys: list[str]) -> None:
+    def __init__(
+        self,
+        filePath: Path,
+        groupPath: str,
+        keys: list[str],
+        hdf5Keys: list[str] | None = None,
+    ) -> None:
         self.filePath = filePath
         self.groupPath = groupPath
         self._keys = keys
+        # hdf5Keys are the raw (possibly percent-encoded) names in the file
+        self._hdf5Keys = hdf5Keys or keys
+        self._keyToHdf5: dict[str, str] = dict(zip(self._keys, self._hdf5Keys, strict=True))
         self._cache: dict[str, np.ndarray] = {}
 
     def __len__(self) -> int:
@@ -112,11 +121,12 @@ class LazyArrayDict:
 
     def __getitem__(self, key: str) -> np.ndarray:
         if key not in self._cache:
-            if key not in self._keys:
+            if key not in self._keyToHdf5:
                 raise KeyError(key)
+            hdf5Key = self._keyToHdf5[key]
             with h5py.File(self.filePath, "r") as f:
-                self._cache[key] = f[f"{self.groupPath}/{key}"][()]
-            logger.debug("Lazy-loaded %s/%s", self.groupPath, key)
+                self._cache[key] = f[f"{self.groupPath}/{hdf5Key}"][()]
+            logger.debug("Lazy-loaded %s/%s", self.groupPath, hdf5Key)
         return self._cache[key]
 
     def __contains__(self, key: object) -> bool:
