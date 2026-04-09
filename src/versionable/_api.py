@@ -120,7 +120,10 @@ def load[T: Versionable](
     lazyFields: set[str] = set()
     loadLazy = getattr(be, "loadLazy", None)
     if loadLazy is not None and (preload != "*" or metadataOnly):
-        rawFields, fileMeta, lazyFields = loadLazy(path, preload=preload, metadataOnly=metadataOnly)
+        rawFields, fileMeta, lazyFields = loadLazy(path, cls=cls, preload=preload, metadataOnly=metadataOnly)
+    elif loadLazy is not None:
+        # HDF5 with preload="*" — use loadLazy so cls is available for type dispatch
+        rawFields, fileMeta, lazyFields = loadLazy(path, cls=cls, preload="*", metadataOnly=False)
     else:
         rawFields, fileMeta = be.load(path)
 
