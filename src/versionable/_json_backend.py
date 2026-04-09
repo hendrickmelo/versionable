@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from versionable._backend import Backend, registerBackend
+from versionable._base import _resolveFields
+from versionable._types import serialize
 from versionable.errors import BackendError
 
 
@@ -25,8 +27,13 @@ class JsonBackend(Backend):
         fields: dict[str, Any],
         meta: dict[str, Any],
         path: Path,
+        *,
+        cls: type,
         **kwargs: Any,
     ) -> None:
+        fieldTypes = _resolveFields(cls)
+        fields = {k: serialize(v, fieldTypes[k], nativeTypes=self.nativeTypes) for k, v in fields.items()}
+
         data = {
             "__OBJECT__": meta["name"],
             "__VERSION__": meta["version"],

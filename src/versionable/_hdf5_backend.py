@@ -20,7 +20,9 @@ import h5py
 import numpy as np
 
 from versionable._backend import Backend, registerBackend
+from versionable._base import _resolveFields
 from versionable._hdf5_compression import ZSTD_DEFAULT, Hdf5Compression
+from versionable._types import serialize
 from versionable.errors import BackendError
 
 logger = logging.getLogger(__name__)
@@ -37,9 +39,13 @@ class Hdf5Backend(Backend):
         meta: dict[str, Any],
         path: Path,
         *,
+        cls: type,
         compression: Hdf5Compression | None = None,
         **kwargs: Any,
     ) -> None:
+        fieldTypes = _resolveFields(cls)
+        fields = {k: serialize(v, fieldTypes[k], nativeTypes=self.nativeTypes) for k, v in fields.items()}
+
         comp = compression or ZSTD_DEFAULT
         try:
             with h5py.File(path, "w") as f:
