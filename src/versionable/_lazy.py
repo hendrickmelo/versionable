@@ -52,9 +52,14 @@ def isLazySentinel(value: Any) -> bool:
 class LazyArray:
     """Sentinel that loads an HDF5 dataset on first access.
 
+    Has ``_isLazySentinel = True`` so generic code can detect lazy sentinels
+    without importing this module.
+
     Stores the file path and dataset name; loads and returns the
     numpy array when ``load()`` is called.
     """
+
+    _isLazySentinel = True
 
     def __init__(self, filePath: Path, datasetPath: str) -> None:
         self.filePath = filePath
@@ -72,9 +77,11 @@ class LazyArray:
 class LazyArrayList:
     """A list-like container where each element is lazily loaded from HDF5.
 
-    Supports ``len()``, indexing, iteration, and ``preloadAll()`` to eagerly
-    load everything at once.  Each element is loaded and cached on first access.
+    Supports ``len()``, indexing, iteration, and slicing.
+    Each element is loaded and cached on first access.
     """
+
+    _isLazySentinel = True
 
     def __init__(self, filePath: Path, groupPath: str, keys: list[str]) -> None:
         self.filePath = filePath
@@ -120,6 +127,8 @@ class LazyArrayDict:
     Supports ``len()``, key access, ``keys()``, ``values()``, ``items()``,
     and iteration.  Each value is loaded and cached on first access.
     """
+
+    _isLazySentinel = True
 
     def __init__(
         self,
@@ -171,6 +180,8 @@ class LazyArrayDict:
 
 class ArrayNotLoaded:
     """Sentinel for ``metadataOnly=True`` — raises on access."""
+
+    _isLazySentinel = True
 
     def __init__(self, fieldName: str) -> None:
         self.fieldName = fieldName

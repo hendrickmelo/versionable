@@ -471,8 +471,6 @@ def _deserializeVersionable(data: dict[str, Any], cls: type[Versionable]) -> Ver
     """
     import dataclasses
 
-    from versionable._lazy import isLazySentinel, makeLazyInstance
-
     lazyFields: set[str] = data.pop("__lazy__", set())
 
     meta = cls._serializer_meta_
@@ -482,7 +480,7 @@ def _deserializeVersionable(data: dict[str, Any], cls: type[Versionable]) -> Ver
     for fieldName, fieldType in fields.items():
         if fieldName in data:
             rawValue = data[fieldName]
-            if fieldName in lazyFields or isLazySentinel(rawValue):
+            if fieldName in lazyFields or getattr(rawValue, "_isLazySentinel", False):
                 # Lazy sentinel — pass through without deserialization
                 kwargs[fieldName] = rawValue
             else:
@@ -500,6 +498,8 @@ def _deserializeVersionable(data: dict[str, Any], cls: type[Versionable]) -> Ver
 
     instance = cls(**kwargs)
     if lazyFields:
+        from versionable._lazy import makeLazyInstance
+
         instance = makeLazyInstance(instance, lazyFields)
     return instance
 
