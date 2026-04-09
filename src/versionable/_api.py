@@ -17,7 +17,7 @@ from typing import Any, TypeVar
 
 from versionable._backend import Backend, getBackend
 from versionable._base import Versionable, _resolveFields, metadata
-from versionable._types import deserialize, serialize
+from versionable._types import deserialize
 from versionable.errors import BackendError, UnknownFieldError, VersionError
 
 logger = logging.getLogger(__name__)
@@ -50,12 +50,12 @@ def save(
     path = Path(path)
     be = getBackend(path, explicit=backend)
 
-    meta = metadata(type(obj))
-    fields = _resolveFields(type(obj))
-    nativeTypes = be.nativeTypes
+    objType = type(obj)
+    meta = metadata(objType)
+    fields = _resolveFields(objType)
 
-    serializedFields: dict[str, Any] = {}
-    for fieldName, fieldType in fields.items():
+    rawFields: dict[str, Any] = {}
+    for fieldName in fields:
         value = getattr(obj, fieldName)
 
         # skip_defaults: omit fields at their default value
@@ -63,7 +63,7 @@ def save(
             import dataclasses
 
             # Versionable subclasses are always @dataclass; mypy/pyright can't prove that statically.
-            dcFields = {f.name: f for f in dataclasses.fields(type(obj))}  # type: ignore[arg-type]
+            dcFields = {f.name: f for f in dataclasses.fields(objType)}  # type: ignore[arg-type]
             if fieldName in dcFields:
                 dcField = dcFields[fieldName]
                 if dcField.default is not dataclasses.MISSING and value == dcField.default:
@@ -71,14 +71,14 @@ def save(
                 if dcField.default_factory is not dataclasses.MISSING and value == dcField.default_factory():
                     continue
 
-        serializedFields[fieldName] = serialize(value, fieldType, nativeTypes=nativeTypes)
+        rawFields[fieldName] = value
 
     metaDict = {
         "name": meta.name,
         "version": meta.version,
         "hash": meta.hash,
     }
-    be.save(serializedFields, metaDict, path, commentDefaults=commentDefaults, **kwargs)
+    be.save(rawFields, metaDict, path, cls=objType, commentDefaults=commentDefaults, **kwargs)
 
 
 def load[T: Versionable](
@@ -120,7 +120,10 @@ def load[T: Versionable](
     lazyFields: set[str] = set()
     loadLazy = getattr(be, "loadLazy", None)
     if loadLazy is not None and (preload != "*" or metadataOnly):
-        rawFields, fileMeta, lazyFields = loadLazy(path, preload=preload, metadataOnly=metadataOnly)
+        rawFields, fileMeta, lazyFields = loadLazy(path, cls=cls, preload=preload, metadataOnly=metadataOnly)
+    elif loadLazy is not None:
+        # HDF5 with preload="*" — use loadLazy so cls is available for type dispatch
+        rawFields, fileMeta, lazyFields = loadLazy(path, cls=cls, preload="*", metadataOnly=False)
     else:
         rawFields, fileMeta = be.load(path)
 

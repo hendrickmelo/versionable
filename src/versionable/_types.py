@@ -232,7 +232,7 @@ def serialize(value: Any, fieldType: Any, *, nativeTypes: set[type] | None = Non
 _UNHANDLED = object()  # sentinel
 
 
-def _serializeTyped(value: Any, nativeTypes: set[type]) -> Any:  # noqa: PLR0911 — type-dispatch; many returns are inherent
+def _serializeTyped(value: Any, nativeTypes: set[type]) -> Any:
     """Try to serialize based on value type.  Returns _UNHANDLED if not matched."""
     valueType = type(value)
 
@@ -359,7 +359,7 @@ def _deserializeUnion(
     return data
 
 
-def _deserializeConcrete(  # noqa: PLR0911 — type-dispatch; many returns are inherent
+def _deserializeConcrete(
     data: Any,
     concreteType: Any,
     args: tuple[Any, ...],
@@ -463,8 +463,15 @@ def _serializeVersionable(obj: Versionable) -> dict[str, Any]:
 
 
 def _deserializeVersionable(data: dict[str, Any], cls: type[Versionable]) -> Versionable:
-    """Deserialize a dict to a Versionable instance."""
+    """Deserialize a dict to a Versionable instance.
+
+    If the dict contains a ``__lazy__`` key (set by the HDF5 backend's
+    recursive lazy reader), lazy sentinels are passed through without
+    deserialization and the instance is wrapped with ``makeLazyInstance``.
+    """
     import dataclasses
+
+    lazyFields: set[str] = data.pop("__lazy__", set())
 
     meta = cls._serializer_meta_
     fields = _resolveFields(cls)
@@ -472,18 +479,29 @@ def _deserializeVersionable(data: dict[str, Any], cls: type[Versionable]) -> Ver
     kwargs: dict[str, Any] = {}
     for fieldName, fieldType in fields.items():
         if fieldName in data:
-            dcField = dcFields.get(fieldName)
-            dcMeta = dcField.metadata if dcField is not None else None
-            kwargs[fieldName] = deserialize(
-                data[fieldName], fieldType, fieldMetadata=dcMeta, validateLiterals=meta.validateLiterals
-            )
+            rawValue = data[fieldName]
+            if fieldName in lazyFields or getattr(rawValue, "_isLazySentinel", False):
+                # Lazy sentinel — pass through without deserialization
+                kwargs[fieldName] = rawValue
+            else:
+                dcField = dcFields.get(fieldName)
+                dcMeta = dcField.metadata if dcField is not None else None
+                kwargs[fieldName] = deserialize(
+                    rawValue, fieldType, fieldMetadata=dcMeta, validateLiterals=meta.validateLiterals
+                )
         elif fieldName in dcFields:
             dcField = dcFields[fieldName]
             if dcField.default is not dataclasses.MISSING:
                 kwargs[fieldName] = dcField.default
             elif dcField.default_factory is not dataclasses.MISSING:
                 kwargs[fieldName] = dcField.default_factory()
-    return cls(**kwargs)
+
+    instance = cls(**kwargs)
+    if lazyFields:
+        from versionable._lazy import makeLazyInstance
+
+        instance = makeLazyInstance(instance, lazyFields)
+    return instance
 
 
 # ---------------------------------------------------------------------------

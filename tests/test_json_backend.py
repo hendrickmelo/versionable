@@ -115,10 +115,12 @@ class TestJsonMetadata:
         versionable.save(obj, p)
 
         data = json.loads(p.read_text())
-        assert "__OBJECT__" in data
-        assert "__VERSION__" in data
-        assert "__HASH__" in data
-        assert data["__VERSION__"] == 1
+        assert "__versionable__" in data
+        meta = data["__versionable__"]
+        assert "__OBJECT__" in meta
+        assert "__VERSION__" in meta
+        assert "__HASH__" in meta
+        assert meta["__VERSION__"] == 1
 
     def test_prettyPrinted(self, tmp_path: Path) -> None:
         obj = SimpleConfig(name="test")
@@ -166,9 +168,11 @@ class TestUnknownFields:
         p.write_text(
             json.dumps(
                 {
-                    "__OBJECT__": "SimpleConfig",
-                    "__VERSION__": 1,
-                    "__HASH__": "",
+                    "__versionable__": {
+                        "__OBJECT__": "SimpleConfig",
+                        "__VERSION__": 1,
+                        "__HASH__": "",
+                    },
                     "name": "test",
                     "debug": False,
                     "retries": 3,
@@ -193,9 +197,11 @@ class TestJsonLiteral:
         p.write_text(
             json.dumps(
                 {
-                    "__OBJECT__": "WithLiteral",
-                    "__VERSION__": 1,
-                    "__HASH__": "",
+                    "__versionable__": {
+                        "__OBJECT__": "WithLiteral",
+                        "__VERSION__": 1,
+                        "__HASH__": "",
+                    },
                     "name": "test",
                     "mode": "banana",
                 }
@@ -209,9 +215,11 @@ class TestJsonLiteral:
         p.write_text(
             json.dumps(
                 {
-                    "__OBJECT__": "WithLiteral",
-                    "__VERSION__": 1,
-                    "__HASH__": "",
+                    "__versionable__": {
+                        "__OBJECT__": "WithLiteral",
+                        "__VERSION__": 1,
+                        "__HASH__": "",
+                    },
                     "name": "test",
                     "mode": "banana",
                 }
@@ -264,9 +272,11 @@ class TestErrors:
         p.write_text(
             json.dumps(
                 {
-                    "__OBJECT__": "SimpleConfig",
-                    "__VERSION__": 999,
-                    "__HASH__": "",
+                    "__versionable__": {
+                        "__OBJECT__": "SimpleConfig",
+                        "__VERSION__": 999,
+                        "__HASH__": "",
+                    },
                     "name": "test",
                 }
             )

@@ -124,8 +124,12 @@ on load. Every TOML field should have a default value.
 
 ### HDF5 Details
 
-Arrays are lazy-loaded by default — `load()` returns instantly even for multi-gigabyte files. Accessing an array field
-triggers the disk read.
+Every field maps to a native HDF5 construct — no JSON in the file. Scalars become attributes, arrays become datasets,
+nested Versionables become subgroups with a `__versionable__` metadata group, and `list[np.ndarray]` /
+`dict[str, np.ndarray]` become groups of datasets.
+
+Arrays and array collections are lazy-loaded by default — `load()` returns instantly even for multi-gigabyte files.
+Accessing an array field or indexing into a `list[np.ndarray]` triggers the disk read.
 
 ```python
 from versionable.hdf5 import ZSTD_DEFAULT, GZIP_DEFAULT
@@ -390,9 +394,12 @@ from versionable import Backend, registerBackend
 class MsgPackBackend(Backend):
     nativeTypes: set[type] = set()
 
-    def save(self, fields: dict, meta: dict, path, **kwargs) -> None: ...
+    def save(self, fields: dict, meta: dict, path, *, cls: type, **kwargs) -> None: ...
     def load(self, path) -> tuple[dict, dict]: ...
 
 
 registerBackend([".msgpack"], MsgPackBackend)
 ```
+
+The `save()` method receives raw (unserialized) field values and the Versionable class. Call `serialize()` internally
+for dict-based formats, or handle type dispatch directly for binary formats.

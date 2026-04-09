@@ -20,6 +20,8 @@ mdlint_check = "npx markdownlint-cli2 '**/*.md'"
 test = "pytest"
 cleanup = { depends-on = ["format", "ruff", "mypy", "pyright", "prettier", "mdlint"] }
 ci = { depends-on = ["format_check", "ruff_check", "mypy", "pyright", "prettier_check", "mdlint_check", "test"] }
+ci-minimal = { cmd = "pixi run -e minimal ci", description = "Run CI in minimal environment (no h5py)" }
+ci-all = { depends-on = ["ci", "ci-minimal"], description = "Run CI in all environments" }
 
 [dependencies]
 python = ">=3.12,<3.14"

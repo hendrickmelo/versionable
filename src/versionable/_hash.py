@@ -28,7 +28,7 @@ def computeHash(fields: dict[str, Any]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:6]
 
 
-def canonicalTypeName(tp: Any) -> str:  # noqa: PLR0911 — type-dispatch; many returns are inherent
+def canonicalTypeName(tp: Any) -> str:
     """Return a stable, canonical string representation of a type.
 
     This must be deterministic across Python versions.  It normalises

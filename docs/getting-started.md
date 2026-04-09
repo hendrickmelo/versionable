@@ -71,7 +71,7 @@ The YAML file on disk looks like:
 ```yaml
 name: experiment-A
 value: 9.81
-__meta__:
+__versionable__:
   __OBJECT__: MyConfig
   __VERSION__: 1
   __HASH__: 4b7866

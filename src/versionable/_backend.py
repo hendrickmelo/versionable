@@ -20,9 +20,18 @@ class Backend(ABC):
         fields: dict[str, Any],
         meta: dict[str, Any],
         path: Path,
+        *,
+        cls: type,
         **kwargs: Any,
     ) -> None:
-        """Write serialized fields and metadata to *path*."""
+        """Write fields and metadata to *path*.
+
+        Args:
+            fields: Raw field values (not pre-serialized).
+            meta: Metadata dict with ``name``, ``version``, ``hash`` keys.
+            path: Output file path.
+            cls: The Versionable subclass, used to resolve field types.
+        """
 
     @abstractmethod
     def load(self, path: Path) -> tuple[dict[str, Any], dict[str, Any]]:

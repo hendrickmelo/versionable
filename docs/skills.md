@@ -132,8 +132,8 @@ class SensorConfig(
 **Serialized fields:** annotated, non-private (no `_` prefix), non-`ClassVar`. Private fields, unannotated attributes,
 and `ClassVar` are excluded.
 
-**Reserved metadata keys (cannot be field names):** `__OBJECT__`, `__VERSION__`, `__HASH__`, `__meta__`, `__ndarray__`,
-`__json__`.
+**Reserved metadata keys (cannot be field names):** `__OBJECT__`, `__VERSION__`, `__HASH__`, `__versionable__`,
+`__ndarray__`, `__json__`.
 
 ### Type System
 

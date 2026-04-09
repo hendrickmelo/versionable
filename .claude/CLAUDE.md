@@ -161,7 +161,7 @@ Initialize logger: `logger = logging.getLogger(__name__)`
 - **`_backend.py`** — Backend ABC, extension-based auto-detection
 - **`_json_backend.py`**, **`_toml_backend.py`**, **`_yaml_backend.py`**, **`_hdf5_backend.py`** — Storage backends
 - **`_migration.py`** — Declarative + imperative migration system
-- **`_lazy.py`** — Lazy HDF5 array loading via dynamic subclass
+- **`_lazy.py`** — Lazy HDF5 loading: `LazyArray`, `LazyArrayList`, `LazyArrayDict`, dynamic subclass
 - **`_api.py`** — `save()`, `load()`, `loadDynamic()` entry points
 - **`errors.py`** — Exception hierarchy (`VersionableError` and subclasses)
 - **`hdf5.py`** — HDF5 submodule re-exports (compression presets)
@@ -171,3 +171,5 @@ Key design decisions:
 - Hash validated at class definition time (import time)
 - Versionable types use their serialization name (not module path) in hashes — stable across file moves
 - `save()`/`load()` accessed via qualified import (`import versionable`), not direct import
+- `Backend.save()` receives raw values + `cls`; each backend owns its serialization
+- HDF5 backend uses native type mapping (no JSON) with `__versionable__` metadata groups

@@ -51,7 +51,7 @@ channels:
   - 0
   - 1
   - 2
-__meta__:
+__versionable__:
   __OBJECT__: SensorConfig
   __VERSION__: 1
   __HASH__: 9d6951
@@ -59,8 +59,8 @@ __meta__:
 
 Both `.yaml` and `.yml` extensions are supported.
 
-Metadata is stored in a `__meta__` mapping at the end of the file — your data comes first, schema metadata stays out of
-the way.
+Metadata is stored in a `__versionable__` mapping at the end of the file — your data comes first, schema metadata stays
+out of the way.
 
 ### Missing fields
 
@@ -83,7 +83,7 @@ sampleRate_Hz: 120000
 # - 0
 # - 1
 # - 2
-__meta__:
+__versionable__:
   __OBJECT__: SensorConfig
   __VERSION__: 1
   __HASH__: 9d6951
@@ -131,7 +131,7 @@ name = "probe-A"
 sampleRate_Hz = 120000
 channels = [0, 1, 2]
 
-[__meta__]
+[__versionable__]
 __OBJECT__ = "SensorConfig"
 __VERSION__ = 1
 __HASH__ = "9d6951"
@@ -176,7 +176,7 @@ The saved TOML looks like:
 ```toml
 name = "worker"
 
-[__meta__]
+[__versionable__]
 __OBJECT__ = "WorkerConfig"
 __VERSION__ = 1
 __HASH__ = "8bdfa7"
@@ -203,7 +203,7 @@ name = "probe-A"
 sampleRate_Hz = 120000
 # channels = [0, 1, 2]
 
-[__meta__]
+[__versionable__]
 __OBJECT__ = "SensorConfig"
 __VERSION__ = 1
 __HASH__ = "9d6951"
@@ -256,8 +256,27 @@ rec = Recording(name="capture-1", sampleRate_Hz=240000, data=np.random.rand(1_00
 versionable.save(rec, "recording.h5")
 ```
 
-Arrays are stored as compressed HDF5 datasets. Scalar fields (`str`, `int`, `float`, etc.) are stored as dataset
-attributes and are always loaded immediately.
+Every field maps to a native HDF5 construct:
+
+| Python type                                           | HDF5 representation                            |
+| ----------------------------------------------------- | ---------------------------------------------- |
+| `int`, `float`, `bool`, `str`                         | Scalar attribute                               |
+| `np.ndarray`                                          | Dataset (compressed)                           |
+| `list[int]`, `list[float]`, `list[str]`, `list[bool]` | 1-D dataset                                    |
+| `list[np.ndarray]`                                    | Group of integer-keyed datasets                |
+| `dict[str, np.ndarray]`                               | Group of named datasets                        |
+| Nested `Versionable`                                  | Subgroup with `__versionable__` metadata group |
+| `list[Versionable]`                                   | Group of integer-keyed subgroups               |
+| `None`                                                | `h5py.Empty` attribute                         |
+| `Enum`                                                | Attribute (stores `.value`)                    |
+| Converted types (datetime, Path, etc.)                | Attribute (converter output)                   |
+
+Metadata (`__OBJECT__`, `__VERSION__`, `__HASH__`) is stored in a `__versionable__` child group at the root and inside
+each nested Versionable subgroup. This distinguishes Versionable groups from plain collection groups. `__FORMAT__` is
+reserved in this group for future versionable versioning.
+
+Files are readable with h5dump, HDFView, MATLAB, or any HDF5-compatible tool. Reconstructing exact Python types (e.g.,
+distinguishing `list[float]` from `np.ndarray`) requires the class's type annotations.
 
 ### Compression
 
@@ -321,13 +340,23 @@ versionable.save(rec, "recording.h5", compression=GZIP_DEFAULT)
 ### Lazy Loading
 
 By default, array fields are not read from disk until first access. This means `load()` returns almost instantly even
-for large files — the file handle stays open in the background and the array is fetched only when your code actually
-uses it:
+for large files — the array is fetched only when your code actually uses it:
 
 ```python
 loaded = versionable.load(Recording, "recording.h5")
 loaded.name    # Loaded immediately (scalar)
 loaded.data    # Read from disk on first access, then cached
+```
+
+Lazy loading also works per-element for collection fields:
+
+- **`list[np.ndarray]`** — returns a `LazyArrayList` where each element loads on indexing or iteration
+- **`dict[str, np.ndarray]`** — returns a `LazyArrayDict` where each value loads on key access
+
+```python
+loaded = versionable.load(Experiment, "experiment.h5")
+loaded.traces[0]         # Loads only the first trace
+loaded.channels["ch0"]   # Loads only channel "ch0"
 ```
 
 Lazy loading is particularly useful when you have many recordings on disk and only need to inspect metadata (name,
