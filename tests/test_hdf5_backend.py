@@ -299,6 +299,48 @@ class TestHdf5Errors:
         with pytest.raises(BackendError):
             versionable.load(SimpleConfig, tmp_path / "nonexistent.h5")
 
+    def test_dictKeyWithSlash(self, tmp_path: Path) -> None:
+        """Dict keys containing '/' roundtrip correctly (percent-encoded in HDF5)."""
+        h = computeHash({"data": dict[str, int]})
+
+        @dataclass
+        class WithSlashKey(Versionable, version=1, hash=h, register=False):
+            data: dict[str, int]
+
+        obj = WithSlashKey(data={"valid": 1, "path/key": 2, "a/b/c": 3})
+        p = tmp_path / "slash.h5"
+        versionable.save(obj, p)
+        loaded = versionable.load(WithSlashKey, p)
+        assert loaded.data == {"valid": 1, "path/key": 2, "a/b/c": 3}
+
+    def test_dictKeyWithLiteralPercent(self, tmp_path: Path) -> None:
+        """Dict keys containing literal '%2F' don't collide with escaped '/'."""
+        h = computeHash({"data": dict[str, int]})
+
+        @dataclass
+        class WithPercentKey(Versionable, version=1, hash=h, register=False):
+            data: dict[str, int]
+
+        obj = WithPercentKey(data={"%2F": 1, "/": 2, "normal": 3})
+        p = tmp_path / "percent.h5"
+        versionable.save(obj, p)
+        loaded = versionable.load(WithPercentKey, p)
+        assert loaded.data == {"%2F": 1, "/": 2, "normal": 3}
+
+    def test_dictKeyDot(self, tmp_path: Path) -> None:
+        """Dict key '.' (HDF5 current-group alias) roundtrips correctly."""
+        h = computeHash({"data": dict[str, int]})
+
+        @dataclass
+        class WithDotKey(Versionable, version=1, hash=h, register=False):
+            data: dict[str, int]
+
+        obj = WithDotKey(data={".": 1, "..": 2, ".hidden": 3})
+        p = tmp_path / "dot.h5"
+        versionable.save(obj, p)
+        loaded = versionable.load(WithDotKey, p)
+        assert loaded.data == {".": 1, "..": 2, ".hidden": 3}
+
 
 # ---------------------------------------------------------------------------
 # Native type mapping tests
@@ -329,7 +371,7 @@ class TestNativeScalars:
             # Scalars should be native attributes, not in __scalars__
             assert "__scalars__" not in f.attrs
             assert f.attrs["name"] == "test"
-            assert f.attrs["debug"] is np.True_
+            assert bool(f.attrs["debug"]) is True
             assert f.attrs["retries"] == 5
 
     def test_floatPrecision(self, tmp_path: Path) -> None:
@@ -592,6 +634,20 @@ class TestNativeArrayCollections:
             traces_group = f["traces"]
             assert isinstance(traces_group, h5py.Group)
             assert sorted(traces_group.keys()) == ["0", "1"]
+
+    def test_emptyListNdarray(self, tmp_path: Path) -> None:
+        obj = _WithTraces(name="test", traces=[])
+        p = tmp_path / "empty_traces.h5"
+        versionable.save(obj, p)
+        loaded = versionable.load(_WithTraces, p, preload="*")
+        assert loaded.traces == []
+
+    def test_emptyDictNdarray(self, tmp_path: Path) -> None:
+        obj = _WithChannels(name="test", channels={})
+        p = tmp_path / "empty_channels.h5"
+        versionable.save(obj, p)
+        loaded = versionable.load(_WithChannels, p, preload="*")
+        assert loaded.channels == {}
 
 
 class TestNativeNestedVersionable:

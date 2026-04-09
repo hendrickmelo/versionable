@@ -102,7 +102,15 @@ class _EmptyCollections(Versionable, version=1, hash="6c8e40", register=False):
 # ---------------------------------------------------------------------------
 
 _DICT_BACKENDS = [".json", ".yaml", ".toml"]
-_ALL_BACKENDS = [".json", ".yaml", ".toml", ".h5"]
+
+try:
+    import versionable._hdf5_backend
+
+    _HDF5_BACKENDS: list[str] = [".h5"]
+except ImportError:
+    _HDF5_BACKENDS = []
+
+_ALL_BACKENDS = [*_DICT_BACKENDS, *_HDF5_BACKENDS]
 
 
 def _roundtrip(cls: type, obj: Versionable, tmp_path: Path, ext: str) -> Versionable:
@@ -323,6 +331,7 @@ class TestArrayFieldsRoundtrip:
             channels={"ch0": np.array([1.0, 2.0]), "ch1": np.array([3.0, 4.0])},
         )
 
+    @pytest.mark.skipif(not _HDF5_BACKENDS, reason="HDF5 backend not available")
     def test_hdf5Roundtrip(self, obj: _WithArrays, tmp_path: Path) -> None:
         loaded = _roundtrip(_WithArrays, obj, tmp_path, ".h5")
         _assertFullMatch(obj, loaded, ".h5")
@@ -336,6 +345,7 @@ class TestArrayFieldsRoundtrip:
         np.testing.assert_array_equal(loaded.matrix, obj.matrix)
         assert loaded.matrix.dtype == obj.matrix.dtype
 
+    @pytest.mark.skipif(not _HDF5_BACKENDS, reason="HDF5 backend not available")
     def test_hdf5ArrayDtypes(self, obj: _WithArrays, tmp_path: Path) -> None:
         """HDF5 preserves exact dtypes."""
         loaded = _roundtrip(_WithArrays, obj, tmp_path, ".h5")

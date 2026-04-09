@@ -27,6 +27,7 @@ import typing
 from enum import Enum
 from pathlib import Path
 from typing import Any, ClassVar
+from urllib.parse import unquote
 
 import h5py
 import numpy as np
@@ -78,7 +79,12 @@ class Hdf5Backend(Backend):
                 meta = _readMeta(f)
                 objectName = meta["__OBJECT__"]
                 cls = _resolveClass(objectName)
-                fieldTypes = _resolveFields(cls) if cls is not None else {}
+                if cls is None:
+                    raise BackendError(
+                        f"Unknown Versionable type {objectName!r} in {path}. "
+                        f"Ensure the class is imported and registered."
+                    )
+                fieldTypes = _resolveFields(cls)
                 fields = _readFields(f, fieldTypes)
             return fields, meta
         except OSError as e:
@@ -147,7 +153,7 @@ class Hdf5Backend(Backend):
                             elif preloadAll or key in preloadSet:
                                 fields[key] = _readGroup(item, fieldType)
                             else:
-                                fields[key] = _makeLazyCollection(path, key, item, fieldType)
+                                fields[key] = _makeLazyCollection(path, item, fieldType)
                                 lazyFields.add(key)
                         else:
                             # Other groups (list[Versionable], etc.) — eager
@@ -302,12 +308,29 @@ def _writeDict(
 
 
 def _keyToStr(key: Any) -> str:
-    """Convert a dict key to a string for use as an HDF5 group/dataset name."""
+    """Convert a dict key to a string for use as an HDF5 group/dataset name.
+
+    Forward slashes are percent-encoded (``%2F``) since HDF5 interprets ``/``
+    as a path separator. Percent signs are also encoded to keep the escaping
+    reversible. Null bytes and empty keys are rejected.
+    """
     if isinstance(key, str):
-        return key
-    if isinstance(key, Enum):
-        return str(key.value)
-    return str(key)
+        result = key
+    elif isinstance(key, Enum):
+        result = str(key.value)
+    else:
+        result = str(key)
+    if not result:
+        raise BackendError("Dict key is empty after string conversion — HDF5 requires non-empty names.")
+    if "\0" in result:
+        raise BackendError(f"Dict key {result!r} contains null bytes — not supported in HDF5 names.")
+    # Percent-encode % and / (the only chars HDF5 interprets specially).
+    # "." as a bare key means "current group" in HDF5, so encode it too.
+    # Decoded with urllib.parse.unquote in _strToKey (single-pass, handles %25 correctly).
+    encoded = result.replace("%", "%25").replace("/", "%2F")
+    if encoded == ".":
+        encoded = "%2E"
+    return encoded
 
 
 def _writeVersionable(
@@ -481,6 +504,9 @@ def _readChild(item: h5py.Dataset | h5py.Group, elemType: Any) -> Any:
 
 def _strToKey(strKey: str, keyType: Any) -> Any:
     """Convert a string HDF5 key back to the original dict key type."""
+    # Reverse percent-encoding in a single pass (handles %25 → % correctly)
+    strKey = unquote(strKey)
+
     if keyType is str or keyType is None:
         return strKey
     if keyType is int:
@@ -552,17 +578,20 @@ def _isArrayCollectionField(fieldType: Any) -> bool:
     return False
 
 
-def _makeLazyCollection(path: Path, key: str, group: h5py.Group, fieldType: Any) -> Any:
+def _makeLazyCollection(path: Path, group: h5py.Group, fieldType: Any) -> Any:
     """Create a LazyArrayList or LazyArrayDict for an array collection group."""
     from versionable._lazy import LazyArrayDict, LazyArrayList
+
+    # Use the full HDF5 group path so nested Versionable fields resolve correctly
+    groupPath = group.name.lstrip("/")
 
     origin = typing.get_origin(fieldType)
     if origin is list:
         keys = sorted(group.keys(), key=int)
-        return LazyArrayList(path, key, keys)
+        return LazyArrayList(path, groupPath, keys)
     if origin is dict:
         keys = list(group.keys())
-        return LazyArrayDict(path, key, keys)
+        return LazyArrayDict(path, groupPath, keys)
     # Shouldn't get here — _isArrayCollectionField guards the call
     return _readGroup(group, fieldType)
 
@@ -579,7 +608,13 @@ def _isArrayField(fieldType: Any) -> bool:
 
 
 def _isNdarrayType(fieldType: Any) -> bool:
-    """Check if a type annotation refers to np.ndarray."""
+    """Check if a type annotation refers to np.ndarray.
+
+    Handles three forms:
+    - Bare: ``np.ndarray``
+    - Typed: ``npt.NDArray[np.float64]`` → origin is ``np.ndarray``
+    - Annotated: ``Annotated[np.ndarray, ...]`` → first arg is ``np.ndarray``
+    """
     origin = typing.get_origin(fieldType)
     if origin is np.ndarray:
         return True
