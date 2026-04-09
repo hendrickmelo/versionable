@@ -46,6 +46,24 @@ class _Measurement(Versionable, version=1, hash=_h_measurement, name="Measuremen
     data: npt.NDArray[np.float64]
 
 
+_h_with_traces = computeHash({"name": str, "traces": list[npt.NDArray[np.float64]]})
+
+
+@dataclass
+class _WithTraces(Versionable, version=1, hash=_h_with_traces, register=False):
+    name: str
+    traces: list[npt.NDArray[np.float64]]
+
+
+_h_with_channels = computeHash({"name": str, "channels": dict[str, npt.NDArray[np.float64]]})
+
+
+@dataclass
+class _WithChannels(Versionable, version=1, hash=_h_with_channels, register=False):
+    name: str
+    channels: dict[str, npt.NDArray[np.float64]]
+
+
 _h_experiment = computeHash({"name": str, "measurements": list[_Measurement]})
 
 
@@ -642,6 +660,111 @@ class TestNativeNoJson:
         with h5py.File(p, "r") as f:
             assert "__scalars__" not in f.attrs
             _assertNoJsonAttrs(f)
+
+
+class TestLazyArrayCollections:
+    """Test per-element lazy loading for list[ndarray] and dict[str, ndarray]."""
+
+    def test_listNdarrayLazy(self, tmp_path: Path) -> None:
+        """list[ndarray] is lazily loaded per-element by default."""
+        from versionable._lazy import LazyArrayList
+
+        traces = [np.array([1.0, 2.0]), np.array([3.0, 4.0, 5.0])]
+        obj = _WithTraces(name="test", traces=traces)
+        p = tmp_path / "lazy_list.h5"
+        versionable.save(obj, p)
+
+        loaded = versionable.load(_WithTraces, p)
+        assert isinstance(loaded.traces, LazyArrayList)
+        assert len(loaded.traces) == 2
+        # Accessing an element loads it
+        np.testing.assert_array_equal(loaded.traces[0], traces[0])
+        np.testing.assert_array_equal(loaded.traces[1], traces[1])
+
+    def test_listNdarrayPreload(self, tmp_path: Path) -> None:
+        """list[ndarray] with preload returns a regular list."""
+        traces = [np.array([1.0, 2.0]), np.array([3.0, 4.0, 5.0])]
+        obj = _WithTraces(name="test", traces=traces)
+        p = tmp_path / "preload_list.h5"
+        versionable.save(obj, p)
+
+        loaded = versionable.load(_WithTraces, p, preload=["traces"])
+        assert isinstance(loaded.traces, list)
+        assert len(loaded.traces) == 2
+        np.testing.assert_array_equal(loaded.traces[0], traces[0])
+
+    def test_listNdarrayMetadataOnly(self, tmp_path: Path) -> None:
+        """list[ndarray] with metadataOnly raises on access."""
+        traces = [np.array([1.0])]
+        obj = _WithTraces(name="test", traces=traces)
+        p = tmp_path / "meta_list.h5"
+        versionable.save(obj, p)
+
+        loaded = versionable.load(_WithTraces, p, metadataOnly=True)
+        assert loaded.name == "test"
+        with pytest.raises(ArrayNotLoadedError):
+            _ = loaded.traces
+
+    def test_dictNdarrayLazy(self, tmp_path: Path) -> None:
+        """dict[str, ndarray] is lazily loaded per-element by default."""
+        from versionable._lazy import LazyArrayDict
+
+        channels = {"ch0": np.array([1.0, 2.0]), "ch1": np.array([3.0, 4.0])}
+        obj = _WithChannels(name="test", channels=channels)
+        p = tmp_path / "lazy_dict.h5"
+        versionable.save(obj, p)
+
+        loaded = versionable.load(_WithChannels, p)
+        assert isinstance(loaded.channels, LazyArrayDict)
+        assert len(loaded.channels) == 2
+        assert "ch0" in loaded.channels
+        np.testing.assert_array_equal(loaded.channels["ch0"], channels["ch0"])
+        np.testing.assert_array_equal(loaded.channels["ch1"], channels["ch1"])
+
+    def test_dictNdarrayPreload(self, tmp_path: Path) -> None:
+        """dict[str, ndarray] with preload returns a regular dict."""
+        channels = {"ch0": np.array([1.0, 2.0]), "ch1": np.array([3.0, 4.0])}
+        obj = _WithChannels(name="test", channels=channels)
+        p = tmp_path / "preload_dict.h5"
+        versionable.save(obj, p)
+
+        loaded = versionable.load(_WithChannels, p, preload=["channels"])
+        assert isinstance(loaded.channels, dict)
+        np.testing.assert_array_equal(loaded.channels["ch0"], channels["ch0"])
+
+    def test_lazyListIteration(self, tmp_path: Path) -> None:
+        """LazyArrayList supports iteration."""
+        traces = [np.array([float(i)]) for i in range(5)]
+        obj = _WithTraces(name="test", traces=traces)
+        p = tmp_path / "iter_list.h5"
+        versionable.save(obj, p)
+
+        loaded = versionable.load(_WithTraces, p)
+        for i, arr in enumerate(loaded.traces):
+            np.testing.assert_array_equal(arr, traces[i])
+
+    def test_lazyListSlice(self, tmp_path: Path) -> None:
+        """LazyArrayList supports slicing."""
+        traces = [np.array([float(i)]) for i in range(5)]
+        obj = _WithTraces(name="test", traces=traces)
+        p = tmp_path / "slice_list.h5"
+        versionable.save(obj, p)
+
+        loaded = versionable.load(_WithTraces, p)
+        sliced = loaded.traces[1:3]
+        assert len(sliced) == 2
+        np.testing.assert_array_equal(sliced[0], traces[1])
+        np.testing.assert_array_equal(sliced[1], traces[2])
+
+    def test_lazyDictKeys(self, tmp_path: Path) -> None:
+        """LazyArrayDict supports keys(), values(), items()."""
+        channels = {"ch0": np.array([1.0]), "ch1": np.array([2.0])}
+        obj = _WithChannels(name="test", channels=channels)
+        p = tmp_path / "dict_keys.h5"
+        versionable.save(obj, p)
+
+        loaded = versionable.load(_WithChannels, p)
+        assert set(loaded.channels.keys()) == {"ch0", "ch1"}
 
 
 def _assertNoJsonAttrs(group: h5py.Group) -> None:

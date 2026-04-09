@@ -232,7 +232,7 @@ def serialize(value: Any, fieldType: Any, *, nativeTypes: set[type] | None = Non
 _UNHANDLED = object()  # sentinel
 
 
-def _serializeTyped(value: Any, nativeTypes: set[type]) -> Any:  # noqa: PLR0911 — type-dispatch; many returns are inherent
+def _serializeTyped(value: Any, nativeTypes: set[type]) -> Any:
     """Try to serialize based on value type.  Returns _UNHANDLED if not matched."""
     valueType = type(value)
 
@@ -359,7 +359,7 @@ def _deserializeUnion(
     return data
 
 
-def _deserializeConcrete(  # noqa: PLR0911 — type-dispatch; many returns are inherent
+def _deserializeConcrete(
     data: Any,
     concreteType: Any,
     args: tuple[Any, ...],

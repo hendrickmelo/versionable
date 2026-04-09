@@ -4,6 +4,11 @@ When loading a Versionable from HDF5, array fields are replaced with
 ``LazyArray`` sentinels.  On first access, the sentinel loads the data
 from the HDF5 file and caches it in the instance dict.
 
+For ``list[np.ndarray]`` and ``dict[str, np.ndarray]`` fields,
+``LazyArrayList`` and ``LazyArrayDict`` provide per-element lazy loading:
+the collection structure is known immediately but individual arrays are
+loaded only when accessed.
+
 The mechanism uses a dynamically created subclass that overrides
 ``__getattribute__`` to intercept access to lazy fields.
 """
@@ -12,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, overload
 
 import h5py
 
@@ -42,6 +47,96 @@ class LazyArray:
 
     def __repr__(self) -> str:
         return f"LazyArray({self.datasetPath!r})"
+
+
+class LazyArrayList:
+    """A list-like container where each element is lazily loaded from HDF5.
+
+    Supports ``len()``, indexing, iteration, and ``preloadAll()`` to eagerly
+    load everything at once.  Each element is loaded and cached on first access.
+    """
+
+    def __init__(self, filePath: Path, groupPath: str, keys: list[str]) -> None:
+        self.filePath = filePath
+        self.groupPath = groupPath
+        self._keys = keys
+        self._cache: dict[int, np.ndarray] = {}
+
+    def __len__(self) -> int:
+        return len(self._keys)
+
+    @overload
+    def __getitem__(self, index: int) -> np.ndarray: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> list[np.ndarray]: ...
+
+    def __getitem__(self, index: int | slice) -> np.ndarray | list[np.ndarray]:
+        if isinstance(index, slice):
+            return [self[i] for i in range(*index.indices(len(self)))]
+        if index < 0:
+            index += len(self)
+        if index < 0 or index >= len(self):
+            raise IndexError(f"index {index} out of range for LazyArrayList of length {len(self)}")
+        if index not in self._cache:
+            key = self._keys[index]
+            with h5py.File(self.filePath, "r") as f:
+                self._cache[index] = f[f"{self.groupPath}/{key}"][()]
+            logger.debug("Lazy-loaded %s/%s", self.groupPath, key)
+        return self._cache[index]
+
+    def __iter__(self) -> Any:
+        for i in range(len(self)):
+            yield self[i]
+
+    def __repr__(self) -> str:
+        loaded = len(self._cache)
+        return f"LazyArrayList({self.groupPath!r}, {len(self)} items, {loaded} loaded)"
+
+
+class LazyArrayDict:
+    """A dict-like container where each value is lazily loaded from HDF5.
+
+    Supports ``len()``, key access, ``keys()``, ``values()``, ``items()``,
+    and iteration.  Each value is loaded and cached on first access.
+    """
+
+    def __init__(self, filePath: Path, groupPath: str, keys: list[str]) -> None:
+        self.filePath = filePath
+        self.groupPath = groupPath
+        self._keys = keys
+        self._cache: dict[str, np.ndarray] = {}
+
+    def __len__(self) -> int:
+        return len(self._keys)
+
+    def __getitem__(self, key: str) -> np.ndarray:
+        if key not in self._cache:
+            if key not in self._keys:
+                raise KeyError(key)
+            with h5py.File(self.filePath, "r") as f:
+                self._cache[key] = f[f"{self.groupPath}/{key}"][()]
+            logger.debug("Lazy-loaded %s/%s", self.groupPath, key)
+        return self._cache[key]
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._keys
+
+    def __iter__(self) -> Any:
+        return iter(self._keys)
+
+    def keys(self) -> list[str]:
+        return list(self._keys)
+
+    def values(self) -> list[np.ndarray]:
+        return [self[k] for k in self._keys]
+
+    def items(self) -> list[tuple[str, np.ndarray]]:
+        return [(k, self[k]) for k in self._keys]
+
+    def __repr__(self) -> str:
+        loaded = len(self._cache)
+        return f"LazyArrayDict({self.groupPath!r}, {len(self)} items, {loaded} loaded)"
 
 
 class ArrayNotLoaded:

@@ -136,7 +136,22 @@ class Hdf5Backend(Backend):
                             # list[numeric], list[str], etc. — always eager
                             fields[key] = _readDataset(item, fieldType)
                     elif isinstance(item, h5py.Group):
-                        fields[key] = _readGroup(item, fieldType)
+                        if _VERSIONABLE_GROUP in item:
+                            # Nested Versionable — always eager
+                            fields[key] = _readGroup(item, fieldType)
+                        elif _isArrayCollectionField(fieldType):
+                            # list[ndarray] or dict[str, ndarray] — lazy per-element
+                            if metadataOnly:
+                                fields[key] = ArrayNotLoaded(key)
+                                lazyFields.add(key)
+                            elif preloadAll or key in preloadSet:
+                                fields[key] = _readGroup(item, fieldType)
+                            else:
+                                fields[key] = _makeLazyCollection(path, key, item, fieldType)
+                                lazyFields.add(key)
+                        else:
+                            # Other groups (list[Versionable], etc.) — eager
+                            fields[key] = _readGroup(item, fieldType)
 
                 # Read scalar attributes
                 for attrName in f.attrs:
@@ -168,7 +183,7 @@ def _writeFields(
         _writeField(group, name, value, fieldType, datasetKwargs, comp)
 
 
-def _writeField(  # noqa: PLR0911 — type dispatch; many returns are inherent
+def _writeField(
     group: h5py.Group,
     name: str,
     value: Any,
@@ -454,7 +469,7 @@ def _readDictGroup(group: h5py.Group, valType: Any) -> dict[str, Any]:
     return result
 
 
-def _readAttr(value: Any) -> Any:  # noqa: PLR0911 — type dispatch
+def _readAttr(value: Any) -> Any:
     """Convert an HDF5 attribute value to a Python value."""
     # h5py.Empty → None
     if isinstance(value, h5py.Empty):
@@ -486,6 +501,37 @@ def _resolveClass(objectName: str) -> type | None:
 
     registry = registeredClasses()
     return registry.get(objectName)
+
+
+def _isArrayCollectionField(fieldType: Any) -> bool:
+    """Check if a field type is list[ndarray] or dict[str, ndarray]."""
+    if fieldType is None:
+        return False
+    origin = typing.get_origin(fieldType)
+    args = typing.get_args(fieldType)
+    if not args:
+        return False
+    if origin is list:
+        return _isNdarrayType(args[0]) or args[0] is np.ndarray
+    if origin is dict:
+        valType = args[1] if len(args) > 1 else None
+        return valType is not None and (_isNdarrayType(valType) or valType is np.ndarray)
+    return False
+
+
+def _makeLazyCollection(path: Path, key: str, group: h5py.Group, fieldType: Any) -> Any:
+    """Create a LazyArrayList or LazyArrayDict for an array collection group."""
+    from versionable._lazy import LazyArrayDict, LazyArrayList
+
+    origin = typing.get_origin(fieldType)
+    if origin is list:
+        keys = sorted(group.keys(), key=int)
+        return LazyArrayList(path, key, keys)
+    if origin is dict:
+        keys = list(group.keys())
+        return LazyArrayDict(path, key, keys)
+    # Shouldn't get here — _isArrayCollectionField guards the call
+    return _readGroup(group, fieldType)
 
 
 def _isArrayField(fieldType: Any) -> bool:

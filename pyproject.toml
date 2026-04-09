@@ -62,6 +62,7 @@ ignore = [
     "N812",     # lowercase imported as non-lowercase
     "N815",     # camelCase in class scope (project convention)
     "N816",     # camelCase in global scope (project convention)
+    "PLR0911",  # too many returns (type-dispatch functions)
     "PLR0912",
     "PLR0915",
     "PLR0913",
