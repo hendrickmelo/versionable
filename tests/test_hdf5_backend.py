@@ -531,11 +531,11 @@ class TestNativeConvertedTypes:
             name: str
             location: Path
 
-        obj = WithPath(name="test", location=Path("/tmp/data"))
+        obj = WithPath(name="test", location=Path("/data/results"))
         p = tmp_path / "path.h5"
         versionable.save(obj, p)
         loaded = versionable.load(WithPath, p)
-        assert loaded.location == Path("/tmp/data")
+        assert loaded.location == Path("/data/results")
 
 
 class TestNativeListDatasets:
