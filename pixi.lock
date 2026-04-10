@@ -7029,7 +7029,7 @@ packages:
 - pypi: ./
   name: versionable
   version: 0.0.1.dev6
-  sha256: 637b4612bb2ab8114dea159a27953e11ca20072c3731c5e1438c6ebf8faa795f
+  sha256: 28156839820c4aa2d0d71a53424cae86676d4a7eeeacd4a5af7ce6da252d6816
   requires_dist:
   - toml>=0.10
   - pyyaml>=6.0

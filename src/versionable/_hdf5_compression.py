@@ -1,3 +1,5 @@
+# hdf5plugin.Zstd/Blosc2 are public APIs with incomplete type stubs
+# pyright: reportPrivateImportUsage=false
 """HDF5 compression configuration and presets."""
 
 from __future__ import annotations

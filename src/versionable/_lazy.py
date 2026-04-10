@@ -30,6 +30,15 @@ from versionable.errors import ArrayNotLoadedError
 logger = logging.getLogger(__name__)
 
 
+def _loadDataset(f: h5py.File, path: str) -> np.ndarray:
+    """Load a dataset from an open HDF5 file, with type narrowing."""
+    ds = f[path]
+    if not isinstance(ds, h5py.Dataset):
+        raise TypeError(f"Expected Dataset at {path!r}, got {type(ds).__name__}")
+    result: np.ndarray = ds[()]
+    return result
+
+
 @dataclass
 class LazyContext:
     """Controls lazy loading behavior during HDF5 reads.
@@ -67,8 +76,7 @@ class LazyArray:
 
     def load(self) -> np.ndarray:
         with h5py.File(self.filePath, "r") as f:
-            arr: np.ndarray = f[self.datasetPath][()]
-            return arr
+            return _loadDataset(f, self.datasetPath)
 
     def __repr__(self) -> str:
         return f"LazyArray({self.datasetPath!r})"
@@ -108,7 +116,7 @@ class LazyArrayList:
         if index not in self._cache:
             key = self._keys[index]
             with h5py.File(self.filePath, "r") as f:
-                self._cache[index] = f[f"{self.groupPath}/{key}"][()]
+                self._cache[index] = _loadDataset(f, f"{self.groupPath}/{key}")
             logger.debug("Lazy-loaded %s/%s", self.groupPath, key)
         return self._cache[index]
 
@@ -155,7 +163,7 @@ class LazyArrayDict:
                 raise KeyError(key)
             hdf5Key = self._keyToHdf5[key]
             with h5py.File(self.filePath, "r") as f:
-                self._cache[key] = f[f"{self.groupPath}/{hdf5Key}"][()]
+                self._cache[key] = _loadDataset(f, f"{self.groupPath}/{hdf5Key}")
             logger.debug("Lazy-loaded %s/%s", self.groupPath, hdf5Key)
         return self._cache[key]
 

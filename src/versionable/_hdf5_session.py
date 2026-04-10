@@ -13,7 +13,7 @@ import os
 import typing
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, SupportsIndex, cast
+from typing import Any, NoReturn, SupportsIndex, cast
 
 import h5py
 import numpy as np
@@ -526,7 +526,7 @@ class TrackedList[T](list[T]):
         fieldName: str = object.__getattribute__(self, "_fieldName")
         session._onListAppend(fieldName, len(self) - 1, value)  # noqa: SLF001
 
-    def __setitem__(self, index: Any, value: Any) -> None:
+    def __setitem__(self, index: SupportsIndex | slice, value: Any) -> None:
         if isinstance(index, slice):
             self._unsupported("slice assignment")
         normalized = operator.index(index)
@@ -545,7 +545,7 @@ class TrackedList[T](list[T]):
         fieldName: str = object.__getattribute__(self, "_fieldName")
         session._onListExtend(fieldName, startIdx, valuesList)  # noqa: SLF001
 
-    def _unsupported(self, op: str) -> None:
+    def _unsupported(self, op: str) -> NoReturn:
         raise NotImplementedError(
             f"TrackedList does not support '{op}'. Build the data in memory and assign the whole list instead."
         )

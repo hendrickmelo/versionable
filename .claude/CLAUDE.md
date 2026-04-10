@@ -73,6 +73,15 @@ pixi run cleanup          # Runs formatters, linters, and type checks
 
 Fix all errors reported by cleanup before creating commits. Do not commit if cleanup fails.
 
+### Type Checking Exclusions
+
+Never exclude Python source files from pyright or mypy in `pyproject.toml`. Fix the type errors instead. If a
+suppression is truly unavoidable (e.g., broken third-party type stubs), use the narrowest possible scope:
+
+1. Inline `# pyright: ignore[ruleCode]` on the specific line (with a comment explaining why)
+2. File-level `# pyright: ruleCode=false` only if every line in the file triggers the same stub issue
+3. Never add files to the pyright `exclude` list — all source code must be type-checked
+
 ## PR Workflow
 
 - Default to creating draft PRs, unless asked otherwise.
