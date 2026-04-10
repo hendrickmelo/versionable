@@ -29,6 +29,8 @@ from versionable._hdf5_backend import (
     _dtypeForElementType,
     _isScalarType,
     _keyToStr,
+    _readFields,
+    _readMeta,
     _writeValue,
 )
 from versionable._hdf5_compression import ZSTD_DEFAULT, Hdf5Compression
@@ -85,27 +87,98 @@ class Hdf5Session[T: Versionable]:
                 os.remove(self._path)
             self._file = h5py.File(self._path, "w")
         elif self._mode == "resume":
-            raise BackendError("Resume mode is not yet implemented.")
+            if not self._path.exists():
+                raise BackendError(f"Cannot resume: file {self._path} does not exist.")
+            self._file = h5py.File(self._path, "a")
         else:
             raise BackendError(f"Unknown session mode: {self._mode!r}")
 
         self._root = self._file
 
-        # Write __versionable__ metadata
-        meta = metadata(self._cls)
-        metaGroup = self._root.create_group(_VERSIONABLE_GROUP)
-        metaGroup.attrs["__OBJECT__"] = meta.name
-        metaGroup.attrs["__VERSION__"] = meta.version
-        metaGroup.attrs["__HASH__"] = meta.hash
-
         # Create proxy instance
         proxyCls = _getProxyClass(self._cls)
-        # Use object.__new__ to skip __init__ (no args needed)
         self._proxy = proxyCls.__new__(proxyCls)
-        # Set session reference without triggering __setattr__ override
         object.__setattr__(self._proxy, "_session", self)
 
+        if self._mode == "resume":
+            self._resumeFromFile()
+        else:
+            # Write __versionable__ metadata for new files
+            meta = metadata(self._cls)
+            metaGroup = self._root.create_group(_VERSIONABLE_GROUP)
+            metaGroup.attrs["__OBJECT__"] = meta.name
+            metaGroup.attrs["__VERSION__"] = meta.version
+            metaGroup.attrs["__HASH__"] = meta.hash
+
         return self._proxy
+
+    def _resumeFromFile(self) -> None:
+        """Restore state from an existing HDF5 file for resume mode."""
+        # Validate metadata
+        fileMeta = _readMeta(self._root)
+        meta = metadata(self._cls)
+        if fileMeta["__OBJECT__"] != meta.name:
+            raise BackendError(
+                f"Cannot resume: file contains type {fileMeta['__OBJECT__']!r}, "
+                f"but session was opened with {meta.name!r}."
+            )
+        if fileMeta["__VERSION__"] != meta.version:
+            raise BackendError(
+                f"Cannot resume: file has version {fileMeta['__VERSION__']}, but class has version {meta.version}."
+            )
+        if fileMeta["__HASH__"] != meta.hash:
+            raise BackendError(
+                f"Cannot resume: file has hash {fileMeta['__HASH__']!r}, but class has hash {meta.hash!r}."
+            )
+
+        # Load existing fields
+        fields, _ = _readFields(self._root, self._fieldTypes)
+
+        # Populate proxy and wrap with tracked proxies
+        for name, value in fields.items():
+            fieldType = self._fieldTypes.get(name)
+            if fieldType is not None:
+                wrapped = self._wrapResumedValue(name, value, fieldType)
+                object.__setattr__(self._proxy, name, wrapped)
+
+    def _wrapResumedValue(self, name: str, value: Any, fieldType: Any) -> Any:
+        """Wrap a loaded value with a tracked proxy for resume mode.
+
+        For Appendable fields, wraps with TrackedArray pointing to the
+        existing resizable dataset. For list/dict fields, wraps with
+        TrackedList/TrackedDict.
+        """
+        # Appendable ndarray -> TrackedArray backed by existing dataset
+        appendable = _getAppendable(fieldType)
+        if appendable is not None and name in self._root:
+            dataset = self._root[name]
+            if isinstance(dataset, h5py.Dataset):
+                # Re-resolve axis from dataset's maxshape (unlimited dim)
+                axis = self._resolveAxisFromDataset(dataset, appendable)
+                return TrackedArray(dataset, name, axis)
+
+        # list -> TrackedList
+        if isinstance(value, list):
+            return TrackedList(value, self, name, fieldType)
+
+        # dict -> TrackedDict
+        if isinstance(value, dict):
+            return TrackedDict(value, self, name, fieldType)
+
+        return value
+
+    @staticmethod
+    def _resolveAxisFromDataset(dataset: h5py.Dataset, appendable: Appendable) -> int:
+        """Re-resolve the append axis from an existing dataset's maxshape."""
+        if appendable.axis is not None:
+            return appendable.axis
+        # Find the unlimited dimension
+        maxshape = dataset.maxshape
+        if maxshape is not None:
+            for i, m in enumerate(maxshape):
+                if m is None:
+                    return i
+        return 0
 
     def __exit__(
         self,

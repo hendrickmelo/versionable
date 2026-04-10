@@ -625,3 +625,119 @@ class TestMixedSession:
         assert loaded.sampleRate_Hz == 48000.0
         np.testing.assert_array_equal(loaded.data, np.arange(10, dtype=np.float64))
         assert loaded.waveform.shape == (5, 4)
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: Resume mode
+# ---------------------------------------------------------------------------
+
+
+class TestResumeMode:
+    """Test resume mode: open existing file, restore state, continue."""
+
+    def test_write_resume_write_load(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        # First session: write some data
+        with versionable.hdf5.open(_WithLists, path) as obj:
+            obj.name = "experiment"
+            obj.timestamps = []
+            obj.traces = []
+            for i in range(5):
+                obj.timestamps.append(float(i))
+                obj.traces.append(np.ones((3, 4)) * i)
+
+        # Resume: continue writing
+        with versionable.hdf5.open(_WithLists, path, mode="resume") as obj:
+            assert obj.name == "experiment"
+            assert len(obj.timestamps) == 5
+            assert len(obj.traces) == 5
+            for i in range(5, 10):
+                obj.timestamps.append(float(i))
+                obj.traces.append(np.ones((3, 4)) * i)
+
+        # Verify all data
+        loaded = versionable.load(_WithLists, path)
+        assert loaded.name == "experiment"
+        assert loaded.timestamps == list(range(10))
+        assert len(loaded.traces) == 10
+
+    def test_resume_validates_class(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.name = "test"
+
+        with pytest.raises(BackendError, match="Cannot resume"), versionable.hdf5.open(_WithLists, path, mode="resume"):
+            pass
+
+    def test_resume_nonexistent_file(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/nonexistent.h5"
+        with (
+            pytest.raises(BackendError, match="does not exist"),
+            versionable.hdf5.open(_SessionBasic, path, mode="resume"),
+        ):
+            pass
+
+    def test_resume_empty_file(self, tmp_path: object) -> None:
+        """Resume on a file with metadata only, no fields set."""
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path):
+            pass  # No fields set
+
+        with versionable.hdf5.open(_SessionBasic, path, mode="resume") as obj:
+            obj.name = "after resume"
+
+        loaded = versionable.load(_SessionBasic, path)
+        assert loaded.name == "after resume"
+
+    def test_resume_preserves_scalars(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.name = "original"
+            obj.sampleRate_Hz = 48000.0
+
+        with versionable.hdf5.open(_SessionBasic, path, mode="resume") as obj:
+            assert obj.name == "original"
+            assert obj.sampleRate_Hz == 48000.0
+
+    def test_resume_appendable_continues(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.waveform = np.empty((0, 4), dtype=np.float64)
+            obj.waveform.append(np.ones((10, 4)))
+
+        with versionable.hdf5.open(_SessionBasic, path, mode="resume") as obj:
+            assert isinstance(obj.waveform, TrackedArray)
+            assert obj.waveform.shape == (10, 4)
+            obj.waveform.append(np.zeros((5, 4)))
+            assert obj.waveform.shape == (15, 4)
+
+        loaded = versionable.load(_SessionBasic, path)
+        assert loaded.waveform.shape == (15, 4)
+        np.testing.assert_array_equal(loaded.waveform[:10], np.ones((10, 4)))
+        np.testing.assert_array_equal(loaded.waveform[10:], np.zeros((5, 4)))
+
+    def test_resume_scalar_overwrite(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.name = "first"
+
+        with versionable.hdf5.open(_SessionBasic, path, mode="resume") as obj:
+            obj.name = "second"
+
+        loaded = versionable.load(_SessionBasic, path)
+        assert loaded.name == "second"
+
+    def test_resume_scalar_list_continues(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithLists, path) as obj:
+            obj.timestamps = []
+            for i in range(3):
+                obj.timestamps.append(float(i))
+
+        with versionable.hdf5.open(_WithLists, path, mode="resume") as obj:
+            assert obj.timestamps == [0.0, 1.0, 2.0]
+            obj.timestamps.append(3.0)
+            obj.timestamps.append(4.0)
+
+        loaded = versionable.load(_WithLists, path)
+        assert loaded.timestamps == [0.0, 1.0, 2.0, 3.0, 4.0]
