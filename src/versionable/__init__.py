@@ -24,6 +24,7 @@ from __future__ import annotations
 from importlib.metadata import version as _version
 
 from versionable._api import load, loadDynamic, save
+from versionable._appendable import Appendable
 from versionable._backend import Backend, registerBackend
 from versionable._base import (
     Versionable,
@@ -50,6 +51,7 @@ from versionable.errors import (
 )
 
 __all__ = [
+    "Appendable",
     "ArrayNotLoadedError",
     "Backend",
     "BackendError",
