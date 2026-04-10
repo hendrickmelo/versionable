@@ -1,13 +1,22 @@
-"""HDF5 compression configuration and presets.
+"""HDF5 compression configuration, presets, and session API.
 
 Usage::
 
     from versionable.hdf5 import Hdf5Compression, ZSTD_DEFAULT
     versionable.save(obj, "out.h5", compression=ZSTD_DEFAULT)
+
+    # Save-as-you-go session
+    import versionable.hdf5
+    with versionable.hdf5.open(MyClass, "out.h5") as obj:
+        obj.name = "foo"
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Literal
+
+from versionable._base import Versionable
 from versionable._hdf5_compression import BLOSC_DEFAULT as BLOSC_DEFAULT
 from versionable._hdf5_compression import GZIP_DEFAULT as GZIP_DEFAULT
 from versionable._hdf5_compression import LZF as LZF
@@ -16,6 +25,34 @@ from versionable._hdf5_compression import ZSTD_BEST as ZSTD_BEST
 from versionable._hdf5_compression import ZSTD_DEFAULT as ZSTD_DEFAULT
 from versionable._hdf5_compression import ZSTD_FAST as ZSTD_FAST
 from versionable._hdf5_compression import Hdf5Compression as Hdf5Compression
+from versionable._hdf5_session import Hdf5Session
+
+type SessionMode = Literal["create", "resume", "overwrite"]
+
+
+def open[T: Versionable](  # noqa: A001 — intentional; mirrors stdlib pattern (io.open)
+    cls: type[T],
+    path: str | Path,
+    *,
+    mode: SessionMode = "create",
+    compression: Hdf5Compression | None = None,
+) -> Hdf5Session[T]:
+    """Open a file-backed Versionable instance for incremental writes.
+
+    Args:
+        cls: The Versionable dataclass type.
+        path: HDF5 file path.
+        mode: How to handle the target file:
+            ``"create"`` (default) — new file, error if exists.
+            ``"resume"`` — open existing file, restore state, continue.
+            ``"overwrite"`` — delete existing file if present, create new.
+        compression: Compression preset (default: ZSTD_DEFAULT).
+
+    Returns:
+        Context manager yielding a file-backed instance of cls.
+    """
+    return Hdf5Session(cls, path, mode=mode, compression=compression)
+
 
 __all__ = [
     "BLOSC_DEFAULT",
@@ -26,4 +63,7 @@ __all__ = [
     "ZSTD_DEFAULT",
     "ZSTD_FAST",
     "Hdf5Compression",
+    "Hdf5Session",
+    "SessionMode",
+    "open",
 ]
