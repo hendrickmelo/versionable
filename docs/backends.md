@@ -386,3 +386,90 @@ loaded = versionable.load(Recording, "recording.h5", metadataOnly=True)
 loaded.name    # Works
 loaded.data    # Raises ArrayNotLoadedError
 ```
+
+### Save-As-You-Go Sessions
+
+For scenarios where data arrives incrementally (DAQ streaming, simulation loops, long experiments),
+`versionable.hdf5.open()` provides a file-backed session that persists mutations as they happen:
+
+```python
+from typing import Annotated
+from versionable import Appendable
+
+@dataclass
+class Experiment(Versionable, version=1, hash="..."):
+    name: str
+    sampleRate_Hz: float
+    traces: list[np.ndarray]
+    timestamps: list[float]
+    waveform: Annotated[np.ndarray, Appendable(chunkRows=64)]
+
+import versionable.hdf5
+with versionable.hdf5.open(Experiment, "run001.h5") as exp:
+    exp.name = "baseline"
+    exp.sampleRate_Hz = 48000.0
+    exp.waveform = np.empty((0, 1024))
+
+    for chunk in daq.stream():
+        exp.traces.append(chunk.data)      # new dataset written to disk
+        exp.timestamps.append(chunk.time)  # resizable dataset grows
+        exp.waveform.append(chunk.raw)     # resizable dataset grows
+
+# Load normally — no special API needed
+exp = versionable.load(Experiment, "run001.h5")
+```
+
+#### Session Modes
+
+| Mode                 | Behavior                                              |
+| -------------------- | ----------------------------------------------------- |
+| `"create"` (default) | New file; error if file exists                        |
+| `"overwrite"`        | Delete existing file if present, create new           |
+| `"resume"`           | Open existing file, restore state, continue appending |
+
+```python
+# Resume after a crash or between sessions
+with versionable.hdf5.open(Experiment, "run001.h5", mode="resume") as exp:
+    print(len(exp.traces))        # existing data is available
+    exp.traces.append(new_data)   # appending continues from where it left off
+```
+
+#### `Appendable` — Growable ndarray Fields
+
+`Appendable` marks an `np.ndarray` field as growable. The dataset is created with a resizable dimension and supports
+`.append()`:
+
+```python
+# Auto axis inference: zero-size dimension becomes the append axis
+exp.waveform = np.empty((0, 1024))  # axis=0, maxshape=(None, 1024)
+
+# Explicit axis
+channels: Annotated[np.ndarray, Appendable(axis=1)]
+
+# Custom chunk size (default: ~256 KB heuristic)
+highRes: Annotated[np.ndarray, Appendable(chunkRows=128)]
+```
+
+`Appendable` is pure annotation metadata — it's ignored by `save()`/`load()` and non-HDF5 backends. The field hashes
+identically to a plain `np.ndarray`.
+
+#### Tracked Collections
+
+- **`list[np.ndarray]`** — each `.append()` creates a new dataset in a group
+- **`list[float]`** / **`list[str]`** — `.append()` resizes a 1-D dataset
+- **`dict[str, np.ndarray]`** — `__setitem__` creates/replaces datasets in a group
+- `insert`, `pop`, `remove`, `sort`, `reverse` raise `NotImplementedError` — build in memory and assign the whole list
+  instead
+
+#### `flush()` for In-Place Mutations
+
+Non-`Appendable` ndarray fields mutated in place (e.g., `obj.data[5] = 99`) are not automatically tracked. Call
+`session.flush("data")` to re-persist them:
+
+```python
+session = versionable.hdf5.open(MyClass, "out.h5")
+with session as obj:
+    obj.data = np.zeros(100)
+    obj.data[50] = 42.0    # in-place mutation — not tracked
+    session.flush("data")  # re-persist to disk
+```
