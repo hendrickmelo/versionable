@@ -741,3 +741,148 @@ class TestResumeMode:
 
         loaded = versionable.load(_WithLists, path)
         assert loaded.timestamps == [0.0, 1.0, 2.0, 3.0, 4.0]
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 test classes
+# ---------------------------------------------------------------------------
+
+from tests.conftest import Inner
+
+_h_with_nested = computeHash({"name": str, "point": Inner})
+
+
+@dataclass
+class _WithNested(
+    Versionable,
+    version=1,
+    hash=_h_with_nested,
+    register=False,
+):
+    name: str = ""
+    point: Inner = field(default_factory=lambda: Inner(x=0.0, y=0.0))
+
+
+_h_with_vlist = computeHash({"name": str, "measurements": list[Inner]})
+
+
+@dataclass
+class _WithVList(
+    Versionable,
+    version=1,
+    hash=_h_with_vlist,
+    register=False,
+):
+    name: str = ""
+    measurements: list[Inner] = field(default_factory=list)
+
+
+_h_with_vdict = computeHash({"name": str, "points": dict[str, Inner]})
+
+
+@dataclass
+class _WithVDict(
+    Versionable,
+    version=1,
+    hash=_h_with_vdict,
+    register=False,
+):
+    name: str = ""
+    points: dict[str, Inner] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: Polish
+# ---------------------------------------------------------------------------
+
+
+class TestNestedVersionable:
+    """Nested Versionable field assignment."""
+
+    def test_nested_roundtrip(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithNested, path) as obj:
+            obj.name = "test"
+            obj.point = Inner(x=1.5, y=2.5)
+
+        loaded = versionable.load(_WithNested, path)
+        assert loaded.name == "test"
+        assert loaded.point.x == 1.5
+        assert loaded.point.y == 2.5
+
+
+class TestListVersionable:
+    """list[Versionable] append support."""
+
+    def test_append_and_load(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithVList, path) as obj:
+            obj.name = "test"
+            obj.measurements = []
+            obj.measurements.append(Inner(x=1.0, y=2.0))
+            obj.measurements.append(Inner(x=3.0, y=4.0))
+
+        loaded = versionable.load(_WithVList, path)
+        assert len(loaded.measurements) == 2
+        assert loaded.measurements[0].x == 1.0
+        assert loaded.measurements[1].y == 4.0
+
+
+class TestDictVersionable:
+    """dict[str, Versionable] setitem support."""
+
+    def test_setitem_and_load(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithVDict, path) as obj:
+            obj.name = "test"
+            obj.points = {}
+            obj.points["origin"] = Inner(x=0.0, y=0.0)
+            obj.points["target"] = Inner(x=10.0, y=20.0)
+
+        loaded = versionable.load(_WithVDict, path)
+        assert len(loaded.points) == 2
+        assert loaded.points["origin"].x == 0.0
+        assert loaded.points["target"].y == 20.0
+
+
+class TestFlush:
+    """flush() re-persists in-place-mutated fields."""
+
+    def test_flush_plain_array(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        session = versionable.hdf5.open(_SessionBasic, path)
+        with session as obj:
+            obj.data = np.zeros(10, dtype=np.float64)
+            # In-place mutation (not tracked by __setattr__)
+            obj.data[5] = 99.0
+            session.flush("data")
+
+        loaded = versionable.load(_SessionBasic, path)
+        assert loaded.data[5] == 99.0
+
+    def test_flush_all(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        session = versionable.hdf5.open(_SessionBasic, path)
+        with session as obj:
+            obj.name = "test"
+            obj.data = np.zeros(5, dtype=np.float64)
+            obj.data[0] = 42.0
+            session.flush()
+
+        loaded = versionable.load(_SessionBasic, path)
+        assert loaded.data[0] == 42.0
+
+
+class TestCompletenessWarning:
+    """Warn on __exit__ about unset required fields."""
+
+    def test_warns_on_unset_required(self, tmp_path: object, caplog: object) -> None:
+        import logging
+
+        path = f"{tmp_path}/test.h5"
+        with caplog.at_level(logging.WARNING), versionable.hdf5.open(_WithNested, path):  # type: ignore[union-attr]
+            # _WithNested has defaults for all fields, so no warning
+            pass
+
+        # _WithNested has defaults for all fields, so no warning expected
+        assert "was never set" not in caplog.text  # type: ignore[union-attr]

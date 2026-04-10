@@ -187,9 +187,49 @@ class Hdf5Session[T: Versionable]:
         excTb: Any,
     ) -> None:
         try:
+            # Warn about required fields that were never set
+            if excType is None:
+                self._warnUnsetFields()
             self._file.close()
         except Exception:
             logger.exception("Error closing HDF5 file %s", self._path)
+
+    def flush(self, *fieldNames: str) -> None:
+        """Re-persist fields that may have been mutated in place.
+
+        For non-Appendable ndarray fields that were modified via
+        ``arr[i] = value`` or similar in-place operations, call
+        ``flush("fieldName")`` to write the current value to disk.
+
+        If no field names are given, flushes all fields that have been
+        set on the proxy.
+        """
+        names = fieldNames or [n for n in self._fieldTypes if hasattr(self._proxy, n)]
+        for name in names:
+            if name not in self._fieldTypes:
+                continue
+            value = object.__getattribute__(self._proxy, name)
+            if isinstance(value, (TrackedArray, TrackedList, TrackedDict)):
+                # Already tracked — mutations are persisted automatically
+                continue
+            self._persistField(name, value)
+
+    def _warnUnsetFields(self) -> None:
+        """Log a warning for required fields that were never assigned."""
+        import dataclasses
+
+        for name in self._fieldTypes:
+            if hasattr(self._proxy, name):
+                continue
+            # Check if the field has a default
+            clsFields = {f.name: f for f in dataclasses.fields(self._cls)}  # type: ignore[arg-type]
+            f = clsFields.get(name)
+            if f is not None and f.default is dataclasses.MISSING and f.default_factory is dataclasses.MISSING:
+                logger.warning(
+                    "Session for %s: field %r was never set and has no default.",
+                    self._cls.__name__,
+                    name,
+                )
 
     def _persistField(self, name: str, value: Any) -> None:
         """Write a single field to the HDF5 file."""
