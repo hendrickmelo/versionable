@@ -405,11 +405,18 @@ class Experiment(Versionable, version=1, hash="..."):
     waveform: Annotated[np.ndarray, Appendable(chunkRows=64)]
 
 import versionable.hdf5
-with versionable.hdf5.open(Experiment, "run001.h5") as exp:
-    exp.name = "baseline"
-    exp.sampleRate_Hz = 48000.0
-    exp.waveform = np.empty((0, 1024))
 
+# You can pass a class (empty proxy) or an existing instance:
+exp = Experiment(
+    name="baseline",
+    sampleRate_Hz=48000.0,
+    traces=[],
+    timestamps=[],
+    waveform=np.empty((0, 1024)),
+)
+
+with versionable.hdf5.open(exp, "run001.h5") as exp:
+    # All fields already persisted — just append
     for chunk in daq.stream():
         exp.traces.append(chunk.data)      # new dataset written to disk
         exp.timestamps.append(chunk.time)  # resizable dataset grows

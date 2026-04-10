@@ -10,6 +10,8 @@
 - Always specify a language tag on fenced code blocks in markdown (e.g., `python`, `bash`, `text`)
 - Do not fix markdown lint warnings during editing — they are distracting and cosmetic. If a clean pass is needed, run
   it once at the end.
+- In examples and tests, always hardcode schema hashes as string literals (e.g., `hash="74a182"`). Only use
+  `computeHash()` when strictly necessary (e.g., computing hashes programmatically in library internals).
 
 ## Shortcuts
 

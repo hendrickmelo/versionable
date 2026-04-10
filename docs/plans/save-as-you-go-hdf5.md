@@ -880,6 +880,43 @@ h5py reads chunked and contiguous datasets identically.
 
 8. **Proxy class cached per Versionable type.** Same pattern as `_lazyClassCache` in `_lazy.py`.
 
+### Phase 7: Instance-based `open()`
+
+Currently `open()` only accepts a **type** and returns an empty proxy. This forces
+users to re-set every field inside the `with` block even if they already have a
+populated instance. Phase 7 adds an overload that accepts an **instance**:
+
+```python
+rec = Recording(name="baseline", sampleRate_Hz=48000.0, ...)
+
+with versionable.hdf5.open(rec, "recording.h5") as rec:
+    # All fields persisted on enter — just append
+    for chunk in daq.stream():
+        rec.time_s.append(chunk.time)
+```
+
+**Changes:**
+
+82. Update `open()` signature: accept `type[T] | T` as the first argument.
+    When an instance is passed, infer the class from `type(obj)`.
+83. Update `Hdf5Session.__init__()` to store the optional source instance.
+84. In `__enter__`, when a source instance is provided:
+    - Create the proxy as usual.
+    - Copy all field values from the source instance to the proxy via
+      `__setattr__` (which triggers `_persistField` + `_wrapValue`).
+    - This means all fields are written to disk on enter.
+85. For `mode="resume"` with an instance: raise `BackendError` — resume
+    restores state from file, so passing initial values is contradictory.
+
+**Tests:**
+
+86. Open with an instance, load back, verify all fields match.
+87. Open with an instance that has Appendable fields, append more, verify.
+88. Open with an instance in overwrite mode.
+89. Open with an instance in resume mode raises `BackendError`.
+90. Open with an instance — verify the proxy is a different object (not the
+    original), so mutations don't affect the source.
+
 ## Open Questions
 
 1. **Thread safety.** The session holds an open `h5py.File`. HDF5 is not thread-safe by default

@@ -14,7 +14,7 @@ Usage::
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Literal, overload
 
 from versionable._base import Versionable
 from versionable._hdf5_compression import BLOSC_DEFAULT as BLOSC_DEFAULT
@@ -30,8 +30,28 @@ from versionable._hdf5_session import Hdf5Session
 type SessionMode = Literal["create", "resume", "overwrite"]
 
 
+@overload
+def open[T: Versionable](  # noqa: A001
+    cls_or_instance: type[T],
+    path: str | Path,
+    *,
+    mode: SessionMode = "create",
+    compression: Hdf5Compression | None = None,
+) -> Hdf5Session[T]: ...
+
+
+@overload
+def open[T: Versionable](  # noqa: A001
+    cls_or_instance: T,
+    path: str | Path,
+    *,
+    mode: SessionMode = "create",
+    compression: Hdf5Compression | None = None,
+) -> Hdf5Session[T]: ...
+
+
 def open[T: Versionable](  # noqa: A001 — intentional; mirrors stdlib pattern (io.open)
-    cls: type[T],
+    cls_or_instance: type[T] | T,
     path: str | Path,
     *,
     mode: SessionMode = "create",
@@ -40,7 +60,8 @@ def open[T: Versionable](  # noqa: A001 — intentional; mirrors stdlib pattern 
     """Open a file-backed Versionable instance for incremental writes.
 
     Args:
-        cls: The Versionable dataclass type.
+        cls_or_instance: A Versionable class (empty proxy) or an existing
+            instance (all fields persisted on enter).
         path: HDF5 file path.
         mode: How to handle the target file:
             ``"create"`` (default) — new file, error if exists.
@@ -51,7 +72,11 @@ def open[T: Versionable](  # noqa: A001 — intentional; mirrors stdlib pattern 
     Returns:
         Context manager yielding a file-backed instance of cls.
     """
-    return Hdf5Session(cls, path, mode=mode, compression=compression)
+    if isinstance(cls_or_instance, Versionable):
+        instance = cls_or_instance
+        cls = type(instance)
+        return Hdf5Session(cls, path, mode=mode, compression=compression, instance=instance)
+    return Hdf5Session(cls_or_instance, path, mode=mode, compression=compression)
 
 
 __all__ = [

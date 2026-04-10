@@ -61,6 +61,8 @@ class Hdf5Session[T: Versionable]:
     _proxy: T
     _path: Path
 
+    _instance: T | None
+
     def __init__(
         self,
         cls: type[T],
@@ -68,12 +70,14 @@ class Hdf5Session[T: Versionable]:
         *,
         mode: str = "create",
         compression: Hdf5Compression | None = None,
+        instance: T | None = None,
     ) -> None:
         self._cls = cls
         self._path = Path(path)
         self._mode = mode
         self._comp = compression or ZSTD_DEFAULT
         self._fieldTypes = _resolveFields(cls)
+        self._instance = instance
 
     def __enter__(self) -> T:
         if self._mode == "create":
@@ -101,6 +105,10 @@ class Hdf5Session[T: Versionable]:
         object.__setattr__(self._proxy, "_session", self)
 
         if self._mode == "resume":
+            if self._instance is not None:
+                raise BackendError(
+                    "Cannot pass an instance with mode='resume'. Resume restores state from the existing file."
+                )
             self._resumeFromFile()
         else:
             # Write __versionable__ metadata for new files
@@ -110,7 +118,19 @@ class Hdf5Session[T: Versionable]:
             metaGroup.attrs["__VERSION__"] = meta.version
             metaGroup.attrs["__HASH__"] = meta.hash
 
+            # If an instance was provided, persist all its fields
+            if self._instance is not None:
+                self._populateFromInstance()
+
         return self._proxy
+
+    def _populateFromInstance(self) -> None:
+        """Copy fields from the source instance to the proxy, persisting each."""
+        for name in self._fieldTypes:
+            if hasattr(self._instance, name):
+                value = getattr(self._instance, name)
+                # Use the proxy's __setattr__ which triggers persist + wrap
+                setattr(self._proxy, name, value)
 
     def _resumeFromFile(self) -> None:
         """Restore state from an existing HDF5 file for resume mode."""

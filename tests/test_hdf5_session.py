@@ -886,3 +886,80 @@ class TestCompletenessWarning:
 
         # _WithNested has defaults for all fields, so no warning expected
         assert "was never set" not in caplog.text  # type: ignore[union-attr]
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: Instance-based open()
+# ---------------------------------------------------------------------------
+
+
+class TestInstanceOpen:
+    """open() accepts an existing instance, persisting all fields on enter."""
+
+    def test_instance_roundtrip(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        obj = _SessionBasic(
+            name="from instance",
+            sampleRate_Hz=48000.0,
+            data=np.arange(10, dtype=np.float64),
+            waveform=np.ones((5, 4), dtype=np.float64),
+        )
+        with versionable.hdf5.open(obj, path):
+            pass
+
+        loaded = versionable.load(_SessionBasic, path)
+        assert loaded.name == "from instance"
+        assert loaded.sampleRate_Hz == 48000.0
+        np.testing.assert_array_equal(loaded.data, np.arange(10, dtype=np.float64))
+        assert loaded.waveform.shape == (5, 4)
+
+    def test_instance_appendable_then_append(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        obj = _SessionBasic(
+            name="append test",
+            sampleRate_Hz=1000.0,
+            data=np.empty(0),
+            waveform=np.empty((0, 4), dtype=np.float64),
+        )
+        with versionable.hdf5.open(obj, path) as rec:
+            rec.waveform.append(np.ones((10, 4)))
+            rec.waveform.append(np.zeros((5, 4)))
+            assert rec.waveform.shape == (15, 4)
+
+        loaded = versionable.load(_SessionBasic, path)
+        assert loaded.waveform.shape == (15, 4)
+
+    def test_instance_overwrite_mode(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        # Create initial file
+        with versionable.hdf5.open(_SessionBasic, path) as rec:
+            rec.name = "first"
+
+        # Overwrite with an instance
+        obj = _SessionBasic(name="second", sampleRate_Hz=99.0)
+        with versionable.hdf5.open(obj, path, mode="overwrite"):
+            pass
+
+        loaded = versionable.load(_SessionBasic, path)
+        assert loaded.name == "second"
+        assert loaded.sampleRate_Hz == 99.0
+
+    def test_instance_resume_raises(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as rec:
+            rec.name = "test"
+
+        obj = _SessionBasic(name="conflict")
+        with (
+            pytest.raises(BackendError, match="Cannot pass an instance with mode='resume'"),
+            versionable.hdf5.open(obj, path, mode="resume"),
+        ):
+            pass
+
+    def test_instance_proxy_is_different_object(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        original = _SessionBasic(name="original", sampleRate_Hz=1000.0)
+        with versionable.hdf5.open(original, path) as rec:
+            rec.name = "modified"
+            # Original should be untouched
+            assert original.name == "original"
