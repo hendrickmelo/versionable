@@ -18,10 +18,11 @@ prettier_check = "npx prettier --check '**/*.md'"
 mdlint = "npx markdownlint-cli2 --fix '**/*.md'"
 mdlint_check = "npx markdownlint-cli2 '**/*.md'"
 test = "pytest"
-cleanup = { depends-on = ["format", "ruff", "mypy", "pyright", "prettier", "mdlint"] }
-ci = { depends-on = ["format_check", "ruff_check", "mypy", "pyright", "prettier_check", "mdlint_check", "test"] }
-ci-minimal = { cmd = "pixi run -e minimal ci", description = "Run CI in minimal environment (no h5py)" }
-ci-all = { depends-on = ["ci", "ci-minimal"], description = "Run CI in all environments" }
+nbclean = "nb-clean clean examples/"
+nbclean_check = "nb-clean check examples/"
+cleanup = { depends-on = ["format", "ruff", "mypy", "pyright", "prettier", "mdlint", "nbclean"] }
+ci = { depends-on = ["format_check", "ruff_check", "mypy", "pyright", "prettier_check", "mdlint_check", "nbclean_check", "test"] }
+ci-all = { cmd = "pixi run -e default ci && pixi run -e minimal ci", description = "Run CI in all environments" }
 
 [dependencies]
 python = ">=3.12,<3.14"
@@ -46,6 +47,7 @@ ipython = ">=8"
 
 [feature.dev.pypi-dependencies]
 mypy = ">=1.10"
+nb-clean = ">=4.0.1, <5"
 plotly = ">=6.7.0, <7"
 nbformat = ">=5.10.4, <6"
 jupyterlab = ">=4.5.6, <5"
@@ -62,7 +64,13 @@ sphinx-autobuild = "*"
 docs = "sphinx-build -b html docs docs/_build/html"
 docs-live = "sphinx-autobuild docs docs/_build/html"
 
+# The minimal env doesn't have h5py/hdf5plugin, so pyright can't resolve those
+# imports. We use a separate config (pyrightconfig.minimal.json) that excludes
+# HDF5 files. The full env uses pyproject.toml's [tool.pyright] which checks all files.
+[feature.minimal.tasks]
+pyright = "npx pyright -p pyrightconfig.minimal.json src/"
+
 [environments]
 default = { features = ["dev", "hdf5"] }
-minimal = { features = ["dev"] }
+minimal = { features = ["dev", "minimal"] }
 docs = { features = ["docs"] }
