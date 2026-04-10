@@ -412,3 +412,216 @@ class TestSessionModes:
         # File should be loadable after context exit
         loaded = versionable.load(_SessionBasic, path)
         assert loaded.name == "test"
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 test classes
+# ---------------------------------------------------------------------------
+
+_h_with_lists = computeHash(
+    {
+        "name": str,
+        "traces": list[npt.NDArray[np.float64]],
+        "timestamps": list[float],
+        "tags": list[str],
+    }
+)
+
+
+@dataclass
+class _WithLists(
+    Versionable,
+    version=1,
+    hash=_h_with_lists,
+    register=False,
+):
+    name: str = ""
+    traces: list[npt.NDArray[np.float64]] = field(default_factory=list)
+    timestamps: list[float] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+
+
+_h_with_dict = computeHash({"name": str, "channels": dict[str, npt.NDArray[np.float64]]})
+
+
+@dataclass
+class _WithDict(
+    Versionable,
+    version=1,
+    hash=_h_with_dict,
+    register=False,
+):
+    name: str = ""
+    channels: dict[str, npt.NDArray[np.float64]] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Tracked collections
+# ---------------------------------------------------------------------------
+
+
+class TestTrackedListArrays:
+    """list[np.ndarray] append creates datasets in a group."""
+
+    def test_append_loop(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        arrays = [np.random.randn(10, 4) for _ in range(5)]
+        with versionable.hdf5.open(_WithLists, path) as obj:
+            obj.traces = []
+            for arr in arrays:
+                obj.traces.append(arr)
+
+        loaded = versionable.load(_WithLists, path)
+        assert len(loaded.traces) == 5
+        for i, arr in enumerate(arrays):
+            np.testing.assert_array_almost_equal(loaded.traces[i], arr)
+
+    def test_setitem(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithLists, path) as obj:
+            obj.traces = []
+            obj.traces.append(np.zeros((3, 4)))
+            obj.traces.append(np.zeros((3, 4)))
+            obj.traces[0] = np.ones((3, 4))
+
+        loaded = versionable.load(_WithLists, path)
+        np.testing.assert_array_equal(loaded.traces[0], np.ones((3, 4)))
+
+    def test_extend(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        arrays = [np.ones((2, 3)) * i for i in range(3)]
+        with versionable.hdf5.open(_WithLists, path) as obj:
+            obj.traces = []
+            obj.traces.extend(arrays)
+
+        loaded = versionable.load(_WithLists, path)
+        assert len(loaded.traces) == 3
+
+
+class TestTrackedListScalars:
+    """list[float] and list[str] append uses resizable 1-D datasets."""
+
+    def test_float_append_loop(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithLists, path) as obj:
+            obj.timestamps = []
+            for i in range(100):
+                obj.timestamps.append(float(i))
+
+        loaded = versionable.load(_WithLists, path)
+        assert loaded.timestamps == list(range(100))
+
+    def test_string_append(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithLists, path) as obj:
+            obj.tags = []
+            obj.tags.append("alpha")
+            obj.tags.append("beta")
+
+        loaded = versionable.load(_WithLists, path)
+        assert loaded.tags == ["alpha", "beta"]
+
+
+class TestTrackedDict:
+    """dict[str, np.ndarray] setitem creates/replaces datasets in a group."""
+
+    def test_setitem_and_load(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithDict, path) as obj:
+            obj.channels = {}
+            obj.channels["ch0"] = np.ones(100)
+            obj.channels["ch1"] = np.zeros(100)
+
+        loaded = versionable.load(_WithDict, path)
+        assert len(loaded.channels) == 2
+        np.testing.assert_array_equal(loaded.channels["ch0"], np.ones(100))
+        np.testing.assert_array_equal(loaded.channels["ch1"], np.zeros(100))
+
+    def test_replace_value(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithDict, path) as obj:
+            obj.channels = {}
+            obj.channels["ch0"] = np.zeros(10)
+            obj.channels["ch0"] = np.ones(10)
+
+        loaded = versionable.load(_WithDict, path)
+        np.testing.assert_array_equal(loaded.channels["ch0"], np.ones(10))
+
+    def test_delitem(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithDict, path) as obj:
+            obj.channels = {}
+            obj.channels["ch0"] = np.ones(10)
+            obj.channels["ch1"] = np.zeros(10)
+            del obj.channels["ch0"]
+
+        loaded = versionable.load(_WithDict, path)
+        assert "ch0" not in loaded.channels
+        assert "ch1" in loaded.channels
+
+    def test_update(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithDict, path) as obj:
+            obj.channels = {}
+            obj.channels.update({"a": np.ones(5), "b": np.zeros(5)})
+
+        loaded = versionable.load(_WithDict, path)
+        assert len(loaded.channels) == 2
+
+
+class TestUnsupportedListOps:
+    """Unsupported list operations raise NotImplementedError."""
+
+    def test_insert(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithLists, path) as obj:
+            obj.timestamps = []
+            with pytest.raises(NotImplementedError, match="insert"):
+                obj.timestamps.insert(0, 1.0)
+
+    def test_pop(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithLists, path) as obj:
+            obj.timestamps = [1.0, 2.0]
+            with pytest.raises(NotImplementedError, match="pop"):
+                obj.timestamps.pop()
+
+    def test_remove(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithLists, path) as obj:
+            obj.timestamps = [1.0]
+            with pytest.raises(NotImplementedError, match="remove"):
+                obj.timestamps.remove(1.0)
+
+    def test_sort(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithLists, path) as obj:
+            obj.timestamps = [3.0, 1.0, 2.0]
+            with pytest.raises(NotImplementedError, match="sort"):
+                obj.timestamps.sort()
+
+    def test_reverse(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithLists, path) as obj:
+            obj.timestamps = [1.0, 2.0]
+            with pytest.raises(NotImplementedError, match="reverse"):
+                obj.timestamps.reverse()
+
+
+class TestMixedSession:
+    """Test mixing scalars, lists, and TrackedArray in the same session."""
+
+    def test_mixed_operations(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.name = "experiment"
+            obj.sampleRate_Hz = 48000.0
+            obj.data = np.arange(10, dtype=np.float64)
+            obj.waveform = np.empty((0, 4), dtype=np.float64)
+            obj.waveform.append(np.ones((5, 4)))
+
+        loaded = versionable.load(_SessionBasic, path)
+        assert loaded.name == "experiment"
+        assert loaded.sampleRate_Hz == 48000.0
+        np.testing.assert_array_equal(loaded.data, np.arange(10, dtype=np.float64))
+        assert loaded.waveform.shape == (5, 4)

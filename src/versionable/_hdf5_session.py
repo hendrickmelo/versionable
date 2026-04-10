@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import logging
 import os
+import typing
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, SupportsIndex, cast
 
 import h5py
 import numpy as np
@@ -24,6 +26,9 @@ from versionable._appendable import (
 from versionable._base import Versionable, _resolveFields, metadata
 from versionable._hdf5_backend import (
     _VERSIONABLE_GROUP,
+    _dtypeForElementType,
+    _isScalarType,
+    _keyToStr,
     _writeValue,
 )
 from versionable._hdf5_compression import ZSTD_DEFAULT, Hdf5Compression
@@ -122,6 +127,12 @@ class Hdf5Session[T: Versionable]:
         if isinstance(value, TrackedArray):
             value = np.asarray(value)
 
+        # Unwrap TrackedList/TrackedDict to plain list/dict
+        if isinstance(value, TrackedList):
+            value = list(value)
+        if isinstance(value, TrackedDict):
+            value = dict(value)
+
         # Remove existing data for this field
         if name in self._root.attrs:
             del self._root.attrs[name]
@@ -132,8 +143,35 @@ class Hdf5Session[T: Versionable]:
         appendable = _getAppendable(fieldType)
         if appendable is not None and isinstance(value, np.ndarray):
             self._createResizableDataset(name, value, appendable)
-        else:
-            _writeValue(self._root, name, value, fieldType, datasetKwargs, self._comp)
+            return
+
+        # For scalar list fields, create resizable datasets so append works
+        if isinstance(value, list):
+            origin = typing.get_origin(fieldType)
+            args = typing.get_args(fieldType)
+            if origin is list and args and _isScalarType(args[0]):
+                self._createResizableScalarList(name, value, args[0])
+                return
+
+        _writeValue(self._root, name, value, fieldType, datasetKwargs, self._comp)
+
+    def _createResizableScalarList(self, name: str, values: list[Any], elemType: type) -> None:
+        """Create a resizable 1-D dataset for a scalar list field."""
+        datasetKwargs = self._comp.datasetKwargs()
+        dtype = h5py.string_dtype() if elemType is str else _dtypeForElementType(elemType)
+
+        if len(values) == 0:
+            # Don't create a dataset for empty lists — _onListAppend will create it
+            return
+
+        self._root.create_dataset(
+            name,
+            data=values,
+            dtype=dtype,
+            maxshape=(None,),
+            chunks=True,
+            **datasetKwargs,
+        )
 
     def _createResizableDataset(
         self,
@@ -179,7 +217,227 @@ class Hdf5Session[T: Versionable]:
                 axis = _resolveAppendAxis(dataset.shape, appendable)
                 return TrackedArray(dataset, name, axis)
 
+        # list -> TrackedList
+        if isinstance(value, list) and not isinstance(value, TrackedList):
+            return TrackedList(value, self, name, fieldType)
+
+        # dict -> TrackedDict
+        if isinstance(value, dict) and not isinstance(value, TrackedDict):
+            return TrackedDict(value, self, name, fieldType)
+
         return value
+
+    # ------------------------------------------------------------------
+    # List mutation callbacks
+    # ------------------------------------------------------------------
+
+    def _elemType(self, fieldName: str) -> Any:
+        """Extract the element type from a list or dict field type."""
+        args = typing.get_args(self._fieldTypes[fieldName])
+        return args[0] if args else Any
+
+    def _valType(self, fieldName: str) -> Any:
+        """Extract the value type from a dict field type."""
+        args = typing.get_args(self._fieldTypes[fieldName])
+        return args[1] if len(args) > 1 else Any
+
+    def _isScalarList(self, fieldName: str) -> bool:
+        """Check if a list field stores scalars (1-D dataset) vs non-scalars (group)."""
+        return _isScalarType(self._elemType(fieldName))
+
+    def _onListAppend(self, fieldName: str, index: int, value: Any) -> None:
+        elemType = self._elemType(fieldName)
+        datasetKwargs = self._comp.datasetKwargs()
+
+        if _isScalarType(elemType):
+            if fieldName not in self._root:
+                dtype = _dtypeForElementType(elemType)
+                if elemType is str:
+                    self._root.create_dataset(
+                        fieldName,
+                        shape=(1,),
+                        maxshape=(None,),
+                        dtype=h5py.string_dtype(),
+                        data=[value],
+                        **datasetKwargs,
+                    )
+                else:
+                    self._root.create_dataset(
+                        fieldName,
+                        shape=(1,),
+                        maxshape=(None,),
+                        dtype=dtype,
+                        data=[value],
+                        **datasetKwargs,
+                    )
+            else:
+                ds = self._root[fieldName]
+                if isinstance(ds, h5py.Dataset):
+                    ds.resize(ds.shape[0] + 1, axis=0)
+                    ds[-1] = value
+        else:
+            group = self._root.require_group(fieldName)
+            _writeValue(group, str(index), value, elemType, datasetKwargs, self._comp)
+
+    def _onListSetItem(self, fieldName: str, index: int, value: Any) -> None:
+        elemType = self._elemType(fieldName)
+        datasetKwargs = self._comp.datasetKwargs()
+
+        if _isScalarType(elemType):
+            ds = self._root[fieldName]
+            if isinstance(ds, h5py.Dataset):
+                ds[index] = value
+        else:
+            item = self._root[fieldName]
+            if isinstance(item, h5py.Group):
+                key = str(index)
+                if key in item:
+                    del item[key]
+                _writeValue(item, key, value, elemType, datasetKwargs, self._comp)
+
+    def _onListExtend(self, fieldName: str, startIdx: int, values: list[Any]) -> None:
+        for i, v in enumerate(values):
+            self._onListAppend(fieldName, startIdx + i, v)
+
+    # ------------------------------------------------------------------
+    # Dict mutation callbacks
+    # ------------------------------------------------------------------
+
+    def _onDictSetItem(self, fieldName: str, key: Any, value: Any) -> None:
+        valType = self._valType(fieldName)
+        datasetKwargs = self._comp.datasetKwargs()
+        group = self._root.require_group(fieldName)
+        strKey = _keyToStr(key)
+        if strKey in group:
+            del group[strKey]
+        if strKey in group.attrs:
+            del group.attrs[strKey]
+        _writeValue(group, strKey, value, valType, datasetKwargs, self._comp)
+
+    def _onDictDelItem(self, fieldName: str, key: Any) -> None:
+        item = self._root[fieldName]
+        if not isinstance(item, h5py.Group):
+            return
+        strKey = _keyToStr(key)
+        if strKey in item:
+            del item[strKey]
+        if strKey in item.attrs:
+            del item.attrs[strKey]
+
+
+# ---------------------------------------------------------------------------
+# Tracked collections
+# ---------------------------------------------------------------------------
+
+_UNSUPPORTED_LIST_OPS = ("insert", "pop", "remove", "sort", "reverse", "__delitem__")
+
+
+class TrackedList[T](list[T]):
+    """List subclass that notifies the session on mutation.
+
+    Supports ``append``, ``__setitem__``, and ``extend``.
+    Reorder operations raise ``NotImplementedError``.
+    """
+
+    def __init__(
+        self,
+        values: Iterable[T],
+        session: Hdf5Session[Any],
+        fieldName: str,
+        fieldType: Any,
+    ) -> None:
+        super().__init__(values)
+        object.__setattr__(self, "_session", session)
+        object.__setattr__(self, "_fieldName", fieldName)
+        object.__setattr__(self, "_fieldType", fieldType)
+
+    def append(self, value: T) -> None:
+        super().append(value)
+        session: Hdf5Session[Any] = object.__getattribute__(self, "_session")
+        fieldName: str = object.__getattribute__(self, "_fieldName")
+        session._onListAppend(fieldName, len(self) - 1, value)  # noqa: SLF001
+
+    def __setitem__(self, index: Any, value: Any) -> None:
+        super().__setitem__(index, value)
+        session: Hdf5Session[Any] = object.__getattribute__(self, "_session")
+        fieldName: str = object.__getattribute__(self, "_fieldName")
+        session._onListSetItem(fieldName, index, value)  # noqa: SLF001
+
+    def extend(self, values: Iterable[T]) -> None:
+        startIdx = len(self)
+        valuesList = list(values)
+        super().extend(valuesList)
+        session: Hdf5Session[Any] = object.__getattribute__(self, "_session")
+        fieldName: str = object.__getattribute__(self, "_fieldName")
+        session._onListExtend(fieldName, startIdx, valuesList)  # noqa: SLF001
+
+    def _unsupported(self, op: str) -> None:
+        raise NotImplementedError(
+            f"TrackedList does not support '{op}'. Build the data in memory and assign the whole list instead."
+        )
+
+    def insert(self, index: SupportsIndex, value: T) -> None:
+        self._unsupported("insert")
+
+    def pop(self, index: SupportsIndex = -1) -> T:
+        self._unsupported("pop")
+        raise AssertionError("unreachable")
+
+    def remove(self, value: T) -> None:
+        self._unsupported("remove")
+
+    def sort(self, *, key: Any = None, reverse: bool = False) -> None:
+        self._unsupported("sort")
+
+    def reverse(self) -> None:
+        self._unsupported("reverse")
+
+    def __delitem__(self, index: Any) -> None:
+        self._unsupported("__delitem__")
+
+
+class TrackedDict[K, V](dict[K, V]):
+    """Dict subclass that notifies the session on mutation."""
+
+    def __init__(
+        self,
+        values: dict[K, V],
+        session: Hdf5Session[Any],
+        fieldName: str,
+        fieldType: Any,
+    ) -> None:
+        super().__init__(values)
+        object.__setattr__(self, "_session", session)
+        object.__setattr__(self, "_fieldName", fieldName)
+        object.__setattr__(self, "_fieldType", fieldType)
+
+    def __setitem__(self, key: K, value: V) -> None:
+        super().__setitem__(key, value)
+        session: Hdf5Session[Any] = object.__getattribute__(self, "_session")
+        fieldName: str = object.__getattribute__(self, "_fieldName")
+        session._onDictSetItem(fieldName, key, value)  # noqa: SLF001
+
+    def __delitem__(self, key: K) -> None:
+        super().__delitem__(key)
+        session: Hdf5Session[Any] = object.__getattribute__(self, "_session")
+        fieldName: str = object.__getattribute__(self, "_fieldName")
+        session._onDictDelItem(fieldName, key)  # noqa: SLF001
+
+    def update(self, other: Any = None, **kwargs: V) -> None:
+        items: dict[Any, Any] = {}
+        if other is not None:
+            items.update(other)
+        items.update(kwargs)
+        super().update(items)
+        session: Hdf5Session[Any] = object.__getattribute__(self, "_session")
+        fieldName: str = object.__getattribute__(self, "_fieldName")
+        for k, v in items.items():
+            session._onDictSetItem(fieldName, k, v)  # noqa: SLF001
+
+
+# ---------------------------------------------------------------------------
+# Proxy class factory
+# ---------------------------------------------------------------------------
 
 
 def _getProxyClass[T: Versionable](cls: type[T]) -> type[T]:
