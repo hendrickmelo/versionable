@@ -24,7 +24,6 @@ from __future__ import annotations
 from importlib.metadata import version as _version
 
 from versionable._api import load, loadDynamic, save
-from versionable._appendable import Appendable
 from versionable._backend import Backend, registerBackend
 from versionable._base import (
     Versionable,
@@ -34,6 +33,7 @@ from versionable._base import (
     metadata,
     registeredClasses,
 )
+from versionable._hdf5_field import Appendable, Hdf5FieldInfo
 from versionable._migration import Migration, MigrationContext, migration
 from versionable._types import VersionableValue, literalFallback, registerConverter
 
@@ -57,6 +57,7 @@ __all__ = [
     "BackendError",
     "ConverterError",
     "HashMismatchError",
+    "Hdf5FieldInfo",
     "Migration",
     "MigrationContext",
     "MigrationError",

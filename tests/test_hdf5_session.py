@@ -15,14 +15,14 @@ import numpy.typing as npt
 
 import versionable
 import versionable.hdf5
-from versionable import Appendable, Versionable
-from versionable._appendable import (
+from versionable import Hdf5FieldInfo, Versionable
+from versionable._dataset_array import DatasetArray
+from versionable._hash import computeHash
+from versionable._hdf5_field import (
     _computeChunkSize,
-    _getAppendable,
+    _getHdf5FieldInfo,
     _resolveAppendAxis,
 )
-from versionable._hash import computeHash
-from versionable._tracked_array import TrackedArray
 from versionable.errors import BackendError
 
 # ---------------------------------------------------------------------------
@@ -33,14 +33,14 @@ _h_with_appendable = computeHash({"name": str, "waveform": npt.NDArray[np.float6
 
 
 @dataclass
-class _WithAppendable(
+class _WithHdf5FieldInfo(
     Versionable,
     version=1,
     hash=_h_with_appendable,
     register=False,
 ):
     name: str
-    waveform: Annotated[npt.NDArray[np.float64], Appendable()]
+    waveform: Annotated[npt.NDArray[np.float64], Hdf5FieldInfo()]
 
 
 _h_plain_array = computeHash({"name": str, "waveform": npt.NDArray[np.float64]})
@@ -58,41 +58,41 @@ class _WithPlainArray(
 
 
 # ---------------------------------------------------------------------------
-# Phase 1: Appendable annotation + TrackedArray
+# Phase 1: Hdf5FieldInfo annotation + DatasetArray
 # ---------------------------------------------------------------------------
 
 
-class TestAppendableHashCompat:
-    """Appendable fields hash identically to plain np.ndarray."""
+class TestHdf5FieldInfoHashCompat:
+    """Hdf5FieldInfo-annotated fields hash identically to plain np.ndarray."""
 
     def test_annotated_hashes_same_as_plain(self) -> None:
-        """Annotated[np.ndarray, Appendable()] hashes the same as np.ndarray."""
+        """Annotated[np.ndarray, Hdf5FieldInfo()] hashes the same as np.ndarray."""
         plain = computeHash({"name": str, "waveform": npt.NDArray[np.float64]})
-        annotated = computeHash({"name": str, "waveform": Annotated[npt.NDArray[np.float64], Appendable()]})
+        annotated = computeHash({"name": str, "waveform": Annotated[npt.NDArray[np.float64], Hdf5FieldInfo()]})
         assert plain == annotated
 
-    def test_class_with_appendable_uses_same_hash(self) -> None:
-        """A class with Appendable field uses the same hash as one with plain ndarray."""
-        assert _WithAppendable._serializer_meta_.hash == _WithPlainArray._serializer_meta_.hash
+    def test_class_with_hdf5field_uses_same_hash(self) -> None:
+        """A class with Hdf5FieldInfo uses the same hash as one with plain ndarray."""
+        assert _WithHdf5FieldInfo._serializer_meta_.hash == _WithPlainArray._serializer_meta_.hash
 
 
-class TestAppendableSaveLoadPassthrough:
-    """save()/load() ignores Appendable marker — field is a normal ndarray."""
+class TestHdf5FieldInfoSaveLoadPassthrough:
+    """save()/load() ignores Hdf5FieldInfo marker — field is a normal ndarray."""
 
     def test_save_load_roundtrip(self, tmp_path: object) -> None:
         path = f"{tmp_path}/test.h5"
-        obj = _WithAppendable(name="test", waveform=np.arange(10, dtype=np.float64))
+        obj = _WithHdf5FieldInfo(name="test", waveform=np.arange(10, dtype=np.float64))
         versionable.save(obj, path)
-        loaded = versionable.load(_WithAppendable, path)
+        loaded = versionable.load(_WithHdf5FieldInfo, path)
         assert loaded.name == "test"
         np.testing.assert_array_equal(loaded.waveform, np.arange(10, dtype=np.float64))
 
     def test_save_load_json_roundtrip(self, tmp_path: object) -> None:
-        """Non-HDF5 backends ignore Appendable entirely."""
+        """Non-HDF5 backends ignore Hdf5FieldInfo entirely."""
         path = f"{tmp_path}/test.json"
-        obj = _WithAppendable(name="test", waveform=np.arange(5, dtype=np.float64))
+        obj = _WithHdf5FieldInfo(name="test", waveform=np.arange(5, dtype=np.float64))
         versionable.save(obj, path)
-        loaded = versionable.load(_WithAppendable, path)
+        loaded = versionable.load(_WithHdf5FieldInfo, path)
         assert loaded.name == "test"
         np.testing.assert_array_equal(loaded.waveform, np.arange(5, dtype=np.float64))
 
@@ -101,28 +101,28 @@ class TestAxisInference:
     """Test _resolveAppendAxis logic."""
 
     def test_zero_axis_0(self) -> None:
-        axis = _resolveAppendAxis((0, 1024), Appendable())
+        axis = _resolveAppendAxis((0, 1024), Hdf5FieldInfo())
         assert axis == 0
 
     def test_zero_axis_1(self) -> None:
-        axis = _resolveAppendAxis((16, 0), Appendable())
+        axis = _resolveAppendAxis((16, 0), Hdf5FieldInfo())
         assert axis == 1
 
     def test_multiple_zero_axes_error(self) -> None:
         with pytest.raises(BackendError, match="Ambiguous append axis"):
-            _resolveAppendAxis((0, 0), Appendable())
+            _resolveAppendAxis((0, 0), Hdf5FieldInfo())
 
     def test_explicit_axis_overrides(self) -> None:
-        axis = _resolveAppendAxis((100, 200), Appendable(axis=1))
+        axis = _resolveAppendAxis((100, 200), Hdf5FieldInfo(axis=1))
         assert axis == 1
 
     def test_no_zero_axis_defaults_to_0(self) -> None:
-        axis = _resolveAppendAxis((100, 1024), Appendable())
+        axis = _resolveAppendAxis((100, 1024), Hdf5FieldInfo())
         assert axis == 0
 
     def test_explicit_axis_ignores_zero_shape(self) -> None:
         """Explicit axis takes precedence even when a zero-size axis exists."""
-        axis = _resolveAppendAxis((0, 1024), Appendable(axis=1))
+        axis = _resolveAppendAxis((0, 1024), Hdf5FieldInfo(axis=1))
         assert axis == 1
 
 
@@ -146,24 +146,24 @@ class TestChunkSize:
         assert size > 0
 
 
-class TestGetAppendable:
-    """Test _getAppendable extraction."""
+class TestGetHdf5FieldInfo:
+    """Test _getHdf5FieldInfo extraction."""
 
-    def test_annotated_with_appendable(self) -> None:
-        ft = Annotated[np.ndarray, Appendable(chunkRows=64)]
-        result = _getAppendable(ft)
+    def test_annotated_with_hdf5field(self) -> None:
+        ft = Annotated[np.ndarray, Hdf5FieldInfo(chunkRows=64)]
+        result = _getHdf5FieldInfo(ft)
         assert result is not None
         assert result.chunkRows == 64
 
     def test_plain_ndarray(self) -> None:
-        assert _getAppendable(np.ndarray) is None
+        assert _getHdf5FieldInfo(np.ndarray) is None
 
-    def test_annotated_without_appendable(self) -> None:
+    def test_annotated_without_hdf5field(self) -> None:
         ft = Annotated[np.ndarray, "some metadata"]
-        assert _getAppendable(ft) is None
+        assert _getHdf5FieldInfo(ft) is None
 
     def test_non_annotated_type(self) -> None:
-        assert _getAppendable(int) is None
+        assert _getHdf5FieldInfo(int) is None
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +190,7 @@ class _SessionBasic(
     name: str = ""
     sampleRate_Hz: float = 0.0
     data: npt.NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
-    waveform: Annotated[npt.NDArray[np.float64], Appendable()] = field(default_factory=lambda: np.empty(0))
+    waveform: Annotated[npt.NDArray[np.float64], Hdf5FieldInfo()] = field(default_factory=lambda: np.empty(0))
 
 
 _h_session_axis1 = computeHash({"channels": npt.NDArray[np.float64]})
@@ -203,7 +203,7 @@ class _SessionAxis1(
     hash=_h_session_axis1,
     register=False,
 ):
-    channels: Annotated[npt.NDArray[np.float64], Appendable(axis=1)] = field(default_factory=lambda: np.empty(0))
+    channels: Annotated[npt.NDArray[np.float64], Hdf5FieldInfo(axis=1)] = field(default_factory=lambda: np.empty(0))
 
 
 _h_session_chunk = computeHash({"data": npt.NDArray[np.float64]})
@@ -216,7 +216,7 @@ class _SessionChunk(
     hash=_h_session_chunk,
     register=False,
 ):
-    data: Annotated[npt.NDArray[np.float64], Appendable(chunkRows=16)] = field(default_factory=lambda: np.empty(0))
+    data: Annotated[npt.NDArray[np.float64], Hdf5FieldInfo(chunkRows=16)] = field(default_factory=lambda: np.empty(0))
 
 
 # ---------------------------------------------------------------------------
@@ -259,8 +259,8 @@ class TestSessionPlainArray:
         loaded = versionable.load(_SessionBasic, path)
         np.testing.assert_array_equal(loaded.data, arr)
 
-    def test_contiguous_dataset(self, tmp_path: object) -> None:
-        """Plain ndarray datasets are not chunked/resizable."""
+    def test_resizable_dataset(self, tmp_path: object) -> None:
+        """All ndarray fields in sessions get resizable datasets."""
         path = f"{tmp_path}/test.h5"
         arr = np.arange(100, dtype=np.float64)
         with versionable.hdf5.open(_SessionBasic, path) as obj:
@@ -268,8 +268,8 @@ class TestSessionPlainArray:
 
         with h5py.File(path, "r") as f:
             ds = f["data"]
-            # maxshape should be fixed (same as shape), not (None,)
-            assert ds.maxshape == (100,)
+            # All session ndarrays are resizable (unlimited along axis 0)
+            assert ds.maxshape == (None,)
 
     def test_replace_array(self, tmp_path: object) -> None:
         path = f"{tmp_path}/test.h5"
@@ -281,8 +281,8 @@ class TestSessionPlainArray:
         np.testing.assert_array_equal(loaded.data, np.ones(30, dtype=np.float64))
 
 
-class TestSessionAppendableArray:
-    """Appendable ndarray fields create resizable datasets."""
+class TestSessionHdf5FieldInfoArray:
+    """Hdf5FieldInfo ndarray fields create resizable datasets."""
 
     def test_assign_creates_resizable(self, tmp_path: object) -> None:
         path = f"{tmp_path}/test.h5"
@@ -310,7 +310,7 @@ class TestSessionAppendableArray:
         path = f"{tmp_path}/test.h5"
         with versionable.hdf5.open(_SessionBasic, path) as obj:
             obj.waveform = np.empty((0, 4), dtype=np.float64)
-            assert isinstance(obj.waveform, TrackedArray)
+            assert isinstance(obj.waveform, DatasetArray)
 
     def test_append_axis1(self, tmp_path: object) -> None:
         path = f"{tmp_path}/test.h5"
@@ -369,12 +369,12 @@ class TestSessionAppendableArray:
             assert ds.chunks[0] == 16  # explicit chunkRows
 
     def test_reassign_appendable_field(self, tmp_path: object) -> None:
-        """Reassigning an Appendable field replaces the dataset."""
+        """Reassigning an Hdf5FieldInfo-annotated field replaces the dataset."""
         path = f"{tmp_path}/test.h5"
         with versionable.hdf5.open(_SessionBasic, path) as obj:
             obj.waveform = np.zeros((5, 4), dtype=np.float64)
             obj.waveform = np.ones((3, 4), dtype=np.float64)
-            assert isinstance(obj.waveform, TrackedArray)
+            assert isinstance(obj.waveform, DatasetArray)
             assert obj.waveform.shape == (3, 4)
 
 
@@ -609,7 +609,7 @@ class TestUnsupportedListOps:
 
 
 class TestMixedSession:
-    """Test mixing scalars, lists, and TrackedArray in the same session."""
+    """Test mixing scalars, lists, and DatasetArray in the same session."""
 
     def test_mixed_operations(self, tmp_path: object) -> None:
         path = f"{tmp_path}/test.h5"
@@ -706,7 +706,7 @@ class TestResumeMode:
             obj.waveform.append(np.ones((10, 4)))
 
         with versionable.hdf5.open(_SessionBasic, path, mode="resume") as obj:
-            assert isinstance(obj.waveform, TrackedArray)
+            assert isinstance(obj.waveform, DatasetArray)
             assert obj.waveform.shape == (10, 4)
             obj.waveform.append(np.zeros((5, 4)))
             assert obj.waveform.shape == (15, 4)
@@ -846,28 +846,26 @@ class TestDictVersionable:
 
 
 class TestFlush:
-    """flush() re-persists in-place-mutated fields."""
+    """flush() flushes HDF5 buffers to disk."""
 
-    def test_flush_plain_array(self, tmp_path: object) -> None:
+    def test_setitem_writes_through(self, tmp_path: object) -> None:
+        """DatasetArray __setitem__ writes through — no flush needed."""
         path = f"{tmp_path}/test.h5"
-        session = versionable.hdf5.open(_SessionBasic, path)
-        with session as obj:
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
             obj.data = np.zeros(10, dtype=np.float64)
-            # In-place mutation (not tracked by __setattr__)
             obj.data[5] = 99.0
-            session.flush("data")
 
         loaded = versionable.load(_SessionBasic, path)
         assert loaded.data[5] == 99.0
 
-    def test_flush_all(self, tmp_path: object) -> None:
+    def test_flush_for_durability(self, tmp_path: object) -> None:
+        """flush() calls h5py.File.flush() for durability."""
         path = f"{tmp_path}/test.h5"
         session = versionable.hdf5.open(_SessionBasic, path)
         with session as obj:
-            obj.name = "test"
             obj.data = np.zeros(5, dtype=np.float64)
             obj.data[0] = 42.0
-            session.flush()
+            session.flush()  # no args — flushes HDF5 buffers
 
         loaded = versionable.load(_SessionBasic, path)
         assert loaded.data[0] == 42.0
@@ -963,3 +961,150 @@ class TestInstanceOpen:
             rec.name = "modified"
             # Original should be untouched
             assert original.name == "original"
+
+
+# ---------------------------------------------------------------------------
+# Phase: Dataset-backed session fields
+# ---------------------------------------------------------------------------
+
+
+class TestAllNdarraysAreDatasetArray:
+    """All ndarray fields in a session are DatasetArray, not just Hdf5FieldInfo-annotated ones."""
+
+    def test_plain_ndarray_is_dataset_array(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.arange(10, dtype=np.float64)
+            assert isinstance(obj.data, DatasetArray)
+
+    def test_plain_ndarray_supports_append(self, tmp_path: object) -> None:
+        """Plain ndarray fields (no Hdf5FieldInfo annotation) support append."""
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.empty(0, dtype=np.float64)
+            obj.data.append(np.arange(5, dtype=np.float64))
+            obj.data.append(np.arange(5, 10, dtype=np.float64))
+            assert obj.data.shape == (10,)
+
+        loaded = versionable.load(_SessionBasic, path)
+        np.testing.assert_array_equal(loaded.data, np.arange(10, dtype=np.float64))
+
+    def test_appendable_still_works_as_override(self, tmp_path: object) -> None:
+        """Hdf5FieldInfo annotation still works for chunkRows/axis overrides."""
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.waveform = np.empty((0, 4), dtype=np.float64)
+            obj.waveform.append(np.ones((5, 4)))
+            assert isinstance(obj.waveform, DatasetArray)
+            assert obj.waveform.shape == (5, 4)
+
+    def test_resume_wraps_plain_ndarray(self, tmp_path: object) -> None:
+        """Resume wraps all ndarrays as DatasetArray, not just Hdf5FieldInfo-annotated ones."""
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.arange(10, dtype=np.float64)
+
+        with versionable.hdf5.open(_SessionBasic, path, mode="resume") as obj:
+            assert isinstance(obj.data, DatasetArray)
+            obj.data.append(np.arange(10, 20, dtype=np.float64))
+            assert obj.data.shape == (20,)
+
+        loaded = versionable.load(_SessionBasic, path)
+        np.testing.assert_array_equal(loaded.data, np.arange(20, dtype=np.float64))
+
+
+class TestDatasetArrayResize:
+    """DatasetArray.resize() for pre-allocation and truncation."""
+
+    def test_preallocate_and_fill(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.empty(0, dtype=np.float64)
+            obj.data.resize(100)
+            for i in range(100):
+                obj.data[i] = float(i)
+
+        loaded = versionable.load(_SessionBasic, path)
+        np.testing.assert_array_equal(loaded.data, np.arange(100, dtype=np.float64))
+
+    def test_truncate(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.arange(100, dtype=np.float64)
+            obj.data.resize(50)
+            assert obj.data.shape == (50,)
+
+        loaded = versionable.load(_SessionBasic, path)
+        np.testing.assert_array_equal(loaded.data, np.arange(50, dtype=np.float64))
+
+
+class TestDatasetArrayIteration:
+    """DatasetArray.__iter__ yields rows."""
+
+    def test_iter_rows(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.waveform = np.arange(12, dtype=np.float64).reshape(3, 4)
+            rows = list(obj.waveform)
+            assert len(rows) == 3
+            np.testing.assert_array_equal(rows[0], np.arange(4, dtype=np.float64))
+
+
+class TestDatasetArrayIntrospection:
+    """DatasetArray.chunks and .maxshape properties."""
+
+    def test_chunks_and_maxshape(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.arange(100, dtype=np.float64)
+            assert obj.data.chunks is not None
+            assert obj.data.maxshape[0] is None  # unlimited
+
+
+class TestDatasetArrayClosedSession:
+    """Accessing DatasetArray after session closes raises BackendError."""
+
+    def test_getitem_after_close(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.arange(10, dtype=np.float64)
+            arr = obj.data
+
+        with pytest.raises(BackendError, match="session has been closed"):
+            arr[0]
+
+    def test_setitem_after_close(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.arange(10, dtype=np.float64)
+            arr = obj.data
+
+        with pytest.raises(BackendError, match="session has been closed"):
+            arr[0] = 1.0
+
+    def test_append_after_close(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.arange(10, dtype=np.float64)
+            arr = obj.data
+
+        with pytest.raises(BackendError, match="session has been closed"):
+            arr.append(np.zeros(5))
+
+    def test_shape_after_close(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.arange(10, dtype=np.float64)
+            arr = obj.data
+
+        with pytest.raises(BackendError, match="session has been closed"):
+            _ = arr.shape
+
+    def test_scalar_fields_accessible_after_close(self, tmp_path: object) -> None:
+        """Scalar/list/dict fields are in-memory and remain accessible."""
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.name = "test"
+            proxy = obj
+
+        assert proxy.name == "test"

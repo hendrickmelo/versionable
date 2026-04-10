@@ -17,13 +17,8 @@ from typing import Any, SupportsIndex, cast
 import h5py
 import numpy as np
 
-from versionable._appendable import (
-    Appendable,
-    _computeChunkSize,
-    _getAppendable,
-    _resolveAppendAxis,
-)
 from versionable._base import Versionable, _resolveFields, metadata
+from versionable._dataset_array import DatasetArray
 from versionable._hdf5_backend import (
     _VERSIONABLE_GROUP,
     _dtypeForElementType,
@@ -34,7 +29,12 @@ from versionable._hdf5_backend import (
     _writeValue,
 )
 from versionable._hdf5_compression import ZSTD_DEFAULT, Hdf5Compression
-from versionable._tracked_array import TrackedArray
+from versionable._hdf5_field import (
+    Hdf5FieldInfo,
+    _computeChunkSize,
+    _getHdf5FieldInfo,
+    _resolveAppendAxis,
+)
 from versionable.errors import BackendError
 
 logger = logging.getLogger(__name__)
@@ -162,20 +162,18 @@ class Hdf5Session[T: Versionable]:
                 object.__setattr__(self._proxy, name, wrapped)
 
     def _wrapResumedValue(self, name: str, value: Any, fieldType: Any) -> Any:
-        """Wrap a loaded value with a tracked proxy for resume mode.
+        """Wrap a loaded value with a tracked proxy for resume/read mode.
 
-        For Appendable fields, wraps with TrackedArray pointing to the
-        existing resizable dataset. For list/dict fields, wraps with
-        TrackedList/TrackedDict.
+        For ndarray fields backed by datasets, wraps with DatasetArray.
+        For list/dict fields, wraps with TrackedList/TrackedDict.
         """
-        # Appendable ndarray -> TrackedArray backed by existing dataset
-        appendable = _getAppendable(fieldType)
-        if appendable is not None and name in self._root:
+        # Any ndarray dataset -> DatasetArray
+        if name in self._root:
             dataset = self._root[name]
-            if isinstance(dataset, h5py.Dataset):
-                # Re-resolve axis from dataset's maxshape (unlimited dim)
+            if isinstance(dataset, h5py.Dataset) and isinstance(value, np.ndarray):
+                appendable = _getHdf5FieldInfo(fieldType) or Hdf5FieldInfo()
                 axis = self._resolveAxisFromDataset(dataset, appendable)
-                return TrackedArray(dataset, name, axis)
+                return DatasetArray(dataset, name, axis)
 
         # list -> TrackedList
         if isinstance(value, list):
@@ -188,7 +186,7 @@ class Hdf5Session[T: Versionable]:
         return value
 
     @staticmethod
-    def _resolveAxisFromDataset(dataset: h5py.Dataset, appendable: Appendable) -> int:
+    def _resolveAxisFromDataset(dataset: h5py.Dataset, appendable: Hdf5FieldInfo) -> int:
         """Re-resolve the append axis from an existing dataset's maxshape."""
         if appendable.axis is not None:
             return appendable.axis
@@ -210,29 +208,28 @@ class Hdf5Session[T: Versionable]:
             # Warn about required fields that were never set
             if excType is None:
                 self._warnUnsetFields()
+            # Mark all DatasetArray instances as closed
+            self._closeDatasetArrays()
             self._file.close()
         except Exception:
             logger.exception("Error closing HDF5 file %s", self._path)
 
-    def flush(self, *fieldNames: str) -> None:
-        """Re-persist fields that may have been mutated in place.
+    def _closeDatasetArrays(self) -> None:
+        """Mark all DatasetArray wrappers on the proxy as closed."""
+        for name in self._fieldTypes:
+            if hasattr(self._proxy, name):
+                value = object.__getattribute__(self._proxy, name)
+                if isinstance(value, DatasetArray):
+                    value._closed = True  # noqa: SLF001
 
-        For non-Appendable ndarray fields that were modified via
-        ``arr[i] = value`` or similar in-place operations, call
-        ``flush("fieldName")`` to write the current value to disk.
+    def flush(self) -> None:
+        """Flush HDF5 buffers to disk for durability.
 
-        If no field names are given, flushes all fields that have been
-        set on the proxy.
+        Since all ndarray fields are backed by DatasetArray (which writes
+        through to disk automatically), this only needs to flush the
+        underlying HDF5 file handle.
         """
-        names = fieldNames or [n for n in self._fieldTypes if hasattr(self._proxy, n)]
-        for name in names:
-            if name not in self._fieldTypes:
-                continue
-            value = object.__getattribute__(self._proxy, name)
-            if isinstance(value, (TrackedArray, TrackedList, TrackedDict)):
-                # Already tracked — mutations are persisted automatically
-                continue
-            self._persistField(name, value)
+        self._file.flush()
 
     def _warnUnsetFields(self) -> None:
         """Log a warning for required fields that were never assigned."""
@@ -256,8 +253,8 @@ class Hdf5Session[T: Versionable]:
         fieldType = self._fieldTypes[name]
         datasetKwargs = self._comp.datasetKwargs()
 
-        # Unwrap TrackedArray to get the raw ndarray for writing
-        if isinstance(value, TrackedArray):
+        # Unwrap DatasetArray to get the raw ndarray for writing
+        if isinstance(value, DatasetArray):
             value = np.asarray(value)
 
         # Unwrap TrackedList/TrackedDict to plain list/dict
@@ -272,9 +269,9 @@ class Hdf5Session[T: Versionable]:
         if name in self._root:
             del self._root[name]
 
-        # Check if this is an Appendable field
-        appendable = _getAppendable(fieldType)
-        if appendable is not None and isinstance(value, np.ndarray):
+        # All ndarray fields get resizable datasets in sessions
+        if isinstance(value, np.ndarray):
+            appendable = _getHdf5FieldInfo(fieldType) or Hdf5FieldInfo()
             self._createResizableDataset(name, value, appendable)
             return
 
@@ -310,9 +307,9 @@ class Hdf5Session[T: Versionable]:
         self,
         name: str,
         data: np.ndarray,
-        appendable: Appendable,
+        appendable: Hdf5FieldInfo,
     ) -> tuple[h5py.Dataset, int]:
-        """Create a chunked, resizable dataset for an Appendable field.
+        """Create a chunked, resizable dataset for an ndarray field.
 
         Returns:
             Tuple of (dataset, resolvedAxis).
@@ -342,13 +339,13 @@ class Hdf5Session[T: Versionable]:
 
     def _wrapValue(self, name: str, value: Any, fieldType: Any) -> Any:
         """Wrap a value with a tracked proxy if applicable."""
-        # Appendable ndarray -> TrackedArray backed by the just-created dataset
-        appendable = _getAppendable(fieldType)
-        if appendable is not None and name in self._root:
+        # Any ndarray field -> DatasetArray backed by the just-created dataset
+        if name in self._root:
             dataset = self._root[name]
-            if isinstance(dataset, h5py.Dataset):
+            if isinstance(dataset, h5py.Dataset) and isinstance(value, (np.ndarray, DatasetArray)):
+                appendable = _getHdf5FieldInfo(fieldType) or Hdf5FieldInfo()
                 axis = _resolveAppendAxis(dataset.shape, appendable)
-                return TrackedArray(dataset, name, axis)
+                return DatasetArray(dataset, name, axis)
 
         # list -> TrackedList
         if isinstance(value, list) and not isinstance(value, TrackedList):
