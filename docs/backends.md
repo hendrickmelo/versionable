@@ -393,16 +393,13 @@ For scenarios where data arrives incrementally (DAQ streaming, simulation loops,
 `versionable.hdf5.open()` provides a file-backed session that persists mutations as they happen:
 
 ```python
-from typing import Annotated
-from versionable import Appendable
-
 @dataclass
 class Experiment(Versionable, version=1, hash="..."):
     name: str
     sampleRate_Hz: float
     traces: list[np.ndarray]
     timestamps: list[float]
-    waveform: Annotated[np.ndarray, Appendable(chunkRows=64)]
+    waveform: NDArray[np.float64]
 
 import versionable.hdf5
 
@@ -426,6 +423,9 @@ with versionable.hdf5.open(exp, "run001.h5") as exp:
 exp = versionable.load(Experiment, "run001.h5")
 ```
 
+All ndarray fields in a session are backed by resizable HDF5 datasets and wrapped with `DatasetArray`. Every ndarray
+supports `.append()`, element writes (write-through to disk), `.resize()`, and numpy interop — no annotation required.
+
 #### Session Modes
 
 | Mode                 | Behavior                                              |
@@ -433,32 +433,49 @@ exp = versionable.load(Experiment, "run001.h5")
 | `"create"` (default) | New file; error if file exists                        |
 | `"overwrite"`        | Delete existing file if present, create new           |
 | `"resume"`           | Open existing file, restore state, continue appending |
+| `"read"`             | Open existing file read-only, no mutations allowed    |
 
 ```python
 # Resume after a crash or between sessions
 with versionable.hdf5.open(Experiment, "run001.h5", mode="resume") as exp:
     print(len(exp.traces))        # existing data is available
     exp.traces.append(new_data)   # appending continues from where it left off
+
+# Read-only access — no mutations allowed
+with versionable.hdf5.open(Experiment, "run001.h5", mode="read") as exp:
+    print(np.mean(exp.waveform))  # numpy reads work
+    # exp.name = "new"            # raises BackendError
+    # exp.waveform[0] = 0         # raises BackendError
 ```
 
-#### `Appendable` — Growable ndarray Fields
+#### `Hdf5FieldInfo` — Optional Layout Hints
 
-`Appendable` marks an `np.ndarray` field as growable. The dataset is created with a resizable dimension and supports
-`.append()`:
+All ndarray fields are resizable by default. Use `Hdf5FieldInfo` only when you need to override the chunk size or append
+axis:
 
 ```python
-# Auto axis inference: zero-size dimension becomes the append axis
-exp.waveform = np.empty((0, 1024))  # axis=0, maxshape=(None, 1024)
+from typing import Annotated
+from versionable import Hdf5FieldInfo
 
-# Explicit axis
-channels: Annotated[np.ndarray, Appendable(axis=1)]
+# Explicit axis (default: inferred from zero-size dimension, or 0)
+channels: Annotated[np.ndarray, Hdf5FieldInfo(axis=1)]
 
 # Custom chunk size (default: ~256 KB heuristic)
-highRes: Annotated[np.ndarray, Appendable(chunkRows=128)]
+highRes: Annotated[np.ndarray, Hdf5FieldInfo(chunkRows=128)]
 ```
 
-`Appendable` is pure annotation metadata — it's ignored by `save()`/`load()` and non-HDF5 backends. The field hashes
+`Hdf5FieldInfo` is pure annotation metadata — it's ignored by `save()`/`load()` and non-HDF5 backends. The field hashes
 identically to a plain `np.ndarray`.
+
+#### Dtype Inference
+
+The on-disk dtype is inferred from the field's type annotation:
+
+```python
+data: NDArray[np.float32]  # stored as float32 on disk, even if assigned float64
+```
+
+Bare `np.ndarray` fields use the assigned array's dtype.
 
 #### Tracked Collections
 
@@ -468,15 +485,15 @@ identically to a plain `np.ndarray`.
 - `insert`, `pop`, `remove`, `sort`, `reverse` raise `NotImplementedError` — build in memory and assign the whole list
   instead
 
-#### `flush()` for In-Place Mutations
+#### `flush()` for Durability
 
-Non-`Appendable` ndarray fields mutated in place (e.g., `obj.data[5] = 99`) are not automatically tracked. Call
-`session.flush("data")` to re-persist them:
+`session.flush()` flushes HDF5 buffers to disk. Since all ndarray fields write through automatically via `DatasetArray`,
+this is only needed for explicit durability guarantees (e.g., before a potential crash):
 
 ```python
 session = versionable.hdf5.open(MyClass, "out.h5")
 with session as obj:
     obj.data = np.zeros(100)
-    obj.data[50] = 42.0    # in-place mutation — not tracked
-    session.flush("data")  # re-persist to disk
+    obj.data[50] = 42.0   # writes through to disk automatically
+    session.flush()        # flush HDF5 buffers for durability
 ```
