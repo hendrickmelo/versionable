@@ -95,7 +95,7 @@ class DatasetArray:
 
     def __len__(self) -> int:
         self._checkOpen()
-        return int(self._dataset.shape[0])
+        return int(self._dataset.shape[self._axis])
 
     def __iter__(self) -> Iterator[np.ndarray]:
         """Iterate over the first axis (rows)."""

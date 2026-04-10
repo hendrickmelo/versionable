@@ -393,15 +393,20 @@ For scenarios where data arrives incrementally (DAQ streaming, simulation loops,
 `versionable.hdf5.open()` provides a file-backed session that persists mutations as they happen:
 
 ```python
+from dataclasses import dataclass, field
+import numpy as np
+from numpy.typing import NDArray
+import versionable
+import versionable.hdf5
+from versionable import Versionable
+
 @dataclass
 class Experiment(Versionable, version=1, hash="..."):
-    name: str
-    sampleRate_Hz: float
-    traces: list[np.ndarray]
-    timestamps: list[float]
-    waveform: NDArray[np.float64]
-
-import versionable.hdf5
+    name: str = ""
+    sampleRate_Hz: float = 0.0
+    traces: list[np.ndarray] = field(default_factory=list)
+    timestamps: list[float] = field(default_factory=list)
+    waveform: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
 
 # You can pass a class (empty proxy) or an existing instance:
 exp = Experiment(
@@ -487,13 +492,26 @@ Bare `np.ndarray` fields use the assigned array's dtype.
 
 #### `flush()` for Durability
 
-`session.flush()` flushes HDF5 buffers to disk. Since all ndarray fields write through automatically via `DatasetArray`,
-this is only needed for explicit durability guarantees (e.g., before a potential crash):
+These operations write through to disk automatically — no `flush()` needed:
+
+- **`DatasetArray.__setitem__`** — `obj.data[50] = 42.0`
+- **`DatasetArray.append()`** / **`resize()`**
+- **`TrackedList.append()`** / **`extend()`** / **`__setitem__`**
+- **`TrackedDict.__setitem__`** / **`__delitem__`** / **`update()`**
+- **Scalar field assignment** — `obj.name = "new"`
+
+`session.flush()` flushes HDF5 internal buffers to the OS, ensuring data reaches disk even if the process crashes
+immediately after. Call it in long-running loops where you need a durability checkpoint:
 
 ```python
 session = versionable.hdf5.open(MyClass, "out.h5")
 with session as obj:
-    obj.data = np.zeros(100)
-    obj.data[50] = 42.0   # writes through to disk automatically
-    session.flush()        # flush HDF5 buffers for durability
+    for batch in data_source:
+        obj.data.append(batch)
+        session.flush()  # ensure data survives a crash
 ```
+
+#### Limitations
+
+Sessions do not support migrations. The file's version and hash must exactly match the class. If your schema has
+changed, use `versionable.load()` (which supports migrations) to load the old file, then re-save with a new session.

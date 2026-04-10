@@ -8,6 +8,7 @@ assignments are intercepted and persisted incrementally.
 from __future__ import annotations
 
 import logging
+import operator
 import os
 import typing
 from collections.abc import Iterable
@@ -118,34 +119,38 @@ class Hdf5Session[T: Versionable]:
         else:
             raise BackendError(f"Unknown session mode: {self._mode!r}")
 
-        self._root = self._file
+        try:
+            self._root = self._file
 
-        # Create proxy instance
-        proxyCls = _getReadOnlyProxyClass(self._cls) if self._mode == "read" else _getProxyClass(self._cls)
-        self._proxy = proxyCls.__new__(proxyCls)
-        object.__setattr__(self._proxy, "_session", self)
+            # Create proxy instance
+            proxyCls = _getReadOnlyProxyClass(self._cls) if self._mode == "read" else _getProxyClass(self._cls)
+            self._proxy = proxyCls.__new__(proxyCls)
+            object.__setattr__(self._proxy, "_session", self)
 
-        if self._mode in ("resume", "read"):
-            if self._instance is not None:
-                raise BackendError(
-                    f"Cannot pass an instance with mode={self._mode!r}. "
-                    f"{'Resume restores' if self._mode == 'resume' else 'Read loads'} "
-                    "state from the existing file."
-                )
-            self._resumeFromFile()
-        else:
-            # Write __versionable__ metadata for new files
-            meta = metadata(self._cls)
-            metaGroup = self._root.create_group(_VERSIONABLE_GROUP)
-            metaGroup.attrs["__OBJECT__"] = meta.name
-            metaGroup.attrs["__VERSION__"] = meta.version
-            metaGroup.attrs["__HASH__"] = meta.hash
+            if self._mode in ("resume", "read"):
+                if self._instance is not None:
+                    raise BackendError(
+                        f"Cannot pass an instance with mode={self._mode!r}. "
+                        f"{'Resume restores' if self._mode == 'resume' else 'Read loads'} "
+                        "state from the existing file."
+                    )
+                self._resumeFromFile()
+            else:
+                # Write __versionable__ metadata for new files
+                meta = metadata(self._cls)
+                metaGroup = self._root.create_group(_VERSIONABLE_GROUP)
+                metaGroup.attrs["__OBJECT__"] = meta.name
+                metaGroup.attrs["__VERSION__"] = meta.version
+                metaGroup.attrs["__HASH__"] = meta.hash
 
-            # If an instance was provided, persist all its fields
-            if self._instance is not None:
-                self._populateFromInstance()
+                # If an instance was provided, persist all its fields
+                if self._instance is not None:
+                    self._populateFromInstance()
 
-        return self._proxy
+            return self._proxy
+        except Exception:
+            self._file.close()
+            raise
 
     def _populateFromInstance(self) -> None:
         """Copy fields from the source instance to the proxy, persisting each."""
@@ -156,8 +161,13 @@ class Hdf5Session[T: Versionable]:
                 setattr(self._proxy, name, value)
 
     def _resumeFromFile(self) -> None:
-        """Restore state from an existing HDF5 file for resume mode."""
-        # Validate metadata
+        """Restore state from an existing HDF5 file for resume/read mode.
+
+        Note: migrations are not supported in sessions. The file's version
+        and hash must exactly match the class. If your schema has changed,
+        use ``versionable.load()`` (which supports migrations) and re-save.
+        """
+        # Validate metadata — no migration support
         fileMeta = _readMeta(self._root)
         meta = metadata(self._cls)
         if fileMeta["__OBJECT__"] != meta.name:
@@ -517,10 +527,15 @@ class TrackedList[T](list[T]):
         session._onListAppend(fieldName, len(self) - 1, value)  # noqa: SLF001
 
     def __setitem__(self, index: Any, value: Any) -> None:
-        super().__setitem__(index, value)
+        if isinstance(index, slice):
+            self._unsupported("slice assignment")
+        normalized = operator.index(index)
+        if normalized < 0:
+            normalized += len(self)
+        super().__setitem__(normalized, value)
         session: Hdf5Session[Any] = object.__getattribute__(self, "_session")
         fieldName: str = object.__getattribute__(self, "_fieldName")
-        session._onListSetItem(fieldName, index, value)  # noqa: SLF001
+        session._onListSetItem(fieldName, normalized, value)  # noqa: SLF001
 
     def extend(self, values: Iterable[T]) -> None:
         startIdx = len(self)

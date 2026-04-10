@@ -66,7 +66,13 @@ def _resolveAppendAxis(shape: tuple[int, ...], hdf5Field: Hdf5FieldInfo) -> int:
     4. Multiple axes have size 0 — raises ``BackendError``.
     """
     if hdf5Field.axis is not None:
-        return hdf5Field.axis
+        axis = hdf5Field.axis
+        ndim = len(shape)
+        if ndim > 0 and not (-ndim <= axis < ndim):
+            raise BackendError(
+                f"Invalid append axis {axis} for shape {shape}. Axis must be in range [{-ndim}, {ndim - 1}]."
+            )
+        return axis % ndim if ndim > 0 else axis
 
     zeroAxes = [i for i, s in enumerate(shape) if s == 0]
     if len(zeroAxes) == 1:
