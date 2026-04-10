@@ -27,7 +27,7 @@ from versionable._hdf5_compression import ZSTD_FAST as ZSTD_FAST
 from versionable._hdf5_compression import Hdf5Compression as Hdf5Compression
 from versionable._hdf5_session import Hdf5Session
 
-type SessionMode = Literal["create", "resume", "overwrite"]
+type SessionMode = Literal["create", "resume", "overwrite", "read"]
 
 
 @overload
@@ -67,6 +67,7 @@ def open[T: Versionable](  # noqa: A001 — intentional; mirrors stdlib pattern 
             ``"create"`` (default) — new file, error if exists.
             ``"resume"`` — open existing file, restore state, continue.
             ``"overwrite"`` — delete existing file if present, create new.
+            ``"read"`` — open existing file read-only, no mutations allowed.
         compression: Compression preset (default: ZSTD_DEFAULT).
 
     Returns:

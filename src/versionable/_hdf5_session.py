@@ -43,6 +43,27 @@ logger = logging.getLogger(__name__)
 _proxyClassCache: dict[type, type] = {}
 
 
+def _dtypeFromAnnotation(fieldType: Any) -> np.dtype[Any] | None:
+    """Extract dtype from an NDArray[X] annotation, or None for bare np.ndarray.
+
+    For ``Annotated[NDArray[np.float32], ...]``, unwraps the Annotated layer first.
+    """
+    # Unwrap Annotated
+    if typing.get_origin(fieldType) is typing.Annotated:
+        fieldType = typing.get_args(fieldType)[0]
+
+    # NDArray[np.float32] → origin=ndarray, args=(tuple[Any,...], dtype[float32])
+    if typing.get_origin(fieldType) is not np.ndarray:
+        return None
+    for arg in typing.get_args(fieldType):
+        if typing.get_origin(arg) is np.dtype:
+            inner = typing.get_args(arg)
+            if inner:
+                result: np.dtype[Any] = np.dtype(inner[0])
+                return result
+    return None
+
+
 class Hdf5Session[T: Versionable]:
     """Context manager wrapping a file-backed Versionable instance.
 
@@ -90,24 +111,26 @@ class Hdf5Session[T: Versionable]:
             if self._path.exists():
                 os.remove(self._path)
             self._file = h5py.File(self._path, "w")
-        elif self._mode == "resume":
+        elif self._mode in ("resume", "read"):
             if not self._path.exists():
-                raise BackendError(f"Cannot resume: file {self._path} does not exist.")
-            self._file = h5py.File(self._path, "a")
+                raise BackendError(f"Cannot {self._mode}: file {self._path} does not exist.")
+            self._file = h5py.File(self._path, "r" if self._mode == "read" else "a")
         else:
             raise BackendError(f"Unknown session mode: {self._mode!r}")
 
         self._root = self._file
 
         # Create proxy instance
-        proxyCls = _getProxyClass(self._cls)
+        proxyCls = _getReadOnlyProxyClass(self._cls) if self._mode == "read" else _getProxyClass(self._cls)
         self._proxy = proxyCls.__new__(proxyCls)
         object.__setattr__(self._proxy, "_session", self)
 
-        if self._mode == "resume":
+        if self._mode in ("resume", "read"):
             if self._instance is not None:
                 raise BackendError(
-                    "Cannot pass an instance with mode='resume'. Resume restores state from the existing file."
+                    f"Cannot pass an instance with mode={self._mode!r}. "
+                    f"{'Resume restores' if self._mode == 'resume' else 'Read loads'} "
+                    "state from the existing file."
                 )
             self._resumeFromFile()
         else:
@@ -167,21 +190,23 @@ class Hdf5Session[T: Versionable]:
         For ndarray fields backed by datasets, wraps with DatasetArray.
         For list/dict fields, wraps with TrackedList/TrackedDict.
         """
+        writable = self._mode != "read"
+
         # Any ndarray dataset -> DatasetArray
         if name in self._root:
             dataset = self._root[name]
             if isinstance(dataset, h5py.Dataset) and isinstance(value, np.ndarray):
                 appendable = _getHdf5FieldInfo(fieldType) or Hdf5FieldInfo()
                 axis = self._resolveAxisFromDataset(dataset, appendable)
-                return DatasetArray(dataset, name, axis)
+                return DatasetArray(dataset, name, axis, writable=writable)
 
-        # list -> TrackedList
+        # list -> TrackedList (read mode returns plain list)
         if isinstance(value, list):
-            return TrackedList(value, self, name, fieldType)
+            return value if not writable else TrackedList(value, self, name, fieldType)
 
-        # dict -> TrackedDict
+        # dict -> TrackedDict (read mode returns plain dict)
         if isinstance(value, dict):
-            return TrackedDict(value, self, name, fieldType)
+            return value if not writable else TrackedDict(value, self, name, fieldType)
 
         return value
 
@@ -271,6 +296,10 @@ class Hdf5Session[T: Versionable]:
 
         # All ndarray fields get resizable datasets in sessions
         if isinstance(value, np.ndarray):
+            # Cast to annotated dtype if specified (e.g. NDArray[np.float32])
+            annotatedDtype = _dtypeFromAnnotation(fieldType)
+            if annotatedDtype is not None and value.dtype != annotatedDtype:
+                value = value.astype(annotatedDtype)
             appendable = _getHdf5FieldInfo(fieldType) or Hdf5FieldInfo()
             self._createResizableDataset(name, value, appendable)
             return
@@ -587,4 +616,23 @@ def _getProxyClass[T: Versionable](cls: type[T]) -> type[T]:
 
     proxyCls = cast("type[T]", type(f"_Live{cls.__name__}", (cls,), {"__setattr__": __setattr__}))
     _proxyClassCache[cls] = proxyCls
+    return proxyCls
+
+
+_readOnlyProxyClassCache: dict[type, type] = {}
+
+
+def _getReadOnlyProxyClass[T: Versionable](cls: type[T]) -> type[T]:
+    """Get or create a read-only proxy subclass that blocks field assignment."""
+    if cls in _readOnlyProxyClassCache:
+        return _readOnlyProxyClassCache[cls]
+
+    def __setattr__(self: Any, name: str, value: Any) -> None:
+        session: Hdf5Session[Any] = object.__getattribute__(self, "_session")
+        if name in session._fieldTypes:  # noqa: SLF001
+            raise BackendError("Session is read-only.")
+        object.__setattr__(self, name, value)
+
+    proxyCls = cast("type[T]", type(f"_ReadOnly{cls.__name__}", (cls,), {"__setattr__": __setattr__}))
+    _readOnlyProxyClassCache[cls] = proxyCls
     return proxyCls

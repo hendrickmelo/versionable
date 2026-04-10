@@ -1108,3 +1108,167 @@ class TestDatasetArrayClosedSession:
             proxy = obj
 
         assert proxy.name == "test"
+
+
+# ---------------------------------------------------------------------------
+# Dtype inference from annotations
+# ---------------------------------------------------------------------------
+
+_h_float32 = computeHash({"data": npt.NDArray[np.float32]})
+
+
+@dataclass
+class _WithFloat32(
+    Versionable,
+    version=1,
+    hash=_h_float32,
+    register=False,
+):
+    data: npt.NDArray[np.float32] = field(default_factory=lambda: np.empty(0, dtype=np.float32))
+
+
+class TestDtypeInference:
+    """On-disk dtype inferred from NDArray type annotations."""
+
+    def test_float64_stored_as_float32(self, tmp_path: object) -> None:
+        """Assigning float64 data to an NDArray[float32] field stores as float32."""
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithFloat32, path) as obj:
+            obj.data = np.arange(10, dtype=np.float64)  # assign float64
+            assert obj.data.dtype == np.float32  # stored as float32
+
+        with h5py.File(path, "r") as f:
+            assert f["data"].dtype == np.float32
+
+    def test_matching_dtype_no_cast(self, tmp_path: object) -> None:
+        """Assigning float32 data to an NDArray[float32] field stores as-is."""
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_WithFloat32, path) as obj:
+            obj.data = np.arange(10, dtype=np.float32)
+            assert obj.data.dtype == np.float32
+
+    def test_annotated_ndarray_uses_annotation_dtype(self, tmp_path: object) -> None:
+        """NDArray[float64] field casts float32 data to float64 on disk."""
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.arange(10, dtype=np.float32)
+            assert obj.data.dtype == np.float64  # cast to annotated dtype
+
+
+# ---------------------------------------------------------------------------
+# Read-only mode
+# ---------------------------------------------------------------------------
+
+
+class TestReadOnlyMode:
+    """Read mode opens the file read-only with no mutations allowed."""
+
+    def test_read_loads_all_fields(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.name = "test"
+            obj.sampleRate_Hz = 48000.0
+            obj.data = np.arange(10, dtype=np.float64)
+            obj.waveform = np.ones((5, 4), dtype=np.float64)
+
+        with versionable.hdf5.open(_SessionBasic, path, mode="read") as obj:
+            assert obj.name == "test"
+            assert obj.sampleRate_Hz == 48000.0
+            np.testing.assert_array_equal(np.asarray(obj.data), np.arange(10, dtype=np.float64))
+            assert obj.waveform.shape == (5, 4)
+
+    def test_field_assignment_raises(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.name = "test"
+
+        with (
+            versionable.hdf5.open(_SessionBasic, path, mode="read") as obj,
+            pytest.raises(BackendError, match="read-only"),
+        ):
+            obj.name = "changed"
+
+    def test_setitem_raises(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.arange(10, dtype=np.float64)
+
+        with (
+            versionable.hdf5.open(_SessionBasic, path, mode="read") as obj,
+            pytest.raises(BackendError, match="read-only"),
+        ):
+            obj.data[0] = 99.0
+
+    def test_append_raises(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.empty(0, dtype=np.float64)
+
+        with (
+            versionable.hdf5.open(_SessionBasic, path, mode="read") as obj,
+            pytest.raises(BackendError, match="read-only"),
+        ):
+            obj.data.append(np.zeros(5))
+
+    def test_resize_raises(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.arange(10, dtype=np.float64)
+
+        with (
+            versionable.hdf5.open(_SessionBasic, path, mode="read") as obj,
+            pytest.raises(BackendError, match="read-only"),
+        ):
+            obj.data.resize(100)
+
+    def test_numpy_reads_work(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.arange(10, dtype=np.float64)
+
+        with versionable.hdf5.open(_SessionBasic, path, mode="read") as obj:
+            assert np.mean(obj.data) == 4.5
+            np.testing.assert_array_equal(obj.data[:], np.arange(10, dtype=np.float64))
+
+    def test_iter_works(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.waveform = np.arange(12, dtype=np.float64).reshape(3, 4)
+
+        with versionable.hdf5.open(_SessionBasic, path, mode="read") as obj:
+            rows = list(obj.waveform)
+            assert len(rows) == 3
+
+    def test_chunks_maxshape_work(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.arange(10, dtype=np.float64)
+
+        with versionable.hdf5.open(_SessionBasic, path, mode="read") as obj:
+            assert obj.data.chunks is not None
+            assert obj.data.maxshape is not None
+
+    def test_file_not_modified(self, tmp_path: object) -> None:
+        import os
+
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.name = "test"
+            obj.data = np.arange(10, dtype=np.float64)
+
+        mtime_before = os.path.getmtime(path)
+
+        with versionable.hdf5.open(_SessionBasic, path, mode="read") as obj:
+            _ = obj.name
+            _ = np.asarray(obj.data)
+
+        mtime_after = os.path.getmtime(path)
+        assert mtime_before == mtime_after
+
+    def test_read_nonexistent_file(self, tmp_path: object) -> None:
+        path = f"{tmp_path}/nonexistent.h5"
+        with (
+            pytest.raises(BackendError, match="does not exist"),
+            versionable.hdf5.open(_SessionBasic, path, mode="read"),
+        ):
+            pass
