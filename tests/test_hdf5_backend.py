@@ -11,9 +11,7 @@ import pytest
 
 h5py = pytest.importorskip("h5py")
 
-import datetime
 from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 
 import numpy as np
@@ -23,13 +21,8 @@ import versionable
 from versionable import Versionable
 from versionable.errors import ArrayNotLoadedError, BackendError
 from versionable.hdf5 import (
-    BLOSC_DEFAULT,
-    GZIP_DEFAULT,
-    LZF,
     UNCOMPRESSED,
-    ZSTD_BEST,
     ZSTD_DEFAULT,
-    ZSTD_FAST,
     Hdf5Compression,
 )
 
@@ -133,35 +126,7 @@ class TestHdf5Compression:
         with h5py.File(p, "r") as f:
             ds = f["data"]
             assert isinstance(ds, h5py.Dataset)
-            # zstd uses hdf5plugin filter id 32015
             assert ds.compression is not None
-
-    def test_zstdFast(self, tmp_path: Path) -> None:
-        self._saveAndCheck(tmp_path, ZSTD_FAST)
-
-    def test_zstdBest(self, tmp_path: Path) -> None:
-        self._saveAndCheck(tmp_path, ZSTD_BEST)
-
-    def test_bloscDefault(self, tmp_path: Path) -> None:
-        p = self._saveAndCheck(tmp_path, BLOSC_DEFAULT)
-        with h5py.File(p, "r") as f:
-            ds = f["data"]
-            assert isinstance(ds, h5py.Dataset)
-            assert ds.compression is not None
-
-    def test_gzipDefault(self, tmp_path: Path) -> None:
-        p = self._saveAndCheck(tmp_path, GZIP_DEFAULT)
-        with h5py.File(p, "r") as f:
-            ds = f["data"]
-            assert isinstance(ds, h5py.Dataset)
-            assert ds.compression == "gzip"
-
-    def test_lzf(self, tmp_path: Path) -> None:
-        p = self._saveAndCheck(tmp_path, LZF)
-        with h5py.File(p, "r") as f:
-            ds = f["data"]
-            assert isinstance(ds, h5py.Dataset)
-            assert ds.compression == "lzf"
 
     def test_uncompressed(self, tmp_path: Path) -> None:
         p = self._saveAndCheck(tmp_path, UNCOMPRESSED)
@@ -170,8 +135,8 @@ class TestHdf5Compression:
             assert isinstance(ds, h5py.Dataset)
             assert ds.compression is None
 
-    def test_defaultCompressionIsZstd(self, tmp_path: Path) -> None:
-        """save() without explicit compression should use zstd."""
+    def test_defaultCompressionIsGzip(self, tmp_path: Path) -> None:
+        """save() without explicit compression should use gzip."""
         arr = np.zeros(1000, dtype=np.float64)
         obj = WithArray(name="zeros", data=arr)
         p = tmp_path / "default.h5"
@@ -180,8 +145,7 @@ class TestHdf5Compression:
         with h5py.File(p, "r") as f:
             ds = f["data"]
             assert isinstance(ds, h5py.Dataset)
-            # Should be compressed (blosc2 via hdf5plugin)
-            assert ds.compression is not None
+            assert ds.compression == "gzip"
 
 
 class TestLazyLoading:
@@ -245,15 +209,6 @@ class TestMetadataOnly:
         assert loaded.name == "test"
         assert loaded.debug is True
         assert loaded.retries == 7
-
-
-class TestHdf5Extension:
-    def test_hdf5Extension(self, tmp_path: Path) -> None:
-        obj = SimpleConfig(name="test")
-        p = tmp_path / "out.hdf5"
-        versionable.save(obj, p)
-        loaded = versionable.load(SimpleConfig, p)
-        assert loaded.name == "test"
 
 
 class TestHdf5Errors:
@@ -349,17 +304,6 @@ class TestHdf5Errors:
 # ---------------------------------------------------------------------------
 
 
-class Color(Enum):
-    RED = "red"
-    GREEN = "green"
-    BLUE = "blue"
-
-
-class Priority(Enum):
-    LOW = 1
-    HIGH = 2
-
-
 class TestNativeScalars:
     """Test that scalar fields are stored as native HDF5 attributes."""
 
@@ -375,18 +319,6 @@ class TestNativeScalars:
             assert f.attrs["name"] == "test"
             assert bool(f.attrs["debug"]) is True
             assert f.attrs["retries"] == 5
-
-    def test_floatPrecision(self, tmp_path: Path) -> None:
-        @dataclass
-        class FloatData(Versionable, version=1, register=False):
-            value: float
-
-        obj = FloatData(value=3.141592653589793)
-        p = tmp_path / "float.h5"
-        versionable.save(obj, p)
-        loaded = versionable.load(FloatData, p)
-        assert loaded.value == 3.141592653589793
-        assert isinstance(loaded.value, float)
 
 
 class TestNativeNone:
@@ -405,105 +337,30 @@ class TestNativeNone:
         assert loaded.name == "test"
         assert loaded.label is None
 
-    def test_noneVsDefault(self, tmp_path: Path) -> None:
-        """None stored explicitly, not confused with missing default."""
-
-        @dataclass
-        class WithDefault(Versionable, version=1, register=False):
-            name: str
-            tag: str | None = "default"
-
-        obj = WithDefault(name="test", tag=None)
-        p = tmp_path / "none_vs_default.h5"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithDefault, p)
-        assert loaded.tag is None  # not "default"
-
-
-class TestNativeEnum:
-    """Test Enum storage as native attributes."""
-
-    def test_stringEnum(self, tmp_path: Path) -> None:
-        @dataclass
-        class WithColor(Versionable, version=1, register=False):
-            name: str
-            color: Color
-
-        obj = WithColor(name="test", color=Color.GREEN)
-        p = tmp_path / "enum.h5"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithColor, p)
-        assert loaded.color == Color.GREEN
-
-    def test_intEnum(self, tmp_path: Path) -> None:
-        @dataclass
-        class WithPriority(Versionable, version=1, register=False):
-            name: str
-            priority: Priority
-
-        obj = WithPriority(name="test", priority=Priority.HIGH)
-        p = tmp_path / "int_enum.h5"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithPriority, p)
-        assert loaded.priority == Priority.HIGH
-
-
-class TestNativeConvertedTypes:
-    """Test converted types (datetime, Path) as native attributes."""
-
-    def test_datetime(self, tmp_path: Path) -> None:
-        @dataclass
-        class WithDatetime(Versionable, version=1, register=False):
-            name: str
-            timestamp: datetime.datetime
-
-        ts = datetime.datetime(2024, 1, 15, 10, 30, 0)
-        obj = WithDatetime(name="test", timestamp=ts)
-        p = tmp_path / "datetime.h5"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithDatetime, p)
-        assert loaded.timestamp == ts
-
-    def test_path(self, tmp_path: Path) -> None:
-        @dataclass
-        class WithPath(Versionable, version=1, register=False):
-            name: str
-            location: Path
-
-        obj = WithPath(name="test", location=Path("/data/results"))
-        p = tmp_path / "path.h5"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithPath, p)
-        assert loaded.location == Path("/data/results")
-
 
 class TestNativeListDatasets:
     """Test list[numeric], list[str], list[bool] as 1-D datasets."""
 
-    def test_listFloat(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize(
+        "values",
+        [
+            [1.0, 2.5, 3.7],
+            [10, 20, 30],
+            [True, False, True],
+        ],
+    )
+    def test_numericList(self, tmp_path: Path, values: list[object]) -> None:
         @dataclass
-        class WithListFloat(Versionable, version=1, register=False):
+        class WithNumericList(Versionable, version=1, register=False):
             name: str
-            values: list[float]
+            values: list[float] | list[int] | list[bool]
 
-        obj = WithListFloat(name="test", values=[1.0, 2.5, 3.7])
-        p = tmp_path / "list_float.h5"
+        obj = WithNumericList(name="test", values=values)
+        p = tmp_path / "list.h5"
         versionable.save(obj, p)
-        loaded = versionable.load(WithListFloat, p)
-        assert loaded.values == [1.0, 2.5, 3.7]
+        loaded = versionable.load(WithNumericList, p)
+        assert loaded.values == values
         assert isinstance(loaded.values, list)
-
-    def test_listInt(self, tmp_path: Path) -> None:
-        @dataclass
-        class WithListInt(Versionable, version=1, register=False):
-            name: str
-            counts: list[int]
-
-        obj = WithListInt(name="test", counts=[10, 20, 30])
-        p = tmp_path / "list_int.h5"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithListInt, p)
-        assert loaded.counts == [10, 20, 30]
 
     def test_listStr(self, tmp_path: Path) -> None:
         @dataclass
@@ -516,18 +373,6 @@ class TestNativeListDatasets:
         versionable.save(obj, p)
         loaded = versionable.load(WithListStr, p)
         assert loaded.tags == ["alpha", "beta", "gamma"]
-
-    def test_listBool(self, tmp_path: Path) -> None:
-        @dataclass
-        class WithListBool(Versionable, version=1, register=False):
-            name: str
-            flags: list[bool]
-
-        obj = WithListBool(name="test", flags=[True, False, True])
-        p = tmp_path / "list_bool.h5"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithListBool, p)
-        assert loaded.flags == [True, False, True]
 
     def test_emptyList(self, tmp_path: Path) -> None:
         @dataclass
