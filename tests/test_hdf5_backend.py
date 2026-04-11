@@ -318,6 +318,18 @@ class TestHdf5Errors:
         with pytest.raises(BackendError):
             versionable.load(SimpleConfig, tmp_path / "nonexistent.h5")
 
+    def test_futureFormatRaises(self, tmp_path: Path) -> None:
+        p = tmp_path / "future.h5"
+        with h5py.File(p, "w") as f:
+            meta = f.create_group("__versionable__")
+            meta.attrs["__OBJECT__"] = "SimpleConfig"
+            meta.attrs["__VERSION__"] = 1
+            meta.attrs["__HASH__"] = ""
+            meta.attrs["__FORMAT__"] = 2
+
+        with pytest.raises(BackendError, match="Upgrade versionable"):
+            versionable.load(SimpleConfig, p)
+
     def test_unregisteredClassInLoad(self, tmp_path: Path) -> None:
         """load() raises when the file's __OBJECT__ isn't in the registry."""
         from versionable._hdf5_backend import Hdf5Backend

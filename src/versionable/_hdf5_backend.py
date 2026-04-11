@@ -325,6 +325,12 @@ def _readMeta(group: h5py.Group) -> dict[str, Any]:
     """Read metadata from the __versionable__ child group."""
     if _VERSIONABLE_GROUP in group:
         metaGroup = group[_VERSIONABLE_GROUP]
+        fileFormat = metaGroup.attrs.get("__FORMAT__")
+        if fileFormat is not None:
+            raise BackendError(
+                f"File uses versionable format {fileFormat!r}, but this version only supports "
+                f"format-less files. Upgrade versionable to read this file."
+            )
         return {
             "__OBJECT__": str(metaGroup.attrs.get("__OBJECT__", "")),
             "__VERSION__": int(metaGroup.attrs.get("__VERSION__", 1)),

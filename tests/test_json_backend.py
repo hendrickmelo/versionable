@@ -283,3 +283,21 @@ class TestErrors:
         )
         with pytest.raises(VersionError, match="newer"):
             versionable.load(SimpleConfig, p)
+
+    def test_futureFormatRaises(self, tmp_path: Path) -> None:
+        p = tmp_path / "out.json"
+        p.write_text(
+            json.dumps(
+                {
+                    "__versionable__": {
+                        "__OBJECT__": "SimpleConfig",
+                        "__VERSION__": 1,
+                        "__HASH__": "",
+                        "__FORMAT__": 2,
+                    },
+                    "name": "test",
+                }
+            )
+        )
+        with pytest.raises(BackendError, match="Upgrade versionable"):
+            versionable.load(SimpleConfig, p)

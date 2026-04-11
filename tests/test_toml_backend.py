@@ -249,3 +249,13 @@ class TestTomlErrors:
     def test_missingFile(self, tmp_path: Path) -> None:
         with pytest.raises(BackendError):
             versionable.load(SimpleConfig, tmp_path / "nonexistent.toml")
+
+    def test_futureFormatRaises(self, tmp_path: Path) -> None:
+        p = tmp_path / "out.toml"
+        p.write_text(
+            '[__versionable__]\n__OBJECT__ = "SimpleConfig"\n'
+            '__VERSION__ = 1\n__HASH__ = ""\n__FORMAT__ = 2\n\n'
+            'name = "test"\n'
+        )
+        with pytest.raises(BackendError, match="Upgrade versionable"):
+            versionable.load(SimpleConfig, p)

@@ -82,6 +82,13 @@ class YamlBackend(Backend):
         metaTable = data.pop("__versionable__", {})
         if not isinstance(metaTable, dict):
             raise BackendError(f"Expected __versionable__ to be a mapping in {path}, got {type(metaTable).__name__}")
+        fileFormat = metaTable.get("__FORMAT__")
+        if fileFormat is not None:
+            raise BackendError(
+                f"File {path} uses versionable format {fileFormat!r}, but this version only supports "
+                f"format-less files. Upgrade versionable to read this file."
+            )
+
         meta = {
             "__OBJECT__": metaTable.get("__OBJECT__", ""),
             "__VERSION__": metaTable.get("__VERSION__"),
