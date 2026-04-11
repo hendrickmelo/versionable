@@ -6,8 +6,10 @@ type converters, and pluggable storage backends.
 ## Installation
 
 ```bash
-pip install versionable            # Core (JSON, TOML, YAML)
-pip install versionable[hdf5]      # Add HDF5 support (h5py + hdf5plugin)
+pip install versionable            # Core (JSON backend, numpy)
+pip install pyyaml                 # Add YAML backend
+pip install toml                   # Add TOML backend
+pip install h5py hdf5plugin        # Add HDF5 backend
 ```
 
 ## Quick Start
@@ -156,8 +158,61 @@ loaded = versionable.load(MyClass, "data.h5", metadataOnly=True)
 | `LZF`           | LZF — fastest, no extra deps             |
 | `UNCOMPRESSED`  | No compression                           |
 
-zstd and blosc require `hdf5plugin` (included in `[hdf5]` extra). gzip and lzf work everywhere — use `GZIP_DEFAULT` if
-files must be readable by MATLAB or HDFView.
+zstd and blosc require `hdf5plugin`. gzip and lzf work everywhere — use `GZIP_DEFAULT` if files must be readable by
+MATLAB or HDFView.
+
+### HDF5 Sessions — Incremental Writes and Random Access
+
+For large or long-running data, `versionable.hdf5.open()` provides incremental writes to chunked, resizable datasets and
+random access reads without loading the whole file into memory.
+
+```python
+import numpy as np
+from numpy.typing import NDArray
+
+@dataclass
+class Experiment(Versionable, version=1, hash="536849"):
+    name: str
+    traces: NDArray[np.float64] = field(default_factory=lambda: np.empty((0, 1024)))
+
+# Write incrementally — each append extends the dataset on disk
+session = versionable.hdf5.open(Experiment, "run.h5")
+with session as obj:
+    obj.name = "acquisition-001"
+    for batch in data_source:
+        obj.traces.append(batch)
+        session.flush()             # fsync for crash resilience
+
+# Resume an existing file
+session = versionable.hdf5.open(Experiment, "run.h5", mode="resume")
+with session as obj:
+    obj.traces.append(more_data)
+
+# Random access — read slices directly from disk
+with versionable.hdf5.open(Experiment, "run.h5", mode="read") as obj:
+    print(obj.traces[1000])         # reads only row 1000
+    print(obj.traces[50:100])       # reads only this slice
+```
+
+**Session modes:**
+
+| Mode       | Description                                      |
+| ---------- | ------------------------------------------------ |
+| `"create"` | New file (default). Fails if file exists         |
+| `"resume"` | Append to existing file. Version/hash must match |
+| `"read"`   | Read-only access. No writes allowed              |
+
+**Field types in sessions:**
+
+| Type                  | Behavior                                                 |
+| --------------------- | -------------------------------------------------------- |
+| Scalars               | Assignment writes through to disk                        |
+| `NDArray` / `ndarray` | `DatasetArray` with `append()`, `resize()`, slice access |
+| `list[np.ndarray]`    | `TrackedList` — `append()`/`extend()` write through      |
+| `dict[str, ndarray]`  | `TrackedDict` — `__setitem__`/`update()` write through   |
+
+Sessions do not support migrations. The file's version and hash must exactly match the class. `DatasetArray` fields
+raise `BackendError` after the session is closed — copy data before closing if needed.
 
 ## Supported Types
 
