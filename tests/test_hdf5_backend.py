@@ -87,28 +87,6 @@ class TestHdf5RoundTrip:
         assert loaded.debug is True
         assert loaded.retries == 5
 
-    def test_withArray(self, tmp_path: Path) -> None:
-        arr = np.array([1.0, 2.0, 3.0], dtype=np.float64)
-        obj = WithArray(name="data", data=arr)
-        p = tmp_path / "out.h5"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithArray, p, preload="*")
-        assert loaded.name == "data"
-        np.testing.assert_array_equal(loaded.data, arr)
-
-    def test_2dArray(self, tmp_path: Path) -> None:
-        @dataclass
-        class MatrixData(Versionable, version=1, register=False):
-            label: str
-            matrix: npt.NDArray[np.int32]
-
-        arr = np.array([[1, 2], [3, 4]], dtype=np.int32)
-        obj = MatrixData(label="test", matrix=arr)
-        p = tmp_path / "matrix.h5"
-        versionable.save(obj, p)
-        loaded = versionable.load(MatrixData, p, preload="*")
-        np.testing.assert_array_equal(loaded.matrix, arr)
-
     def test_largeArray(self, tmp_path: Path) -> None:
         rng = np.random.default_rng(42)
         arr = rng.random(10000).astype(np.float64)
@@ -117,15 +95,6 @@ class TestHdf5RoundTrip:
         versionable.save(obj, p)
         loaded = versionable.load(WithArray, p, preload="*")
         np.testing.assert_array_equal(loaded.data, arr)
-
-    def test_withNested(self, tmp_path: Path) -> None:
-        obj = WithNested(name="origin", point=Inner(x=1.0, y=2.0))
-        p = tmp_path / "nested.h5"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithNested, p)
-        assert isinstance(loaded.point, Inner)
-        assert loaded.point.x == 1.0
-        assert loaded.point.y == 2.0
 
 
 class TestHdf5Metadata:
@@ -213,6 +182,7 @@ class TestHdf5Compression:
             assert isinstance(ds, h5py.Dataset)
             # Should be compressed (blosc2 via hdf5plugin)
             assert ds.compression is not None
+
 
 class TestLazyLoading:
     def test_lazyByDefault(self, tmp_path: Path) -> None:

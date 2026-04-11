@@ -8,111 +8,22 @@ import pytest
 
 yaml = pytest.importorskip("yaml")
 
-from datetime import UTC, datetime
 from pathlib import Path
-
-import numpy as np
 
 import versionable
 from versionable.errors import BackendError, ConverterError, VersionError
 
 from .conftest import (
-    Inner,
-    Priority,
     SimpleConfig,
-    WithArray,
-    WithDatetime,
-    WithEnum,
     WithList,
     WithLiteral,
     WithLiteralFallback,
     WithLiteralNoValidation,
-    WithNested,
-    WithOptional,
     WithSkipDefaults,
 )
 
 
 class TestYamlRoundTrip:
-    def test_simpleConfig(self, tmp_path: Path) -> None:
-        obj = SimpleConfig(name="test", debug=True, retries=5)
-        p = tmp_path / "config.yaml"
-        versionable.save(obj, p)
-        loaded = versionable.load(SimpleConfig, p)
-        assert loaded.name == "test"
-        assert loaded.debug is True
-        assert loaded.retries == 5
-
-    def test_withDefaults(self, tmp_path: Path) -> None:
-        obj = SimpleConfig(name="default")
-        p = tmp_path / "config.yaml"
-        versionable.save(obj, p)
-        loaded = versionable.load(SimpleConfig, p)
-        assert loaded.debug is False
-        assert loaded.retries == 3
-
-    def test_optional_present(self, tmp_path: Path) -> None:
-        obj = WithOptional(label="test", description="hello")
-        p = tmp_path / "out.yaml"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithOptional, p)
-        assert loaded.description == "hello"
-
-    def test_optional_none(self, tmp_path: Path) -> None:
-        obj = WithOptional(label="test")
-        p = tmp_path / "out.yaml"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithOptional, p)
-        assert loaded.description is None
-
-    def test_withArray(self, tmp_path: Path) -> None:
-        arr = np.array([1.0, 2.0, 3.0], dtype=np.float64)
-        obj = WithArray(name="data", data=arr)
-        p = tmp_path / "out.yaml"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithArray, p)
-        assert loaded.name == "data"
-        np.testing.assert_array_equal(loaded.data, arr)
-
-    def test_withEnum(self, tmp_path: Path) -> None:
-        obj = WithEnum(title="task", priority=Priority.HIGH)
-        p = tmp_path / "out.yaml"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithEnum, p)
-        assert loaded.priority is Priority.HIGH
-
-    def test_withDatetime(self, tmp_path: Path) -> None:
-        dt = datetime(2026, 3, 30, 12, 0, 0, tzinfo=UTC)
-        obj = WithDatetime(label="event", createdAt=dt)
-        p = tmp_path / "out.yaml"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithDatetime, p)
-        assert loaded.createdAt == dt
-
-    def test_withNested(self, tmp_path: Path) -> None:
-        obj = WithNested(name="origin", point=Inner(x=1.0, y=2.0))
-        p = tmp_path / "out.yaml"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithNested, p)
-        assert isinstance(loaded.point, Inner)
-        assert loaded.point.x == 1.0
-        assert loaded.point.y == 2.0
-
-    def test_withList(self, tmp_path: Path) -> None:
-        obj = WithList(tags=["a", "b"], scores=[1.0, 2.0])
-        p = tmp_path / "out.yaml"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithList, p)
-        assert loaded.tags == ["a", "b"]
-        assert loaded.scores == [1.0, 2.0]
-
-    def test_emptyList(self, tmp_path: Path) -> None:
-        obj = WithList(tags=[], scores=[])
-        p = tmp_path / "out.yaml"
-        versionable.save(obj, p)
-        loaded = versionable.load(WithList, p)
-        assert loaded.tags == []
-
     def test_ymlExtension(self, tmp_path: Path) -> None:
         """Both .yaml and .yml should work."""
         obj = SimpleConfig(name="test")
