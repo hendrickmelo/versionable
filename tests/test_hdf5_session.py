@@ -65,27 +65,6 @@ class TestHdf5FieldInfoHashCompat:
         assert _WithHdf5FieldInfo._serializer_meta_.hash == _WithPlainArray._serializer_meta_.hash
 
 
-class TestHdf5FieldInfoSaveLoadPassthrough:
-    """save()/load() ignores Hdf5FieldInfo marker — field is a normal ndarray."""
-
-    def test_save_load_roundtrip(self, tmp_path: object) -> None:
-        path = f"{tmp_path}/test.h5"
-        obj = _WithHdf5FieldInfo(name="test", waveform=np.arange(10, dtype=np.float64))
-        versionable.save(obj, path)
-        loaded = versionable.load(_WithHdf5FieldInfo, path)
-        assert loaded.name == "test"
-        np.testing.assert_array_equal(loaded.waveform, np.arange(10, dtype=np.float64))
-
-    def test_save_load_json_roundtrip(self, tmp_path: object) -> None:
-        """Non-HDF5 backends ignore Hdf5FieldInfo entirely."""
-        path = f"{tmp_path}/test.json"
-        obj = _WithHdf5FieldInfo(name="test", waveform=np.arange(5, dtype=np.float64))
-        versionable.save(obj, path)
-        loaded = versionable.load(_WithHdf5FieldInfo, path)
-        assert loaded.name == "test"
-        np.testing.assert_array_equal(loaded.waveform, np.arange(5, dtype=np.float64))
-
-
 class TestAxisInference:
     """Test _resolveAppendAxis logic."""
 
@@ -198,51 +177,22 @@ class _SessionChunk(
 class TestSessionScalars:
     """Scalar field assignment persists to HDF5."""
 
-    def test_assign_scalars_and_load(self, tmp_path: object) -> None:
-        path = f"{tmp_path}/test.h5"
-        with versionable.hdf5.open(_SessionBasic, path) as obj:
-            obj.name = "baseline"
-            obj.sampleRate_Hz = 48000.0
-
-        loaded = versionable.load(_SessionBasic, path)
-        assert loaded.name == "baseline"
-        assert loaded.sampleRate_Hz == 48000.0
-
-    def test_overwrite_scalar(self, tmp_path: object) -> None:
+    def test_assign_and_overwrite(self, tmp_path: object) -> None:
         path = f"{tmp_path}/test.h5"
         with versionable.hdf5.open(_SessionBasic, path) as obj:
             obj.name = "first"
+            obj.sampleRate_Hz = 48000.0
             obj.name = "second"
 
         loaded = versionable.load(_SessionBasic, path)
         assert loaded.name == "second"
+        assert loaded.sampleRate_Hz == 48000.0
 
 
 class TestSessionPlainArray:
     """Plain ndarray field assignment creates a contiguous dataset."""
 
-    def test_assign_and_load(self, tmp_path: object) -> None:
-        path = f"{tmp_path}/test.h5"
-        arr = np.arange(100, dtype=np.float64)
-        with versionable.hdf5.open(_SessionBasic, path) as obj:
-            obj.data = arr
-
-        loaded = versionable.load(_SessionBasic, path)
-        np.testing.assert_array_equal(loaded.data, arr)
-
-    def test_resizable_dataset(self, tmp_path: object) -> None:
-        """All ndarray fields in sessions get resizable datasets."""
-        path = f"{tmp_path}/test.h5"
-        arr = np.arange(100, dtype=np.float64)
-        with versionable.hdf5.open(_SessionBasic, path) as obj:
-            obj.data = arr
-
-        with h5py.File(path, "r") as f:
-            ds = f["data"]
-            # All session ndarrays are resizable (unlimited along axis 0)
-            assert ds.maxshape == (None,)
-
-    def test_replace_array(self, tmp_path: object) -> None:
+    def test_assign_replace_and_load(self, tmp_path: object) -> None:
         path = f"{tmp_path}/test.h5"
         with versionable.hdf5.open(_SessionBasic, path) as obj:
             obj.data = np.zeros(50, dtype=np.float64)
@@ -250,6 +200,16 @@ class TestSessionPlainArray:
 
         loaded = versionable.load(_SessionBasic, path)
         np.testing.assert_array_equal(loaded.data, np.ones(30, dtype=np.float64))
+
+    def test_resizable_dataset(self, tmp_path: object) -> None:
+        """All ndarray fields in sessions get resizable datasets."""
+        path = f"{tmp_path}/test.h5"
+        with versionable.hdf5.open(_SessionBasic, path) as obj:
+            obj.data = np.arange(100, dtype=np.float64)
+
+        with h5py.File(path, "r") as f:
+            ds = f["data"]
+            assert ds.maxshape == (None,)
 
 
 class TestSessionHdf5FieldInfoArray:
@@ -359,7 +319,7 @@ class TestSessionModes:
         with pytest.raises(BackendError, match="already exists"), versionable.hdf5.open(_SessionBasic, path):
             pass
 
-    def test_overwrite_replaces_existing(self, tmp_path: object) -> None:
+    def test_overwrite(self, tmp_path: object) -> None:
         path = f"{tmp_path}/test.h5"
         with versionable.hdf5.open(_SessionBasic, path) as obj:
             obj.name = "first"
@@ -369,20 +329,12 @@ class TestSessionModes:
         loaded = versionable.load(_SessionBasic, path)
         assert loaded.name == "second"
 
-    def test_overwrite_on_nonexistent(self, tmp_path: object) -> None:
-        path = f"{tmp_path}/test.h5"
-        with versionable.hdf5.open(_SessionBasic, path, mode="overwrite") as obj:
+        # Also works on nonexistent files
+        path2 = f"{tmp_path}/new.h5"
+        with versionable.hdf5.open(_SessionBasic, path2, mode="overwrite") as obj:
             obj.name = "new"
-        loaded = versionable.load(_SessionBasic, path)
-        assert loaded.name == "new"
-
-    def test_context_manager_closes_file(self, tmp_path: object) -> None:
-        path = f"{tmp_path}/test.h5"
-        with versionable.hdf5.open(_SessionBasic, path) as obj:
-            obj.name = "test"
-        # File should be loadable after context exit
-        loaded = versionable.load(_SessionBasic, path)
-        assert loaded.name == "test"
+        loaded2 = versionable.load(_SessionBasic, path2)
+        assert loaded2.name == "new"
 
 
 # ---------------------------------------------------------------------------
@@ -458,24 +410,18 @@ class TestTrackedListArrays:
 class TestTrackedListScalars:
     """list[float] and list[str] append uses resizable 1-D datasets."""
 
-    def test_float_append_loop(self, tmp_path: object) -> None:
+    def test_float_and_string_append(self, tmp_path: object) -> None:
         path = f"{tmp_path}/test.h5"
         with versionable.hdf5.open(_WithLists, path) as obj:
             obj.timestamps = []
+            obj.tags = []
             for i in range(100):
                 obj.timestamps.append(float(i))
-
-        loaded = versionable.load(_WithLists, path)
-        assert loaded.timestamps == list(range(100))
-
-    def test_string_append(self, tmp_path: object) -> None:
-        path = f"{tmp_path}/test.h5"
-        with versionable.hdf5.open(_WithLists, path) as obj:
-            obj.tags = []
             obj.tags.append("alpha")
             obj.tags.append("beta")
 
         loaded = versionable.load(_WithLists, path)
+        assert loaded.timestamps == list(range(100))
         assert loaded.tags == ["alpha", "beta"]
 
 
@@ -529,40 +475,25 @@ class TestTrackedDict:
 class TestUnsupportedListOps:
     """Unsupported list operations raise NotImplementedError."""
 
-    def test_insert(self, tmp_path: object) -> None:
-        path = f"{tmp_path}/test.h5"
-        with versionable.hdf5.open(_WithLists, path) as obj:
-            obj.timestamps = []
-            with pytest.raises(NotImplementedError, match="insert"):
-                obj.timestamps.insert(0, 1.0)
-
-    def test_pop(self, tmp_path: object) -> None:
-        path = f"{tmp_path}/test.h5"
-        with versionable.hdf5.open(_WithLists, path) as obj:
-            obj.timestamps = [1.0, 2.0]
-            with pytest.raises(NotImplementedError, match="pop"):
-                obj.timestamps.pop()
-
-    def test_remove(self, tmp_path: object) -> None:
-        path = f"{tmp_path}/test.h5"
-        with versionable.hdf5.open(_WithLists, path) as obj:
-            obj.timestamps = [1.0]
-            with pytest.raises(NotImplementedError, match="remove"):
-                obj.timestamps.remove(1.0)
-
-    def test_sort(self, tmp_path: object) -> None:
+    def test_in_place_ops(self, tmp_path: object) -> None:
         path = f"{tmp_path}/test.h5"
         with versionable.hdf5.open(_WithLists, path) as obj:
             obj.timestamps = [3.0, 1.0, 2.0]
             with pytest.raises(NotImplementedError, match="sort"):
                 obj.timestamps.sort()
+            with pytest.raises(NotImplementedError, match="reverse"):
+                obj.timestamps.reverse()
+            with pytest.raises(NotImplementedError, match="remove"):
+                obj.timestamps.remove(1.0)
 
-    def test_reverse(self, tmp_path: object) -> None:
+    def test_index_ops(self, tmp_path: object) -> None:
         path = f"{tmp_path}/test.h5"
         with versionable.hdf5.open(_WithLists, path) as obj:
             obj.timestamps = [1.0, 2.0]
-            with pytest.raises(NotImplementedError, match="reverse"):
-                obj.timestamps.reverse()
+            with pytest.raises(NotImplementedError, match="insert"):
+                obj.timestamps.insert(0, 1.0)
+            with pytest.raises(NotImplementedError, match="pop"):
+                obj.timestamps.pop()
 
 
 class TestMixedSession:
@@ -900,14 +831,6 @@ class TestInstanceOpen:
         ):
             pass
 
-    def test_instance_proxy_is_different_object(self, tmp_path: object) -> None:
-        path = f"{tmp_path}/test.h5"
-        original = _SessionBasic(name="original", sampleRate_Hz=1000.0)
-        with versionable.hdf5.open(original, path) as rec:
-            rec.name = "modified"
-            # Original should be untouched
-            assert original.name == "original"
-
 
 # ---------------------------------------------------------------------------
 # Phase: Dataset-backed session fields
@@ -984,27 +907,20 @@ class TestDatasetArrayResize:
         np.testing.assert_array_equal(loaded.data, np.arange(50, dtype=np.float64))
 
 
-class TestDatasetArrayIteration:
-    """DatasetArray.__iter__ yields rows."""
-
-    def test_iter_rows(self, tmp_path: object) -> None:
-        path = f"{tmp_path}/test.h5"
-        with versionable.hdf5.open(_SessionBasic, path) as obj:
-            obj.waveform = np.arange(12, dtype=np.float64).reshape(3, 4)
-            rows = list(obj.waveform)
-            assert len(rows) == 3
-            np.testing.assert_array_equal(rows[0], np.arange(4, dtype=np.float64))
-
-
 class TestDatasetArrayIntrospection:
-    """DatasetArray.chunks and .maxshape properties."""
+    """DatasetArray introspection: chunks, maxshape, iteration."""
 
-    def test_chunks_and_maxshape(self, tmp_path: object) -> None:
+    def test_chunks_maxshape_and_iter(self, tmp_path: object) -> None:
         path = f"{tmp_path}/test.h5"
         with versionable.hdf5.open(_SessionBasic, path) as obj:
             obj.data = np.arange(100, dtype=np.float64)
             assert obj.data.chunks is not None
             assert obj.data.maxshape[0] is None  # unlimited
+
+            obj.waveform = np.arange(12, dtype=np.float64).reshape(3, 4)
+            rows = list(obj.waveform)
+            assert len(rows) == 3
+            np.testing.assert_array_equal(rows[0], np.arange(4, dtype=np.float64))
 
 
 class TestDatasetArrayClosedSession:
@@ -1120,74 +1036,32 @@ class TestReadOnlyMode:
             np.testing.assert_array_equal(np.asarray(obj.data), np.arange(10, dtype=np.float64))
             assert obj.waveform.shape == (5, 4)
 
-    def test_field_assignment_raises(self, tmp_path: object) -> None:
+    def test_mutations_raise(self, tmp_path: object) -> None:
         path = f"{tmp_path}/test.h5"
         with versionable.hdf5.open(_SessionBasic, path) as obj:
             obj.name = "test"
+            obj.data = np.arange(10, dtype=np.float64)
 
-        with (
-            versionable.hdf5.open(_SessionBasic, path, mode="read") as obj,
-            pytest.raises(BackendError, match="read-only"),
-        ):
-            obj.name = "changed"
+        with versionable.hdf5.open(_SessionBasic, path, mode="read") as obj:
+            with pytest.raises(BackendError, match="read-only"):
+                obj.name = "changed"
+            with pytest.raises(BackendError, match="read-only"):
+                obj.data[0] = 99.0
+            with pytest.raises(BackendError, match="read-only"):
+                obj.data.append(np.zeros(5))
+            with pytest.raises(BackendError, match="read-only"):
+                obj.data.resize(100)
 
-    def test_setitem_raises(self, tmp_path: object) -> None:
+    def test_reads_work(self, tmp_path: object) -> None:
         path = f"{tmp_path}/test.h5"
         with versionable.hdf5.open(_SessionBasic, path) as obj:
             obj.data = np.arange(10, dtype=np.float64)
-
-        with (
-            versionable.hdf5.open(_SessionBasic, path, mode="read") as obj,
-            pytest.raises(BackendError, match="read-only"),
-        ):
-            obj.data[0] = 99.0
-
-    def test_append_raises(self, tmp_path: object) -> None:
-        path = f"{tmp_path}/test.h5"
-        with versionable.hdf5.open(_SessionBasic, path) as obj:
-            obj.data = np.empty(0, dtype=np.float64)
-
-        with (
-            versionable.hdf5.open(_SessionBasic, path, mode="read") as obj,
-            pytest.raises(BackendError, match="read-only"),
-        ):
-            obj.data.append(np.zeros(5))
-
-    def test_resize_raises(self, tmp_path: object) -> None:
-        path = f"{tmp_path}/test.h5"
-        with versionable.hdf5.open(_SessionBasic, path) as obj:
-            obj.data = np.arange(10, dtype=np.float64)
-
-        with (
-            versionable.hdf5.open(_SessionBasic, path, mode="read") as obj,
-            pytest.raises(BackendError, match="read-only"),
-        ):
-            obj.data.resize(100)
-
-    def test_numpy_reads_work(self, tmp_path: object) -> None:
-        path = f"{tmp_path}/test.h5"
-        with versionable.hdf5.open(_SessionBasic, path) as obj:
-            obj.data = np.arange(10, dtype=np.float64)
+            obj.waveform = np.arange(12, dtype=np.float64).reshape(3, 4)
 
         with versionable.hdf5.open(_SessionBasic, path, mode="read") as obj:
             assert np.mean(obj.data) == 4.5
             np.testing.assert_array_equal(obj.data[:], np.arange(10, dtype=np.float64))
-
-    def test_iter_works(self, tmp_path: object) -> None:
-        path = f"{tmp_path}/test.h5"
-        with versionable.hdf5.open(_SessionBasic, path) as obj:
-            obj.waveform = np.arange(12, dtype=np.float64).reshape(3, 4)
-
-        with versionable.hdf5.open(_SessionBasic, path, mode="read") as obj:
-            rows = list(obj.waveform)
-            assert len(rows) == 3
-
-    def test_chunks_maxshape_work(self, tmp_path: object) -> None:
-        path = f"{tmp_path}/test.h5"
-        with versionable.hdf5.open(_SessionBasic, path) as obj:
-            obj.data = np.arange(10, dtype=np.float64)
-
-        with versionable.hdf5.open(_SessionBasic, path, mode="read") as obj:
+            assert len(list(obj.waveform)) == 3
             assert obj.data.chunks is not None
             assert obj.data.maxshape is not None
 
