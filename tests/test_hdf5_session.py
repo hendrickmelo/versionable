@@ -1,6 +1,9 @@
 # ruff: noqa: E402 — module-level imports must come after pytest.importorskip("h5py")
 """Tests for the HDF5 save-as-you-go session."""
 
+# Hash validation is tested separately in test_hash.py and test_base.py. Classes here
+# omit the hash parameter to keep declarations concise.
+
 from __future__ import annotations
 
 import pytest
@@ -17,7 +20,6 @@ import versionable
 import versionable.hdf5
 from versionable import Hdf5FieldInfo, Versionable
 from versionable._dataset_array import DatasetArray
-from versionable._hash import computeHash
 from versionable._hdf5_field import (
     _computeChunkSize,
     _getHdf5FieldInfo,
@@ -29,28 +31,21 @@ from versionable.errors import BackendError
 # Test classes
 # ---------------------------------------------------------------------------
 
-_h_with_appendable = computeHash({"name": str, "waveform": npt.NDArray[np.float64]})
-
 
 @dataclass
 class _WithHdf5FieldInfo(
     Versionable,
     version=1,
-    hash=_h_with_appendable,
     register=False,
 ):
     name: str
     waveform: Annotated[npt.NDArray[np.float64], Hdf5FieldInfo()]
 
 
-_h_plain_array = computeHash({"name": str, "waveform": npt.NDArray[np.float64]})
-
-
 @dataclass
 class _WithPlainArray(
     Versionable,
     version=1,
-    hash=_h_plain_array,
     register=False,
 ):
     name: str
@@ -64,12 +59,6 @@ class _WithPlainArray(
 
 class TestHdf5FieldInfoHashCompat:
     """Hdf5FieldInfo-annotated fields hash identically to plain np.ndarray."""
-
-    def test_annotated_hashes_same_as_plain(self) -> None:
-        """Annotated[np.ndarray, Hdf5FieldInfo()] hashes the same as np.ndarray."""
-        plain = computeHash({"name": str, "waveform": npt.NDArray[np.float64]})
-        annotated = computeHash({"name": str, "waveform": Annotated[npt.NDArray[np.float64], Hdf5FieldInfo()]})
-        assert plain == annotated
 
     def test_class_with_hdf5field_uses_same_hash(self) -> None:
         """A class with Hdf5FieldInfo uses the same hash as one with plain ndarray."""
@@ -170,21 +159,11 @@ class TestGetHdf5FieldInfo:
 # Phase 2 test classes
 # ---------------------------------------------------------------------------
 
-_h_session_basic = computeHash(
-    {
-        "name": str,
-        "sampleRate_Hz": float,
-        "data": npt.NDArray[np.float64],
-        "waveform": npt.NDArray[np.float64],
-    }
-)
-
 
 @dataclass
 class _SessionBasic(
     Versionable,
     version=1,
-    hash=_h_session_basic,
     register=False,
 ):
     name: str = ""
@@ -193,27 +172,19 @@ class _SessionBasic(
     waveform: Annotated[npt.NDArray[np.float64], Hdf5FieldInfo()] = field(default_factory=lambda: np.empty(0))
 
 
-_h_session_axis1 = computeHash({"channels": npt.NDArray[np.float64]})
-
-
 @dataclass
 class _SessionAxis1(
     Versionable,
     version=1,
-    hash=_h_session_axis1,
     register=False,
 ):
     channels: Annotated[npt.NDArray[np.float64], Hdf5FieldInfo(axis=1)] = field(default_factory=lambda: np.empty(0))
-
-
-_h_session_chunk = computeHash({"data": npt.NDArray[np.float64]})
 
 
 @dataclass
 class _SessionChunk(
     Versionable,
     version=1,
-    hash=_h_session_chunk,
     register=False,
 ):
     data: Annotated[npt.NDArray[np.float64], Hdf5FieldInfo(chunkRows=16)] = field(default_factory=lambda: np.empty(0))
@@ -418,21 +389,11 @@ class TestSessionModes:
 # Phase 3 test classes
 # ---------------------------------------------------------------------------
 
-_h_with_lists = computeHash(
-    {
-        "name": str,
-        "traces": list[npt.NDArray[np.float64]],
-        "timestamps": list[float],
-        "tags": list[str],
-    }
-)
-
 
 @dataclass
 class _WithLists(
     Versionable,
     version=1,
-    hash=_h_with_lists,
     register=False,
 ):
     name: str = ""
@@ -441,14 +402,10 @@ class _WithLists(
     tags: list[str] = field(default_factory=list)
 
 
-_h_with_dict = computeHash({"name": str, "channels": dict[str, npt.NDArray[np.float64]]})
-
-
 @dataclass
 class _WithDict(
     Versionable,
     version=1,
-    hash=_h_with_dict,
     register=False,
 ):
     name: str = ""
@@ -749,42 +706,31 @@ class TestResumeMode:
 
 from tests.conftest import Inner
 
-_h_with_nested = computeHash({"name": str, "point": Inner})
-
 
 @dataclass
 class _WithNested(
     Versionable,
     version=1,
-    hash=_h_with_nested,
     register=False,
 ):
     name: str = ""
     point: Inner = field(default_factory=lambda: Inner(x=0.0, y=0.0))
 
 
-_h_with_vlist = computeHash({"name": str, "measurements": list[Inner]})
-
-
 @dataclass
 class _WithVList(
     Versionable,
     version=1,
-    hash=_h_with_vlist,
     register=False,
 ):
     name: str = ""
     measurements: list[Inner] = field(default_factory=list)
 
 
-_h_with_vdict = computeHash({"name": str, "points": dict[str, Inner]})
-
-
 @dataclass
 class _WithVDict(
     Versionable,
     version=1,
-    hash=_h_with_vdict,
     register=False,
 ):
     name: str = ""
@@ -1114,14 +1060,11 @@ class TestDatasetArrayClosedSession:
 # Dtype inference from annotations
 # ---------------------------------------------------------------------------
 
-_h_float32 = computeHash({"data": npt.NDArray[np.float32]})
-
 
 @dataclass
 class _WithFloat32(
     Versionable,
     version=1,
-    hash=_h_float32,
     register=False,
 ):
     data: npt.NDArray[np.float32] = field(default_factory=lambda: np.empty(0, dtype=np.float32))

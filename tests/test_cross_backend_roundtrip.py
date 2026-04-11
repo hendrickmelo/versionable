@@ -2,6 +2,9 @@
 
 Saves objects through every backend and verifies that the loaded data
 matches the original exactly — values, types, and structure.
+
+Hash validation is tested separately in test_hash.py and test_base.py.
+Classes here omit the hash parameter to keep declarations concise.
 """
 
 from __future__ import annotations
@@ -19,7 +22,6 @@ import pytest
 
 import versionable
 from versionable import Versionable
-from versionable._hash import computeHash
 
 # ---------------------------------------------------------------------------
 # Test classes — defined at module level for type-annotation resolution
@@ -393,10 +395,9 @@ class TestNumpyDtypeRoundtrip:
     @pytest.mark.parametrize("ext", _ALL_BACKENDS)
     def test_scalarDtype(self, tmp_path: Path, dtype: type, ext: str) -> None:
         """1-D array of each dtype roundtrips with correct dtype."""
-        h = computeHash({"arr": npt.NDArray[np.generic]})
 
         @dataclass
-        class DtypeTest(Versionable, version=1, hash=h, register=False):
+        class DtypeTest(Versionable, version=1, register=False):
             arr: npt.NDArray[np.generic]
 
         arr = np.array([1, 2, 3], dtype=dtype)
@@ -408,10 +409,9 @@ class TestNumpyDtypeRoundtrip:
     @pytest.mark.parametrize("ext", _ALL_BACKENDS)
     def test_2dArray(self, tmp_path: Path, ext: str) -> None:
         """2-D array preserves shape and dtype."""
-        h = computeHash({"matrix": npt.NDArray[np.float64]})
 
         @dataclass
-        class Matrix(Versionable, version=1, hash=h, register=False):
+        class Matrix(Versionable, version=1, register=False):
             matrix: npt.NDArray[np.float64]
 
         arr = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], dtype=np.float64)
@@ -423,10 +423,9 @@ class TestNumpyDtypeRoundtrip:
     @pytest.mark.parametrize("ext", _ALL_BACKENDS)
     def test_3dArray(self, tmp_path: Path, ext: str) -> None:
         """3-D array preserves shape."""
-        h = computeHash({"cube": npt.NDArray[np.float32]})
 
         @dataclass
-        class Cube(Versionable, version=1, hash=h, register=False):
+        class Cube(Versionable, version=1, register=False):
             cube: npt.NDArray[np.float32]
 
         arr = np.ones((2, 3, 4), dtype=np.float32)
@@ -439,10 +438,9 @@ class TestNumpyDtypeRoundtrip:
     @pytest.mark.parametrize("ext", _ALL_BACKENDS)
     def test_emptyArray(self, tmp_path: Path, ext: str) -> None:
         """Zero-length array preserves dtype."""
-        h = computeHash({"arr": npt.NDArray[np.float64]})
 
         @dataclass
-        class EmptyArr(Versionable, version=1, hash=h, register=False):
+        class EmptyArr(Versionable, version=1, register=False):
             arr: npt.NDArray[np.float64]
 
         arr = np.array([], dtype=np.float64)

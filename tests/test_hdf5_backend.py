@@ -2,6 +2,9 @@
 # so the entire file is skipped when h5py is not installed.
 """Tests for the HDF5 backend with native type mapping."""
 
+# Hash validation is tested separately in test_hash.py and test_base.py. Classes here
+# omit the hash parameter to keep declarations concise.
+
 from __future__ import annotations
 
 import pytest
@@ -18,7 +21,6 @@ import numpy.typing as npt
 
 import versionable
 from versionable import Versionable
-from versionable._hash import computeHash
 from versionable.errors import ArrayNotLoadedError, BackendError
 from versionable.hdf5 import (
     BLOSC_DEFAULT,
@@ -37,57 +39,40 @@ from .conftest import Inner, SimpleConfig, WithArray, WithNested
 # Defining inside test functions causes forward-reference resolution failures with
 # `from __future__ import annotations`.
 
-_h_measurement = computeHash({"label": str, "data": npt.NDArray[np.float64]})
-
 
 @dataclass
-class _Measurement(Versionable, version=1, hash=_h_measurement, name="Measurement"):
+class _Measurement(Versionable, version=1, name="Measurement"):
     label: str
     data: npt.NDArray[np.float64]
 
 
-_h_with_traces = computeHash({"name": str, "traces": list[npt.NDArray[np.float64]]})
-
-
 @dataclass
-class _WithTraces(Versionable, version=1, hash=_h_with_traces, register=False):
+class _WithTraces(Versionable, version=1, register=False):
     name: str
     traces: list[npt.NDArray[np.float64]]
 
 
-_h_with_channels = computeHash({"name": str, "channels": dict[str, npt.NDArray[np.float64]]})
-
-
 @dataclass
-class _WithChannels(Versionable, version=1, hash=_h_with_channels, register=False):
+class _WithChannels(Versionable, version=1, register=False):
     name: str
     channels: dict[str, npt.NDArray[np.float64]]
 
 
-_h_experiment = computeHash({"name": str, "measurements": list[_Measurement]})
-
-
 @dataclass
-class _Experiment(Versionable, version=1, hash=_h_experiment, register=False):
+class _Experiment(Versionable, version=1, register=False):
     name: str
     measurements: list[_Measurement]
 
 
 # Deeply nested: Sensor has list[ndarray], Lab has dict[str, Sensor]
-_h_sensor = computeHash({"name": str, "traces": list[npt.NDArray[np.float64]]})
-
-
 @dataclass
-class _Sensor(Versionable, version=1, hash=_h_sensor, name="Sensor"):
+class _Sensor(Versionable, version=1, name="Sensor"):
     name: str
     traces: list[npt.NDArray[np.float64]]
 
 
-_h_lab = computeHash({"title": str, "sensors": dict[str, _Sensor]})
-
-
 @dataclass
-class _Lab(Versionable, version=1, hash=_h_lab, register=False):
+class _Lab(Versionable, version=1, register=False):
     title: str
     sensors: dict[str, _Sensor]
 
@@ -112,10 +97,8 @@ class TestHdf5RoundTrip:
         np.testing.assert_array_equal(loaded.data, arr)
 
     def test_2dArray(self, tmp_path: Path) -> None:
-        h = computeHash({"label": str, "matrix": npt.NDArray[np.int32]})
-
         @dataclass
-        class MatrixData(Versionable, version=1, hash=h, register=False):
+        class MatrixData(Versionable, version=1, register=False):
             label: str
             matrix: npt.NDArray[np.int32]
 
@@ -231,14 +214,6 @@ class TestHdf5Compression:
             # Should be compressed (blosc2 via hdf5plugin)
             assert ds.compression is not None
 
-    def test_compressionDoesNotAffectHash(self) -> None:
-        """Compression is a storage concern, not a schema concern."""
-        assert ZSTD_DEFAULT != GZIP_DEFAULT
-        # Hash comes from fields, not compression settings
-        h = computeHash({"name": str, "data": npt.NDArray[np.float64]})
-        assert h == WithArray._serializer_meta_.hash
-
-
 class TestLazyLoading:
     def test_lazyByDefault(self, tmp_path: Path) -> None:
         """Array fields are lazy by default (not preloaded)."""
@@ -253,10 +228,8 @@ class TestLazyLoading:
         np.testing.assert_array_equal(loaded.data, arr)
 
     def test_preloadSpecific(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str, "a": npt.NDArray[np.float64], "b": npt.NDArray[np.float64]})
-
         @dataclass
-        class TwoArrays(Versionable, version=1, hash=h, register=False):
+        class TwoArrays(Versionable, version=1, register=False):
             name: str
             a: npt.NDArray[np.float64]
             b: npt.NDArray[np.float64]
@@ -363,10 +336,9 @@ class TestHdf5Errors:
 
     def test_dictKeyWithSlash(self, tmp_path: Path) -> None:
         """Dict keys containing '/' roundtrip correctly (percent-encoded in HDF5)."""
-        h = computeHash({"data": dict[str, int]})
 
         @dataclass
-        class WithSlashKey(Versionable, version=1, hash=h, register=False):
+        class WithSlashKey(Versionable, version=1, register=False):
             data: dict[str, int]
 
         obj = WithSlashKey(data={"valid": 1, "path/key": 2, "a/b/c": 3})
@@ -377,10 +349,9 @@ class TestHdf5Errors:
 
     def test_dictKeyWithLiteralPercent(self, tmp_path: Path) -> None:
         """Dict keys containing literal '%2F' don't collide with escaped '/'."""
-        h = computeHash({"data": dict[str, int]})
 
         @dataclass
-        class WithPercentKey(Versionable, version=1, hash=h, register=False):
+        class WithPercentKey(Versionable, version=1, register=False):
             data: dict[str, int]
 
         obj = WithPercentKey(data={"%2F": 1, "/": 2, "normal": 3})
@@ -391,10 +362,9 @@ class TestHdf5Errors:
 
     def test_dictKeyDot(self, tmp_path: Path) -> None:
         """Dict key '.' (HDF5 current-group alias) roundtrips correctly."""
-        h = computeHash({"data": dict[str, int]})
 
         @dataclass
-        class WithDotKey(Versionable, version=1, hash=h, register=False):
+        class WithDotKey(Versionable, version=1, register=False):
             data: dict[str, int]
 
         obj = WithDotKey(data={".": 1, "..": 2, ".hidden": 3})
@@ -437,10 +407,8 @@ class TestNativeScalars:
             assert f.attrs["retries"] == 5
 
     def test_floatPrecision(self, tmp_path: Path) -> None:
-        h = computeHash({"value": float})
-
         @dataclass
-        class FloatData(Versionable, version=1, hash=h, register=False):
+        class FloatData(Versionable, version=1, register=False):
             value: float
 
         obj = FloatData(value=3.141592653589793)
@@ -455,10 +423,8 @@ class TestNativeNone:
     """Test None handling with h5py.Empty."""
 
     def test_noneField(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str, "label": str | None})
-
         @dataclass
-        class WithOptional(Versionable, version=1, hash=h, register=False):
+        class WithOptional(Versionable, version=1, register=False):
             name: str
             label: str | None = None
 
@@ -471,10 +437,9 @@ class TestNativeNone:
 
     def test_noneVsDefault(self, tmp_path: Path) -> None:
         """None stored explicitly, not confused with missing default."""
-        h = computeHash({"name": str, "tag": str | None})
 
         @dataclass
-        class WithDefault(Versionable, version=1, hash=h, register=False):
+        class WithDefault(Versionable, version=1, register=False):
             name: str
             tag: str | None = "default"
 
@@ -489,10 +454,8 @@ class TestNativeEnum:
     """Test Enum storage as native attributes."""
 
     def test_stringEnum(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str, "color": Color})
-
         @dataclass
-        class WithColor(Versionable, version=1, hash=h, register=False):
+        class WithColor(Versionable, version=1, register=False):
             name: str
             color: Color
 
@@ -503,10 +466,8 @@ class TestNativeEnum:
         assert loaded.color == Color.GREEN
 
     def test_intEnum(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str, "priority": Priority})
-
         @dataclass
-        class WithPriority(Versionable, version=1, hash=h, register=False):
+        class WithPriority(Versionable, version=1, register=False):
             name: str
             priority: Priority
 
@@ -521,10 +482,8 @@ class TestNativeConvertedTypes:
     """Test converted types (datetime, Path) as native attributes."""
 
     def test_datetime(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str, "timestamp": datetime.datetime})
-
         @dataclass
-        class WithDatetime(Versionable, version=1, hash=h, register=False):
+        class WithDatetime(Versionable, version=1, register=False):
             name: str
             timestamp: datetime.datetime
 
@@ -536,10 +495,8 @@ class TestNativeConvertedTypes:
         assert loaded.timestamp == ts
 
     def test_path(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str, "location": Path})
-
         @dataclass
-        class WithPath(Versionable, version=1, hash=h, register=False):
+        class WithPath(Versionable, version=1, register=False):
             name: str
             location: Path
 
@@ -554,10 +511,8 @@ class TestNativeListDatasets:
     """Test list[numeric], list[str], list[bool] as 1-D datasets."""
 
     def test_listFloat(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str, "values": list[float]})
-
         @dataclass
-        class WithListFloat(Versionable, version=1, hash=h, register=False):
+        class WithListFloat(Versionable, version=1, register=False):
             name: str
             values: list[float]
 
@@ -569,10 +524,8 @@ class TestNativeListDatasets:
         assert isinstance(loaded.values, list)
 
     def test_listInt(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str, "counts": list[int]})
-
         @dataclass
-        class WithListInt(Versionable, version=1, hash=h, register=False):
+        class WithListInt(Versionable, version=1, register=False):
             name: str
             counts: list[int]
 
@@ -583,10 +536,8 @@ class TestNativeListDatasets:
         assert loaded.counts == [10, 20, 30]
 
     def test_listStr(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str, "tags": list[str]})
-
         @dataclass
-        class WithListStr(Versionable, version=1, hash=h, register=False):
+        class WithListStr(Versionable, version=1, register=False):
             name: str
             tags: list[str]
 
@@ -597,10 +548,8 @@ class TestNativeListDatasets:
         assert loaded.tags == ["alpha", "beta", "gamma"]
 
     def test_listBool(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str, "flags": list[bool]})
-
         @dataclass
-        class WithListBool(Versionable, version=1, hash=h, register=False):
+        class WithListBool(Versionable, version=1, register=False):
             name: str
             flags: list[bool]
 
@@ -611,10 +560,8 @@ class TestNativeListDatasets:
         assert loaded.flags == [True, False, True]
 
     def test_emptyList(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str, "values": list[float]})
-
         @dataclass
-        class WithEmpty(Versionable, version=1, hash=h, register=False):
+        class WithEmpty(Versionable, version=1, register=False):
             name: str
             values: list[float]
 
@@ -629,10 +576,8 @@ class TestNativeArrayCollections:
     """Test list[np.ndarray] and dict[str, np.ndarray] as groups."""
 
     def test_listNdarray(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str, "traces": list[npt.NDArray[np.float64]]})
-
         @dataclass
-        class WithTraces(Versionable, version=1, hash=h, register=False):
+        class WithTraces(Versionable, version=1, register=False):
             name: str
             traces: list[npt.NDArray[np.float64]]
 
@@ -646,10 +591,8 @@ class TestNativeArrayCollections:
         np.testing.assert_array_equal(loaded.traces[1], traces[1])
 
     def test_listNdarrayVaryingShapes(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str, "data": list[npt.NDArray[np.float64]]})
-
         @dataclass
-        class VaryingShapes(Versionable, version=1, hash=h, register=False):
+        class VaryingShapes(Versionable, version=1, register=False):
             name: str
             data: list[npt.NDArray[np.float64]]
 
@@ -662,10 +605,8 @@ class TestNativeArrayCollections:
             np.testing.assert_array_equal(loaded_arr, orig)
 
     def test_dictNdarray(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str, "channels": dict[str, npt.NDArray[np.float64]]})
-
         @dataclass
-        class WithChannels(Versionable, version=1, hash=h, register=False):
+        class WithChannels(Versionable, version=1, register=False):
             name: str
             channels: dict[str, npt.NDArray[np.float64]]
 
@@ -680,10 +621,9 @@ class TestNativeArrayCollections:
 
     def test_listNdarrayFileLayout(self, tmp_path: Path) -> None:
         """Verify list[ndarray] produces integer-keyed datasets in a group."""
-        h = computeHash({"name": str, "traces": list[npt.NDArray[np.float64]]})
 
         @dataclass
-        class Traces(Versionable, version=1, hash=h, register=False):
+        class Traces(Versionable, version=1, register=False):
             name: str
             traces: list[npt.NDArray[np.float64]]
 
@@ -732,10 +672,8 @@ class TestNativeNestedVersionable:
             assert point["__versionable__"].attrs["__OBJECT__"] == "Inner"
 
     def test_listVersionable(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str, "points": list[Inner]})
-
         @dataclass
-        class WithPointList(Versionable, version=1, hash=h, register=False):
+        class WithPointList(Versionable, version=1, register=False):
             name: str
             points: list[Inner]
 
@@ -888,10 +826,8 @@ class TestLazyArrayCollections:
         """LazyArrayDict decodes percent-encoded keys and loads on access."""
         from versionable._lazy import LazyArrayDict
 
-        h = computeHash({"data": dict[str, npt.NDArray[np.float64]]})
-
         @dataclass
-        class WithSlashChannels(Versionable, version=1, hash=h, register=False):
+        class WithSlashChannels(Versionable, version=1, register=False):
             data: dict[str, npt.NDArray[np.float64]]
 
         obj = WithSlashChannels(data={"a/b": np.array([1.0]), "c": np.array([2.0])})
