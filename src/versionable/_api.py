@@ -289,10 +289,16 @@ def _ensureBackendsRegistered() -> None:
         return
     _backendsRegistered = True
 
-    # Import backends so they call registerBackend()
+    # Import backends so they call registerBackend().
+    # JSON uses only stdlib — always available.
+    # TOML, YAML, and HDF5 have optional dependencies.
     import versionable._json_backend
-    import versionable._toml_backend
-    import versionable._yaml_backend
 
     with contextlib.suppress(ImportError):
-        import versionable._hdf5_backend  # noqa: F401 — side-effect import registers the HDF5 backend
+        import versionable._toml_backend
+
+    with contextlib.suppress(ImportError):
+        import versionable._yaml_backend
+
+    with contextlib.suppress(ImportError):
+        import versionable._hdf5_backend  # noqa: F401

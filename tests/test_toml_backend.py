@@ -1,11 +1,15 @@
+# so the entire file is skipped when toml is not installed.
 """Tests for the TOML backend."""
 
 from __future__ import annotations
 
+import pytest
+
+pytest.importorskip("toml")
+
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 import versionable
 from versionable.errors import BackendError, ConverterError

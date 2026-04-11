@@ -68,7 +68,11 @@ def getBackend(path: Path | str, explicit: type[Backend] | None = None) -> Backe
     ext = path.suffix.lower()
     if ext not in _BACKEND_REGISTRY:
         hint = ""
-        if ext in (".h5", ".hdf5"):
+        if ext == ".toml":
+            hint = " Install toml: `pip install toml`"
+        elif ext in (".yaml", ".yml"):
+            hint = " Install pyyaml: `pip install pyyaml`"
+        elif ext in (".h5", ".hdf5"):
             hint = " Install the HDF5 extra: `pip install versionable[hdf5]`"
         raise BackendError(
             f"No backend registered for extension {ext!r}.{hint} Known extensions: {sorted(_BACKEND_REGISTRY.keys())}"

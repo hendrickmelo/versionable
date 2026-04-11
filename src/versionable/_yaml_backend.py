@@ -25,7 +25,10 @@ import json
 from pathlib import Path
 from typing import Any, ClassVar
 
-import yaml
+try:
+    import yaml
+except ImportError as e:
+    raise ImportError("YAML backend requires pyyaml — install it with: `pip install pyyaml`") from e
 
 from versionable._backend import Backend, registerBackend
 from versionable._base import _resolveFields

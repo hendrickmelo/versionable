@@ -1,13 +1,17 @@
+# ruff: noqa: E402 — module-level imports must come after pytest.importorskip("yaml")
+# so the entire file is skipped when pyyaml is not installed.
 """Tests for the YAML backend."""
 
 from __future__ import annotations
+
+import pytest
+
+yaml = pytest.importorskip("yaml")
 
 from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
-import pytest
-import yaml
 
 import versionable
 from versionable.errors import BackendError, ConverterError, VersionError

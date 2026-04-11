@@ -29,7 +29,11 @@ from pathlib import Path
 from typing import Any, ClassVar
 from urllib.parse import unquote
 
-import h5py
+try:
+    import h5py
+except ImportError as e:
+    raise ImportError("HDF5 backend requires h5py — install it with: `pip install h5py hdf5plugin`") from e
+
 import numpy as np
 
 from versionable._backend import Backend, registerBackend

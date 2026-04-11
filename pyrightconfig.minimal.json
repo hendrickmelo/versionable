@@ -1,13 +1,14 @@
-// Pyright config for the minimal pixi environment (no h5py/hdf5plugin).
-// Files that import h5py are excluded here because those packages aren't
-// installed in the minimal env. The full environment uses pyproject.toml's
-// [tool.pyright] section, which checks all files.
+// Pyright config for the minimal pixi environment (no toml/h5py/hdf5plugin).
+// Files that import optional backend dependencies are excluded here because
+// those packages aren't installed in the minimal env. The full environment
+// uses pyproject.toml's [tool.pyright] section, which checks all files.
 {
   "include": ["src"],
   "exclude": [
     "**/node_modules",
     "**/__pycache__",
     "**/.*",
+    "src/versionable/_toml_backend.py",
     "src/versionable/_hdf5_backend.py",
     "src/versionable/_hdf5_compression.py",
     "src/versionable/_hdf5_session.py",

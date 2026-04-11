@@ -26,9 +26,13 @@ ci-all = { cmd = "pixi run -e default ci && pixi run -e minimal ci", description
 
 [dependencies]
 python = ">=3.12,<3.14"
-toml = ">=0.10"
-pyyaml = ">=6.0"
 numpy = ">=1.26"
+
+[feature.toml.dependencies]
+toml = ">=0.10"
+
+[feature.yaml.dependencies]
+pyyaml = ">=6.0"
 
 [feature.hdf5.dependencies]
 h5py = ">=3.10"
@@ -39,14 +43,18 @@ hdf5plugin = ">=4.0"
 [pypi-dependencies]
 versionable = { path = "./", editable = true }
 
-[feature.dev.dependencies]
+[feature.test.dependencies]
 pytest = ">=8.0"
 ruff = ">=0.4"
 nodejs = ">=20"
+
+[feature.test.pypi-dependencies]
+mypy = ">=1.10"
+
+[feature.dev.dependencies]
 ipython = ">=8"
 
 [feature.dev.pypi-dependencies]
-mypy = ">=1.10"
 nb-clean = ">=4.0.1, <5"
 plotly = ">=6.7.0, <7"
 nbformat = ">=5.10.4, <6"
@@ -71,6 +79,6 @@ docs-live = "sphinx-autobuild docs docs/_build/html"
 pyright = "npx pyright -p pyrightconfig.minimal.json src/"
 
 [environments]
-default = { features = ["dev", "hdf5"] }
-minimal = { features = ["dev", "minimal"] }
+default = { features = ["test", "dev", "toml", "yaml", "hdf5"] }
+minimal = { features = ["test", "minimal"] }
 docs = { features = ["docs"] }

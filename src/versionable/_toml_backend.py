@@ -34,7 +34,10 @@ import json
 from pathlib import Path
 from typing import Any, ClassVar
 
-import toml
+try:
+    import toml
+except ImportError as e:
+    raise ImportError("TOML backend requires toml — install it with: `pip install toml`") from e
 
 from versionable._backend import Backend, registerBackend
 from versionable._base import _resolveFields

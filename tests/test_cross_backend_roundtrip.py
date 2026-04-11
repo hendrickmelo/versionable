@@ -101,7 +101,21 @@ class _EmptyCollections(Versionable, version=1, hash="6c8e40", register=False):
 # Backend extensions
 # ---------------------------------------------------------------------------
 
-_DICT_BACKENDS = [".json", ".yaml", ".toml"]
+_DICT_BACKENDS: list[str] = [".json"]
+
+try:
+    import toml as _toml  # noqa: F401
+
+    _DICT_BACKENDS.append(".toml")
+except ImportError:
+    pass
+
+try:
+    import yaml as _yaml  # noqa: F401
+
+    _DICT_BACKENDS.append(".yaml")
+except ImportError:
+    pass
 
 try:
     import versionable._hdf5_backend
@@ -111,7 +125,7 @@ except ImportError:
     _HDF5_BACKENDS = []
 
 _ALL_BACKENDS = [*_DICT_BACKENDS, *_HDF5_BACKENDS]
-_NONE_SAFE_BACKENDS = [".json", ".yaml", *_HDF5_BACKENDS]  # TOML omits None
+_NONE_SAFE_BACKENDS = [ext for ext in [".json", ".yaml", *_HDF5_BACKENDS] if ext in _ALL_BACKENDS]
 
 
 def _roundtrip(cls: type, obj: Versionable, tmp_path: Path, ext: str) -> Versionable:
@@ -310,6 +324,7 @@ class TestOptionalFieldsRoundtrip:
         assert type(loaded.label) is str, f"[{ext}] label type"
         assert loaded.count is None, f"[{ext}] count should be None"
 
+    @pytest.mark.skipif(".toml" not in _DICT_BACKENDS, reason="toml not installed")
     def test_tomlOmitsNone(self, tmp_path: Path) -> None:
         """TOML omits None fields; they restore from defaults."""
         obj = _WithOptional(name="test", label=None, count=None)

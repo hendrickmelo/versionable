@@ -56,11 +56,18 @@ drift out of sync.
 
 ## Installation
 
+The base install includes the JSON backend (no extra dependencies beyond numpy):
+
 ```bash
 pip install versionable
+```
 
-# With HDF5 backend support (h5py + hdf5plugin)
-pip install "versionable[hdf5]"
+Add backend support as needed:
+
+```bash
+pip install pyyaml                # YAML backend (.yaml, .yml)
+pip install toml                  # TOML backend (.toml)
+pip install h5py hdf5plugin       # HDF5 backend (.h5)
 ```
 
 Or install from source:

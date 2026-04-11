@@ -15,6 +15,15 @@ from versionable._migration import applyMigrations, resolveMigrations
 from versionable.errors import MigrationError, UpgradeRequiredError
 
 
+def _has_toml() -> bool:
+    try:
+        import toml  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
 class TestDeclarativeOperations:
     def test_rename(self) -> None:
         mig = Migration().rename("old", "new")
@@ -253,6 +262,10 @@ class TestEndToEndMigration:
         assert loaded.retries == 3
 
 
+@pytest.mark.skipif(
+    not _has_toml(),
+    reason="toml not installed",
+)
 class TestAddDefaultBehavior:
     """Verify that Migration().add() injects the default only when the field is absent.
 
