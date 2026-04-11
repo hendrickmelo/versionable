@@ -10,6 +10,8 @@
 - Always specify a language tag on fenced code blocks in markdown (e.g., `python`, `bash`, `text`)
 - Do not fix markdown lint warnings during editing — they are distracting and cosmetic. If a clean pass is needed, run
   it once at the end.
+- In examples and tests, always hardcode schema hashes as string literals (e.g., `hash="74a182"`). Only use
+  `computeHash()` when strictly necessary (e.g., computing hashes programmatically in library internals).
 
 ## Shortcuts
 
@@ -70,6 +72,15 @@ pixi run cleanup          # Runs formatters, linters, and type checks
 ```
 
 Fix all errors reported by cleanup before creating commits. Do not commit if cleanup fails.
+
+### Type Checking Exclusions
+
+Never exclude Python source files from pyright or mypy in `pyproject.toml`. Fix the type errors instead. If a
+suppression is truly unavoidable (e.g., broken third-party type stubs), use the narrowest possible scope:
+
+1. Inline `# pyright: ignore[ruleCode]` on the specific line (with a comment explaining why)
+2. File-level `# pyright: ruleCode=false` only if every line in the file triggers the same stub issue
+3. Never add files to the pyright `exclude` list — all source code must be type-checked
 
 ## PR Workflow
 

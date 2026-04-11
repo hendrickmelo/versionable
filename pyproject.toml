@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "versionable"
-version = "0.0.1.dev4"
+version = "0.0.1.dev6"
 description = "Versioned persistence for Python dataclasses with hash validation, declarative migrations, and pluggable backends"
 readme = "README.md"
 license = "MIT"
@@ -90,7 +90,7 @@ ignore_missing_imports = true
 
 [tool.pyright]
 include = ["src"]
-exclude = ["**/node_modules", "**/__pycache__", "**/.*", "src/versionable/_hdf5_backend.py", "src/versionable/_hdf5_compression.py", "src/versionable/_lazy.py"]
+exclude = ["**/node_modules", "**/__pycache__", "**/.*"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
 reportAttributeAccessIssue = "warning"

@@ -349,7 +349,7 @@ def _readFields(
     lazyFields: set[str] = set()
 
     # Read child items (datasets and groups)
-    for key in group:
+    for key in list(group.keys()):
         if key == _VERSIONABLE_GROUP:
             continue
         item = group[key]
@@ -358,7 +358,7 @@ def _readFields(
         if isinstance(item, h5py.Dataset):
             if ctx is not None and _isArrayField(fieldType):
                 # np.ndarray field — lazy loading applies
-                datasetPath = item.name.lstrip("/")
+                datasetPath = _groupName(item)
                 if ctx.metadataOnly:
                     fields[key] = ArrayNotLoaded(key)
                     lazyFields.add(key)
@@ -387,7 +387,7 @@ def _readFields(
                 fields[key] = _readGroup(item, fieldType, ctx)
 
     # Read scalar attributes (always eager)
-    for attrName in group.attrs:
+    for attrName in list(group.attrs.keys()):
         fields[attrName] = _readAttr(group.attrs[attrName])
 
     return fields, lazyFields
@@ -480,7 +480,9 @@ def _readSequenceGroup(group: h5py.Group, elemType: Any, ctx: LazyContext | None
     result: list[Any] = []
     for key in allKeys:
         if key in childKeys:
-            result.append(_readChild(group[key], elemType, ctx))
+            child = group[key]
+            if isinstance(child, (h5py.Dataset, h5py.Group)):
+                result.append(_readChild(child, elemType, ctx))
         else:
             result.append(_readAttr(group.attrs[key]))
     return result
@@ -491,14 +493,16 @@ def _readDictGroup(group: h5py.Group, keyType: Any, valType: Any, ctx: LazyConte
     result: dict[Any, Any] = {}
 
     # Read child items (datasets and groups)
-    for strKey in group:
+    for strKey in list(group.keys()):
         if strKey == _VERSIONABLE_GROUP:
             continue
-        key = _strToKey(strKey, keyType)
-        result[key] = _readChild(group[strKey], valType, ctx)
+        child = group[strKey]
+        if isinstance(child, (h5py.Dataset, h5py.Group)):
+            key = _strToKey(strKey, keyType)
+            result[key] = _readChild(child, valType, ctx)
 
     # Read attributes (scalar dict values are stored as attrs on the subgroup)
-    for strKey in group.attrs:
+    for strKey in list(group.attrs.keys()):
         key = _strToKey(strKey, keyType)
         result[key] = _readAttr(group.attrs[strKey])
 
@@ -568,6 +572,20 @@ def _readAttr(value: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
+def _groupName(item: h5py.Dataset | h5py.Group) -> str:
+    """Return the HDF5 path of *item* without the leading slash.
+
+    ``h5py.Group.name`` (and ``Dataset.name``) can be ``None`` for
+    anonymous items, but we only call this on items that live inside an
+    open file, so the name is always set.
+    """
+    name = item.name
+    if name is None:
+        raise BackendError(f"HDF5 item has no name (anonymous item): {item!r}")
+    result: str = name.lstrip("/")
+    return result
+
+
 def _resolveClass(objectName: str) -> type | None:
     """Look up a Versionable class by its serialization name."""
     from versionable._base import registeredClasses
@@ -597,7 +615,7 @@ def _makeLazyCollection(path: Path, group: h5py.Group, fieldType: Any) -> Any:
     from versionable._lazy import LazyArrayDict, LazyArrayList
 
     # Use the full HDF5 group path so nested Versionable fields resolve correctly
-    groupPath = group.name.lstrip("/")
+    groupPath = _groupName(group)
 
     origin = typing.get_origin(fieldType)
     args = typing.get_args(fieldType)
