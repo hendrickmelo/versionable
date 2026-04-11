@@ -134,10 +134,10 @@ Arrays and array collections are lazy-loaded by default — `load()` returns ins
 Accessing an array field or indexing into a `list[np.ndarray]` triggers the disk read.
 
 ```python
-from versionable.hdf5 import ZSTD_DEFAULT, GZIP_DEFAULT
+from versionable.hdf5 import GZIP_DEFAULT, ZSTD_DEFAULT
 
-# Save with compression
-versionable.save(obj, "data.h5", compression=ZSTD_DEFAULT)
+# Save with compression (gzip is the default)
+versionable.save(obj, "data.h5", compression=GZIP_DEFAULT)
 
 # Load with selective preloading
 loaded = versionable.load(MyClass, "data.h5", preload=["largeArray"])
@@ -150,16 +150,16 @@ loaded = versionable.load(MyClass, "data.h5", metadataOnly=True)
 
 | Preset          | Notes                                    |
 | --------------- | ---------------------------------------- |
-| `ZSTD_DEFAULT`  | zstd level 3 — default, fast, good ratio |
+| `ZSTD_DEFAULT`  | zstd level 3 — fast, good ratio          |
 | `ZSTD_FAST`     | zstd level 1 — fastest                   |
 | `ZSTD_BEST`     | zstd level 19 — best ratio, slow         |
 | `BLOSC_DEFAULT` | Blosc + zstd — fast for large arrays     |
-| `GZIP_DEFAULT`  | gzip level 4 — universal compatibility   |
+| `GZIP_DEFAULT`  | gzip level 4 — default, universal compat |
 | `LZF`           | LZF — fastest, no extra deps             |
 | `UNCOMPRESSED`  | No compression                           |
 
-zstd and blosc require `hdf5plugin`. gzip and lzf work everywhere — use `GZIP_DEFAULT` if files must be readable by
-MATLAB or HDFView.
+gzip (default) and lzf work everywhere. zstd and blosc require `hdf5plugin` — use them if compatibility with other tools
+is not a major concern.
 
 ### HDF5 Sessions — Incremental Writes and Random Access
 
@@ -213,6 +213,9 @@ with versionable.hdf5.open(Experiment, "run.h5", mode="read") as obj:
 
 Sessions do not support migrations. The file's version and hash must exactly match the class. `DatasetArray` fields
 raise `BackendError` after the session is closed — copy data before closing if needed.
+
+**Compression on resume:** Appending to an existing dataset uses the original dataset's compression filter, not the
+session's `compression` parameter. The session compression only applies to newly created datasets.
 
 ## Supported Types
 

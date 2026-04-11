@@ -38,7 +38,7 @@ import numpy as np
 
 from versionable._backend import Backend, registerBackend
 from versionable._base import Versionable, _resolveFields, metadata
-from versionable._hdf5_compression import ZSTD_DEFAULT, Hdf5Compression
+from versionable._hdf5_compression import DEFAULT_COMPRESSION, Hdf5Compression
 from versionable._lazy import ArrayNotLoaded, LazyArray, LazyContext
 from versionable._types import _registry
 from versionable.errors import BackendError
@@ -63,7 +63,7 @@ class Hdf5Backend(Backend):
         compression: Hdf5Compression | None = None,
         **kwargs: Any,
     ) -> None:
-        comp = compression or ZSTD_DEFAULT
+        comp = compression or DEFAULT_COMPRESSION
         fieldTypes = _resolveFields(cls)
         try:
             with h5py.File(path, "w") as f:

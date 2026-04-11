@@ -280,8 +280,8 @@ distinguishing `list[float]` from `np.ndarray`) requires the class's type annota
 
 ### Compression
 
-By default, array datasets are compressed with **zstd (level 3)** — a good balance of speed and compression ratio. You
-can change the algorithm and level per-save by passing a `compression` kwarg:
+By default, array datasets are compressed with **gzip (level 4)** for maximum compatibility across tools (MATLAB,
+HDFView, h5py without plugins). You can change the algorithm and level per-save by passing a `compression` kwarg:
 
 ```python
 from versionable.hdf5 import Hdf5Compression, BLOSC_DEFAULT, GZIP_DEFAULT, UNCOMPRESSED
@@ -295,14 +295,18 @@ versionable.save(rec, "recording.h5", compression=comp)
 ```
 
 Compression is a storage concern — it does not affect the schema hash and has no impact on `load()`. Any compressed file
-can be read back regardless of what compression was used to write it, as long as the HDF5 extra is installed.
+can be read back regardless of what compression was used to write it, as long as the required filter is available.
+
+Compression is set per-dataset at creation time. When resuming a session, appending to an existing dataset uses the
+original dataset's compression filter, not the session's `compression` parameter. The session's compression only applies
+to newly created datasets.
 
 #### Available presets
 
 | Preset          | Speed | Size | When to use                                                                    |
 | --------------- | ----- | ---- | ------------------------------------------------------------------------------ |
-| `ZSTD_DEFAULT`  | 🚀    | 🗜️   | Default — good ratio and speed                                                 |
-| `GZIP_DEFAULT`  | 🐢    | 🗜️   | Files shared with MATLAB, HDFView, or other HDF5 tools                         |
+| `GZIP_DEFAULT`  | 🐢    | 🗜️   | Default — universal compatibility                                              |
+| `ZSTD_DEFAULT`  | 🚀    | 🗜️   | Good ratio and speed (requires hdf5plugin on reader)                           |
 | `ZSTD_FAST`     | ⚡⚡  | 📦   | Write speed matters more than file size                                        |
 | `ZSTD_BEST`     | 🐢    | 🗜️🗜️ | Archival — smallest files, slower writes                                       |
 | `BLOSC_DEFAULT` | ⚡⚡  | 🗜️   | Large arrays — parallel blosc2 with zstd inside                                |
@@ -311,9 +315,9 @@ can be read back regardless of what compression was used to write it, as long as
 
 #### Hdf5Compression fields
 
-- **`algorithm`** — `"zstd"` | `"gzip"` | `"lzf"` | `"blosc"` | `None`. Default: `"zstd"`. Set to `None` for
+- **`algorithm`** — `"zstd"` | `"gzip"` | `"lzf"` | `"blosc"` | `None`. Default: `"gzip"`. Set to `None` for
   uncompressed.
-- **`level`** — `int | None`. Default: `3`. Algorithm-specific level (zstd: 1–22, gzip: 0–9, blosc: 0–9).
+- **`level`** — `int | None`. Default: `4`. Algorithm-specific level (zstd: 1–22, gzip: 0–9, blosc: 0–9).
 - **`shuffle`** — `bool`. Default: `True`. Byte-shuffle filter (improves compression ratio for numeric data).
 - **`bloscCompressor`** — `"zstd"` | `"blosclz"` | `"lz4"` | `"lz4hc"` | `"zlib"`. Default: `"zstd"`. Sub-compressor
   used when `algorithm="blosc"`.
@@ -328,13 +332,12 @@ block sizes are handled automatically.
 
 #### Compatibility note
 
-The default `ZSTD_*` presents (and `BLOSC_DEFAULT`, ) produce files that require `hdf5plugin` to be installed on the
-reading side as well — any environment with `versionable[hdf5]` has it, but external tools (MATLAB, HDFView, bare h5py
-without the plugin) may not. If your HDF5 files need to be readable by tools outside the **`versionable`** ecosystem,
-use `GZIP_DEFAULT` instead — gzip is supported by every HDF5 implementation:
+The default `GZIP_DEFAULT` produces files readable by every HDF5 implementation. The `ZSTD_*` presets (and
+`BLOSC_DEFAULT`) produce files that require `hdf5plugin` on the reading side as well. Use them when all readers have the
+plugin installed and you need better speed or ratio:
 
 ```python
-versionable.save(rec, "recording.h5", compression=GZIP_DEFAULT)
+versionable.save(rec, "recording.h5", compression=ZSTD_DEFAULT)
 ```
 
 ### Lazy Loading

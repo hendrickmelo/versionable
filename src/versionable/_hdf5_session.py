@@ -29,7 +29,7 @@ from versionable._hdf5_backend import (
     _readMeta,
     _writeValue,
 )
-from versionable._hdf5_compression import ZSTD_DEFAULT, Hdf5Compression
+from versionable._hdf5_compression import DEFAULT_COMPRESSION, Hdf5Compression
 from versionable._hdf5_field import (
     Hdf5FieldInfo,
     _computeChunkSize,
@@ -97,7 +97,7 @@ class Hdf5Session[T: Versionable]:
         self._cls = cls
         self._path = Path(path)
         self._mode = mode
-        self._comp = compression or ZSTD_DEFAULT
+        self._comp = compression or DEFAULT_COMPRESSION
         self._fieldTypes = _resolveFields(cls)
         self._instance = instance
 
