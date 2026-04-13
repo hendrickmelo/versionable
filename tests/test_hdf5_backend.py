@@ -767,6 +767,133 @@ class TestLazyArrayCollections:
         np.testing.assert_array_equal(loaded.sensors["accel"].traces[0], np.array([1.0, 2.0]))
 
 
+class TestDtypeCoercion:
+    """Verify that save/load preserves the original array dtype."""
+
+    @pytest.mark.parametrize(
+        ("src_dtype", "expected_dtype"),
+        [
+            (np.float64, np.float64),
+            (np.float32, np.float32),
+            (np.int32, np.int32),
+            (np.uint16, np.uint16),
+            (np.uint32, np.uint32),
+        ],
+    )
+    def test_dtypePreserved(
+        self,
+        tmp_path: Path,
+        src_dtype: type[np.generic],
+        expected_dtype: type[np.generic],
+    ) -> None:
+        @dataclass
+        class DtypeData(Versionable, version=1, register=False):
+            data: npt.NDArray[np.generic]
+
+        arr = np.arange(10, dtype=src_dtype)
+        obj = DtypeData(data=arr)
+        p = tmp_path / "dtype.h5"
+        versionable.save(obj, p)
+        loaded = versionable.load(DtypeData, p, preload="*")
+        np.testing.assert_array_equal(loaded.data, arr)
+        assert loaded.data.dtype == expected_dtype
+
+
+class TestSkipDefaults:
+    """skip_defaults=True omits default-valued fields from HDF5."""
+
+    def test_defaultsOmitted(self, tmp_path: Path) -> None:
+        @dataclass
+        class WithDefaults(Versionable, version=1, skip_defaults=True, register=False):
+            name: str
+            count: int = 0
+            tag: str = "default"
+
+        obj = WithDefaults(name="test")
+        p = tmp_path / "skip.h5"
+        versionable.save(obj, p)
+
+        with h5py.File(p, "r") as f:
+            assert f.attrs["name"] == "test"
+            assert "count" not in f.attrs
+            assert "tag" not in f.attrs
+
+        loaded = versionable.load(WithDefaults, p)
+        assert loaded.name == "test"
+        assert loaded.count == 0
+        assert loaded.tag == "default"
+
+
+class TestUnknownFieldHandling:
+    """unknown='ignore' and unknown='error' modes for HDF5."""
+
+    def test_ignoreUnknownFields(self, tmp_path: Path) -> None:
+        @dataclass
+        class V2(Versionable, version=1, name="UnkIgnore", register=True, unknown="ignore"):
+            name: str
+
+        # Write a file with an extra field
+        p = tmp_path / "extra.h5"
+        with h5py.File(p, "w") as f:
+            meta = f.create_group("__versionable__")
+            meta.attrs["__OBJECT__"] = "UnkIgnore"
+            meta.attrs["__VERSION__"] = 1
+            meta.attrs["__HASH__"] = ""
+            f.attrs["name"] = "test"
+            f.attrs["obsolete"] = 42
+
+        loaded = versionable.load(V2, p)
+        assert loaded.name == "test"
+        assert not hasattr(loaded, "obsolete")
+
+    def test_errorOnUnknownFields(self, tmp_path: Path) -> None:
+        from versionable.errors import UnknownFieldError
+
+        @dataclass
+        class V2Strict(Versionable, version=1, name="UnkError", register=True, unknown="error"):
+            name: str
+
+        p = tmp_path / "extra.h5"
+        with h5py.File(p, "w") as f:
+            meta = f.create_group("__versionable__")
+            meta.attrs["__OBJECT__"] = "UnkError"
+            meta.attrs["__VERSION__"] = 1
+            meta.attrs["__HASH__"] = ""
+            f.attrs["name"] = "test"
+            f.attrs["obsolete"] = 42
+
+        with pytest.raises(UnknownFieldError, match="obsolete"):
+            versionable.load(V2Strict, p)
+
+
+class TestHdf5Migration:
+    """Load a v1 HDF5 file with a v2 class that has a migration."""
+
+    def test_migrationAddsField(self, tmp_path: Path) -> None:
+        from versionable import Migration
+
+        @dataclass
+        class SensorV2(Versionable, version=2, name="MigSensor", register=True):
+            name: str
+            rate_Hz: float = 1000.0
+
+            class Migrate:
+                v1 = Migration().add("rate_Hz", default=1000.0)
+
+        # Write a v1 HDF5 file manually
+        p = tmp_path / "v1_sensor.h5"
+        with h5py.File(p, "w") as f:
+            meta = f.create_group("__versionable__")
+            meta.attrs["__OBJECT__"] = "MigSensor"
+            meta.attrs["__VERSION__"] = 1
+            meta.attrs["__HASH__"] = ""
+            f.attrs["name"] = "accelerometer"
+
+        loaded = versionable.load(SensorV2, p)
+        assert loaded.name == "accelerometer"
+        assert loaded.rate_Hz == 1000.0
+
+
 def _assertNoJsonAttrs(group: h5py.Group) -> None:
     """Recursively verify no attributes contain JSON strings."""
     for attrName in group.attrs:

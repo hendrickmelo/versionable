@@ -463,3 +463,27 @@ class TestEmptyCollectionsRoundtrip:
         assert isinstance(loaded.tags, list)
         assert isinstance(loaded.scores, list)
         assert isinstance(loaded.counts, list)
+
+
+@dataclass
+class _WithUnion(Versionable, version=1, register=False):
+    label: str
+    value: int | str
+
+
+class TestUnionTypeRoundtrip:
+    """int | str union field across backends."""
+
+    @pytest.mark.parametrize("ext", _DICT_BACKENDS)
+    def test_strValue(self, tmp_path: Path, ext: str) -> None:
+        obj = _WithUnion(label="test", value="hello")
+        loaded = _roundtrip(_WithUnion, obj, tmp_path, ext)
+        assert loaded.value == "hello"
+        assert type(loaded.value) is str
+
+    @pytest.mark.parametrize("ext", _DICT_BACKENDS)
+    def test_intValue(self, tmp_path: Path, ext: str) -> None:
+        obj = _WithUnion(label="test", value=42)
+        loaded = _roundtrip(_WithUnion, obj, tmp_path, ext)
+        assert loaded.value == 42
+        assert type(loaded.value) is int
