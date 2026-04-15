@@ -14,9 +14,9 @@ formats.
 Your data lives in files. Your code keeps changing. Without versioning, old files silently load with missing fields,
 wrong types, or stale values.
 
-**`versionable`** fixes that. Every file is stamped with a version number and a fingerprint of its structure. Files
-written by v1 of your code load cleanly into v5, automatically migrated, never silently broken. Save to standard formats
-out of the box: JSON, HDF5, YAML, and TOML.
+**`versionable`** fixes that. Like database migrations, but for files. Every file is stamped with a version number and a
+fingerprint of its structure. Files written by v1 of your code load cleanly into v5, automatically migrated, never
+silently broken. Save to standard formats out of the box: JSON, HDF5, YAML, and TOML.
 
 **What you get:**
 
@@ -110,27 +110,29 @@ loaded = versionable.load(SensorConfig, "config.yaml")
 assert loaded.magnitude == 9.81
 ```
 
-### Catching Version Drift
+### The Schema Hash — Friction as a Feature
 
-The `hash` parameter is a fingerprint of your fields and their types. It's optional, but when present it catches version
-drift: if you change a field and forget to bump the version, Python raises an error as soon as the module is imported.
-Not when a user opens a corrupt file in production. During development, in CI, at deploy time.
+The `hash` parameter is optional — everything works without it. But when present, it acts as a tripwire.
 
-For example, if you rename `value` to `magnitude` but keep the old hash:
+Without it, here's what happens: you rename a field, forget to add a migration, and old files load with a missing field
+that silently defaults to zero. Your experiment runs with wrong calibration data for a week before anyone notices.
+
+The hash prevents that. It's a fingerprint of your fields and their types, validated at _import time_ — not at runtime,
+not in production. Change a field and forget to update the version? Python won't even import:
 
 ```python
-# This raises at import time — not at runtime, not in production
 @dataclass
-class SensorConfig(Versionable, version=2, hash="4b7866"):  # ⬅ Old V1 Hash
+class SensorConfig(Versionable, version=2, hash="4b7866"):  # ⬅ old hash
     name: str
     magnitude: float  # changed, but hash wasn't updated
-    ...
 
 # HashMismatchError: SensorConfig: hash mismatch — declared '4b7866',
 #   computed 'a70249'. Update the hash parameter to 'a70249'.
 ```
 
-Update the hash, add a migration, and you're done ✔️. A few weird looking characters now, and your data is future-proof.
+That error is the point. It means you can't accidentally ship a schema change without a migration. The hash makes
+breaking changes visible during development, in CI, at deploy time — never in production. Think of it like a type
+checker for your data format: optional, zero runtime cost, catches mistakes before they matter.
 
 ### Working with Large Data
 
@@ -176,15 +178,21 @@ If you're an AI agent working with versionable, see **[AGENT.md](docs/AGENT.md)*
 For custom type converters, HDF5 support, and more, see the
 **[full documentation](https://versionable.readthedocs.io)**.
 
+## Background
+
+The pattern behind **`versionable`** has been used in production C++ systems for over 15 years — from `CArchive`-based
+serialization to modern C++11 variadic macros. Some version of this pattern has been a part of every project the authors
+have worked on. This is our second Python implementation of a proven approach, built with modern type-safe Python. The
+test suite has a ~1:1 ratio of test code to source code, with cross-backend round-trip coverage and edge-case validation
+across all four backends.
+
+Have questions? See the **[FAQ](docs/faq.md)**. Want to contribute? See the **[contributing guide](CONTRIBUTING.md)**.
+
 ## Acknowledgements
 
-The idea behind versionable started over 15 years ago in C++, where I first learned the approach from
-[Steve Araiza](https://github.com/saraiza). Over the years the idea of a Serializable / Versionable class evolved from
-using `CArchive` to make use of C++11, variadic macros, and other fun modern C++ features. Some version of this pattern
-has been a part of every project I've worked on since those days.
-
-This is the Python version of the idea. It is built using modern, type-safe Python with great fresh ideas from
-[Emma Powers](https://github.com/emmapowers/).
+The idea started with [Steve Araiza](https://github.com/saraiza), who first taught me this approach. Over the years it
+evolved through many C++ iterations, and every project I've worked on since has used some version of this pattern.
+[Emma Powers](https://github.com/emmapowers/) brought great fresh ideas to this Python implementation.
 
 A big thank you to both of them! 🥓🥞🍳
 
