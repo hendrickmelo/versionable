@@ -120,6 +120,13 @@ jobs:
           NEXT_DEV: ${{ steps.next.outputs.version }}
         run: sed -i "s/^version = .*/version = \"$NEXT_DEV\"/" pyproject.toml
 
+      - uses: prefix-dev/setup-pixi@v0.9.1
+        with:
+          run-install: false
+
+      - name: Update pixi.lock
+        run: pixi install
+
       - name: Create PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -127,7 +134,7 @@ jobs:
         run: |
           BRANCH="chore/bump-${NEXT_DEV}"
           git checkout -b "$BRANCH"
-          git add pyproject.toml
+          git add pyproject.toml pixi.lock
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git commit -m "Bump version to ${NEXT_DEV}"

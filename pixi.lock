@@ -6651,8 +6651,8 @@ packages:
   timestamp: 1767320173250
 - pypi: ./
   name: versionable
-  version: 0.1.0
-  sha256: f9d1a84080e3934116559519ebc7b75477711780c7086b40a63d5ff65d242ea3
+  version: 0.1.1.dev0
+  sha256: f0be20ac7043fdef15ca812721d637fa74d018fcbc69b870380b4659bcaba77c
   requires_dist:
   - numpy>=1.26
   - toml>=0.10 ; extra == 'toml'
