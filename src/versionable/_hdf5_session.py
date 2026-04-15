@@ -10,12 +10,17 @@ from __future__ import annotations
 import logging
 import operator
 import os
+import types
 import typing
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, NoReturn, SupportsIndex, cast
 
-import h5py
+try:
+    import h5py
+except ImportError as e:
+    raise ImportError("HDF5 backend requires h5py — install it with: `pip install h5py hdf5plugin`") from e
+
 import numpy as np
 
 from versionable._base import Versionable, _resolveFields, metadata
@@ -237,7 +242,7 @@ class Hdf5Session[T: Versionable]:
         self,
         excType: type[BaseException] | None,
         excVal: BaseException | None,
-        excTb: Any,
+        excTb: types.TracebackType | None,
     ) -> None:
         try:
             # Warn about required fields that were never set

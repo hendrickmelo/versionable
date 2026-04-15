@@ -9,6 +9,7 @@
     "**/__pycache__",
     "**/.*",
     "src/versionable/_toml_backend.py",
+    "src/versionable/_yaml_backend.py",
     "src/versionable/_hdf5_backend.py",
     "src/versionable/_hdf5_compression.py",
     "src/versionable/_hdf5_session.py",

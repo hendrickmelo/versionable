@@ -448,9 +448,9 @@ class TestNativeArrayCollections:
 
         with h5py.File(p, "r") as f:
             assert "traces" in f
-            traces_group = f["traces"]
-            assert isinstance(traces_group, h5py.Group)
-            assert sorted(traces_group.keys()) == ["0", "1"]
+            tracesGroup = f["traces"]
+            assert isinstance(tracesGroup, h5py.Group)
+            assert sorted(tracesGroup.keys()) == ["0", "1"]
 
     def test_emptyListNdarray(self, tmp_path: Path) -> None:
         obj = _WithTraces(name="test", traces=[])
@@ -771,7 +771,7 @@ class TestDtypeCoercion:
     """Verify that save/load preserves the original array dtype."""
 
     @pytest.mark.parametrize(
-        ("src_dtype", "expected_dtype"),
+        ("srcDtype", "expectedDtype"),
         [
             (np.float64, np.float64),
             (np.float32, np.float32),
@@ -783,20 +783,20 @@ class TestDtypeCoercion:
     def test_dtypePreserved(
         self,
         tmp_path: Path,
-        src_dtype: type[np.generic],
-        expected_dtype: type[np.generic],
+        srcDtype: type[np.generic],
+        expectedDtype: type[np.generic],
     ) -> None:
         @dataclass
         class DtypeData(Versionable, version=1, register=False):
             data: npt.NDArray[np.generic]
 
-        arr = np.arange(10, dtype=src_dtype)
+        arr = np.arange(10, dtype=srcDtype)
         obj = DtypeData(data=arr)
         p = tmp_path / "dtype.h5"
         versionable.save(obj, p)
         loaded = versionable.load(DtypeData, p, preload="*")
         np.testing.assert_array_equal(loaded.data, arr)
-        assert loaded.data.dtype == expected_dtype
+        assert loaded.data.dtype == expectedDtype
 
 
 class TestSkipDefaults:

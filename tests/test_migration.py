@@ -18,7 +18,7 @@ from versionable._migration import applyMigrations, resolveMigrations
 from versionable.errors import MigrationError, UpgradeRequiredError
 
 
-def _has_toml() -> bool:
+def _hasToml() -> bool:
     try:
         import toml  # noqa: F401
 
@@ -261,7 +261,7 @@ class TestEndToEndMigration:
 
 
 @pytest.mark.skipif(
-    not _has_toml(),
+    not _hasToml(),
     reason="toml not installed",
 )
 class TestAddDefaultBehavior:

@@ -7,7 +7,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-import hdf5plugin
+try:
+    import hdf5plugin
+except ImportError as e:
+    raise ImportError("HDF5 compression presets require hdf5plugin — install it with: `pip install hdf5plugin`") from e
 
 type Hdf5CompressionAlgorithm = Literal["zstd", "gzip", "lzf", "blosc"]
 type BloscCompressor = Literal["zstd", "blosclz", "lz4", "lz4hc", "zlib"]
