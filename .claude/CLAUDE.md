@@ -58,9 +58,8 @@ The version lives in `pyproject.toml` (`version = "X.Y.Z"` or `"X.Y.Z.dev0"`).
 
 **Rules:**
 
-- Never leave a release version (without `.devN`) on `main` after a release — always bump to the next dev version
-- Each PR to `main` must increment the dev number (e.g., `0.0.2.dev3` → `0.0.2.dev4`) so source installs are distinguishable
-- The `pixi.lock` depends on this version being stable between releases; `.devN` versions keep it stable
+- Never leave a release version (without `.dev0`) on `main` after a release — always bump to the next dev version immediately after tagging
+- PRs do not need to increment the dev number — `dev0` stays until the next release
 - `__version__` is read at runtime via `importlib.metadata` — it reflects whatever is installed
 
 ## Pre-Commit Checklist
