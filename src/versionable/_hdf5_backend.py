@@ -29,12 +29,16 @@ from pathlib import Path
 from typing import Any, ClassVar
 from urllib.parse import unquote
 
-import h5py
+try:
+    import h5py
+except ImportError as e:
+    raise ImportError("HDF5 backend requires h5py — install it with: `pip install h5py hdf5plugin`") from e
+
 import numpy as np
 
 from versionable._backend import Backend, registerBackend
 from versionable._base import Versionable, _resolveFields, metadata
-from versionable._hdf5_compression import ZSTD_DEFAULT, Hdf5Compression
+from versionable._hdf5_compression import DEFAULT_COMPRESSION, Hdf5Compression
 from versionable._lazy import ArrayNotLoaded, LazyArray, LazyContext
 from versionable._types import _registry
 from versionable.errors import BackendError
@@ -59,7 +63,7 @@ class Hdf5Backend(Backend):
         compression: Hdf5Compression | None = None,
         **kwargs: Any,
     ) -> None:
-        comp = compression or ZSTD_DEFAULT
+        comp = compression or DEFAULT_COMPRESSION
         fieldTypes = _resolveFields(cls)
         try:
             with h5py.File(path, "w") as f:
@@ -325,6 +329,12 @@ def _readMeta(group: h5py.Group) -> dict[str, Any]:
     """Read metadata from the __versionable__ child group."""
     if _VERSIONABLE_GROUP in group:
         metaGroup = group[_VERSIONABLE_GROUP]
+        fileFormat = metaGroup.attrs.get("__FORMAT__")
+        if fileFormat is not None:
+            raise BackendError(
+                f"File uses versionable format {fileFormat!r}, but this version only supports "
+                f"format-less files. Upgrade versionable to read this file."
+            )
         return {
             "__OBJECT__": str(metaGroup.attrs.get("__OBJECT__", "")),
             "__VERSION__": int(metaGroup.attrs.get("__VERSION__", 1)),

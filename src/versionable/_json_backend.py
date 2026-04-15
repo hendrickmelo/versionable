@@ -60,6 +60,13 @@ class JsonBackend(Backend):
         if not isinstance(metaTable, dict):
             raise BackendError(f"Missing or invalid __versionable__ metadata in {path}")
 
+        fileFormat = metaTable.get("__FORMAT__")
+        if fileFormat is not None:
+            raise BackendError(
+                f"File {path} uses versionable format {fileFormat!r}, but this version only supports "
+                f"format-less files. Upgrade versionable to read this file."
+            )
+
         meta = {
             "__OBJECT__": metaTable.get("__OBJECT__", ""),
             "__VERSION__": metaTable.get("__VERSION__"),

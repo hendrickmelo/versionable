@@ -43,10 +43,6 @@ class Hdf5FieldInfo:
     axis: int | None = None
 
 
-# Backwards-compatibility alias
-Appendable = Hdf5FieldInfo
-
-
 def _getHdf5FieldInfo(fieldType: Any) -> Hdf5FieldInfo | None:
     """Extract Hdf5FieldInfo metadata from an Annotated type, if present."""
     if typing.get_origin(fieldType) is Annotated:

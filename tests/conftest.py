@@ -5,26 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Literal, Optional
+from typing import Literal
 
-import numpy as np
-import numpy.typing as npt
+import numpy as np  # noqa: TC002 — needed at runtime for NDArray type resolution
+import numpy.typing as npt  # noqa: TC002
 
 from versionable._base import Versionable
-from versionable._hash import computeHash
 from versionable._types import literalFallback
 
 # --- Sample classes used across tests ---
 
 
-def _hash(**fields: type) -> str:
-    return computeHash(fields)
-
-
 @dataclass
-class SimpleConfig(
-    Versionable, version=1, hash=computeHash({"name": str, "debug": bool, "retries": int}), register=False
-):
+class SimpleConfig(Versionable, version=1, hash="ed3a90", register=False):
     name: str
     debug: bool = False
     retries: int = 3
@@ -34,7 +27,7 @@ class SimpleConfig(
 class WithOptional(
     Versionable,
     version=1,
-    hash=computeHash({"label": str, "description": Optional[str]}),  # noqa: UP045 — hash depends on Optional form
+    hash="36e64d",
     register=False,
 ):
     label: str
@@ -45,7 +38,7 @@ class WithOptional(
 class WithArray(
     Versionable,
     version=1,
-    hash=computeHash({"name": str, "data": npt.NDArray[np.float64]}),
+    hash="c0dc53",
     register=False,
 ):
     name: str
@@ -61,7 +54,7 @@ class Priority(Enum):
 class WithEnum(
     Versionable,
     version=1,
-    hash=computeHash({"title": str, "priority": Priority}),
+    hash="139030",
     register=False,
 ):
     title: str
@@ -72,7 +65,7 @@ class WithEnum(
 class Inner(
     Versionable,
     version=1,
-    hash=computeHash({"x": float, "y": float}),
+    hash="e37514",
     name="Inner",
 ):
     x: float
@@ -83,7 +76,7 @@ class Inner(
 class WithNested(
     Versionable,
     version=1,
-    hash=computeHash({"name": str, "point": Inner}),
+    hash="db925f",
     register=False,
 ):
     name: str
@@ -94,7 +87,7 @@ class WithNested(
 class WithDatetime(
     Versionable,
     version=1,
-    hash=computeHash({"label": str, "createdAt": datetime}),
+    hash="221aca",
     register=False,
 ):
     label: str
@@ -105,7 +98,7 @@ class WithDatetime(
 class WithList(
     Versionable,
     version=1,
-    hash=computeHash({"tags": list[str], "scores": list[float]}),
+    hash="2086ae",
     register=False,
 ):
     tags: list[str]
@@ -116,7 +109,7 @@ class WithList(
 class WithSkipDefaults(
     Versionable,
     version=1,
-    hash=computeHash({"name": str, "debug": bool, "count": int}),
+    hash="2bb7c4",
     skip_defaults=True,
     register=False,
 ):
@@ -129,7 +122,7 @@ class WithSkipDefaults(
 class WithLiteral(
     Versionable,
     version=1,
-    hash=computeHash({"name": str, "mode": Literal["fast", "slow"]}),
+    hash="3c2d1b",
     register=False,
 ):
     name: str
@@ -140,7 +133,7 @@ class WithLiteral(
 class WithLiteralFallback(
     Versionable,
     version=1,
-    hash=computeHash({"name": str, "mode": Literal["fast", "slow"]}),
+    hash="3c2d1b",
     register=False,
 ):
     name: str
@@ -151,7 +144,7 @@ class WithLiteralFallback(
 class WithLiteralNoValidation(
     Versionable,
     version=1,
-    hash=computeHash({"name": str, "mode": Literal["fast", "slow"]}),
+    hash="3c2d1b",
     register=False,
     validate_literals=False,
 ):

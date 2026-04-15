@@ -26,6 +26,23 @@ html_theme_options = {
     "sidebar_hide_name": True,
     "light_logo": "logo-stacked-above.svg",
     "dark_logo": "logo-stacked-above.svg",
+    "source_repository": "https://github.com/hendrickmelo/versionable",
+    "source_branch": "main",
+    "source_directory": "docs/",
+    "footer_icons": [
+        {
+            "name": "GitHub",
+            "url": "https://github.com/hendrickmelo/versionable",
+            "img": "github.svg",
+            "class": "",
+        },
+        {
+            "name": "LinkedIn",
+            "url": "https://www.linkedin.com/in/hendrickmelo",
+            "img": "linkedin.svg",
+            "class": "",
+        },
+    ],
 }
 
 myst_enable_extensions = ["colon_fence"]

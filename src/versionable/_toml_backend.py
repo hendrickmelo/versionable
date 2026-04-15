@@ -34,7 +34,10 @@ import json
 from pathlib import Path
 from typing import Any, ClassVar
 
-import toml
+try:
+    import toml
+except ImportError as e:
+    raise ImportError("TOML backend requires toml — install it with: `pip install toml`") from e
 
 from versionable._backend import Backend, registerBackend
 from versionable._base import _resolveFields
@@ -94,6 +97,13 @@ class TomlBackend(Backend):
         metaTable = data.pop("__versionable__", {})
         if not isinstance(metaTable, dict):
             raise BackendError(f"Expected __versionable__ to be a table in {path}, got {type(metaTable).__name__}")
+        fileFormat = metaTable.get("__FORMAT__")
+        if fileFormat is not None:
+            raise BackendError(
+                f"File {path} uses versionable format {fileFormat!r}, but this version only supports "
+                f"format-less files. Upgrade versionable to read this file."
+            )
+
         meta = {
             "__OBJECT__": metaTable.get("__OBJECT__", ""),
             "__VERSION__": metaTable.get("__VERSION__"),
@@ -150,9 +160,10 @@ def _fromTomlSafe(value: Any) -> Any:
 def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) -> str:
     """Comment out TOML value lines that match the class defaults.
 
-    The ``[__versionable__]`` section is always kept uncommented (required for
-    deserialization).  Section headers whose children are *all* defaults
-    are also commented out.
+    Section headers and ``__versionable__`` blocks are never commented — only
+    individual field value lines.  This ensures nested Versionable
+    sections remain structurally intact so users can uncomment just
+    the fields they need.
     """
     import dataclasses
 
@@ -197,22 +208,14 @@ def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) 
     # Walk input lines
     lines = content.splitlines(keepends=True)
     result: list[str] = []
-    sectionIdx: int | None = None
-    sectionAllDefault = True
     inMetaSection = False
 
     for line in lines:
         stripped = line.rstrip("\n")
 
-        # Section header
+        # Section header — always keep uncommented
         if stripped.startswith("["):
-            # Retroactively comment previous section if all children were defaults
-            if sectionIdx is not None and sectionAllDefault:
-                result[sectionIdx] = "# " + result[sectionIdx]
-
-            inMetaSection = stripped == "[__versionable__]"
-            sectionIdx = len(result)
-            sectionAllDefault = True
+            inMetaSection = "__versionable__" in stripped
             result.append(line)
             continue
 
@@ -223,7 +226,12 @@ def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) 
 
         # __versionable__ section — always keep uncommented
         if inMetaSection:
-            sectionAllDefault = False
+            result.append(line)
+            continue
+
+        # Metadata keys — always keep uncommented (even inside nested sections)
+        key = stripped.split("=", 1)[0].strip()
+        if key.startswith("__") and key.endswith("__"):
             result.append(line)
             continue
 
@@ -231,12 +239,7 @@ def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) 
         if stripped in defaultLineSet:
             result.append("# " + line)
         else:
-            sectionAllDefault = False
             result.append(line)
-
-    # Handle last section
-    if sectionIdx is not None and sectionAllDefault:
-        result[sectionIdx] = "# " + result[sectionIdx]
 
     return "".join(result)
 

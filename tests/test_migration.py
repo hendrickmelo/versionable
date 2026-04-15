@@ -1,4 +1,8 @@
-"""Tests for the migration system."""
+"""Tests for the migration system.
+
+Hash validation is tested separately in test_hash.py and test_base.py.
+Classes here omit the hash parameter to keep declarations concise.
+"""
 
 from __future__ import annotations
 
@@ -10,9 +14,17 @@ import pytest
 
 import versionable
 from versionable import Migration, MigrationContext, Versionable, migration
-from versionable._hash import computeHash
 from versionable._migration import applyMigrations, resolveMigrations
 from versionable.errors import MigrationError, UpgradeRequiredError
+
+
+def _hasToml() -> bool:
+    try:
+        import toml  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
 
 
 class TestDeclarativeOperations:
@@ -166,10 +178,9 @@ class TestResolveMigrations:
 class TestEndToEndMigration:
     def test_loadOldVersionJson(self, tmp_path: Path) -> None:
         """Load a v1 file with a v2 class that has a migration."""
-        h = computeHash({"name": str, "count": int})
 
         @dataclass
-        class Config(Versionable, version=2, hash=h, name="MigConfig", register=True):
+        class Config(Versionable, version=2, name="MigConfig", register=True):
             name: str
             count: int = 0
 
@@ -196,10 +207,8 @@ class TestEndToEndMigration:
         assert loaded.count == 42  # Filled by migration
 
     def test_loadWithRename(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str})
-
         @dataclass
-        class Doc(Versionable, version=2, hash=h, name="MigDoc", register=True):
+        class Doc(Versionable, version=2, name="MigDoc", register=True):
             name: str
 
             class Migrate:
@@ -223,10 +232,8 @@ class TestEndToEndMigration:
         assert loaded.name == "My Document"
 
     def test_multiVersionMigration(self, tmp_path: Path) -> None:
-        h = computeHash({"name": str, "retries": int})
-
         @dataclass
-        class AppConfig(Versionable, version=3, hash=h, name="MigApp", register=True):
+        class AppConfig(Versionable, version=3, name="MigApp", register=True):
             name: str
             retries: int = 3
 
@@ -253,6 +260,10 @@ class TestEndToEndMigration:
         assert loaded.retries == 3
 
 
+@pytest.mark.skipif(
+    not _hasToml(),
+    reason="toml not installed",
+)
 class TestAddDefaultBehavior:
     """Verify that Migration().add() injects the default only when the field is absent.
 

@@ -6,8 +6,10 @@ type converters, and pluggable storage backends.
 ## Installation
 
 ```bash
-pip install versionable            # Core (JSON, TOML, YAML)
-pip install versionable[hdf5]      # Add HDF5 support (h5py + hdf5plugin)
+pip install versionable            # Core (JSON backend, numpy)
+pip install pyyaml                 # Add YAML backend
+pip install toml                   # Add TOML backend
+pip install h5py hdf5plugin        # Add HDF5 backend
 ```
 
 ## Quick Start
@@ -31,8 +33,8 @@ class SensorConfig(Versionable, version=1, hash="<TBD>"):
 print(SensorConfig.hash())  # e.g. "a3f1c9"
 # Paste it into hash="a3f1c9", then:
 
-versionable.save(SensorConfig(sampleRate_Hz=1000.0), "config.yaml")
-loaded = versionable.load(SensorConfig, "config.yaml")
+versionable.save(SensorConfig(sampleRate_Hz=1000.0), "config.json")
+loaded = versionable.load(SensorConfig, "config.json")
 ```
 
 During development, call `ignoreHashErrors(True)` to get warnings instead of errors while you iterate on fields. Compute
@@ -80,12 +82,12 @@ class Outer(Versionable, version=1, hash="..."):
 import versionable
 
 # Backend auto-selected by extension
-versionable.save(obj, "config.yaml")
 versionable.save(obj, "config.json")
-versionable.save(obj, "config.toml")
-versionable.save(obj, "data.h5")
+versionable.save(obj, "config.yaml")   # requires pyyaml
+versionable.save(obj, "config.toml")   # requires toml
+versionable.save(obj, "data.h5")       # requires h5py + hdf5plugin
 
-loaded = versionable.load(MyClass, "config.yaml")
+loaded = versionable.load(MyClass, "config.json")
 ```
 
 **Load without knowing the type** (class must be registered and imported):
@@ -132,10 +134,11 @@ Arrays and array collections are lazy-loaded by default — `load()` returns ins
 Accessing an array field or indexing into a `list[np.ndarray]` triggers the disk read.
 
 ```python
-from versionable.hdf5 import ZSTD_DEFAULT, GZIP_DEFAULT
+import versionable
+from versionable.hdf5 import GZIP_DEFAULT, ZSTD_DEFAULT
 
-# Save with compression
-versionable.save(obj, "data.h5", compression=ZSTD_DEFAULT)
+# Save with compression (gzip is the default)
+versionable.save(obj, "data.h5", compression=GZIP_DEFAULT)
 
 # Load with selective preloading
 loaded = versionable.load(MyClass, "data.h5", preload=["largeArray"])
@@ -148,16 +151,79 @@ loaded = versionable.load(MyClass, "data.h5", metadataOnly=True)
 
 | Preset          | Notes                                    |
 | --------------- | ---------------------------------------- |
-| `ZSTD_DEFAULT`  | zstd level 3 — default, fast, good ratio |
+| `ZSTD_DEFAULT`  | zstd level 3 — fast, good ratio          |
 | `ZSTD_FAST`     | zstd level 1 — fastest                   |
-| `ZSTD_BEST`     | zstd level 19 — best ratio, slow         |
+| `ZSTD_BEST`     | zstd level 9 — best ratio, slow          |
 | `BLOSC_DEFAULT` | Blosc + zstd — fast for large arrays     |
-| `GZIP_DEFAULT`  | gzip level 4 — universal compatibility   |
+| `GZIP_DEFAULT`  | gzip level 4 — default, universal compat |
 | `LZF`           | LZF — fastest, no extra deps             |
 | `UNCOMPRESSED`  | No compression                           |
 
-zstd and blosc require `hdf5plugin` (included in `[hdf5]` extra). gzip and lzf work everywhere — use `GZIP_DEFAULT` if
-files must be readable by MATLAB or HDFView.
+gzip (default) and lzf work everywhere. zstd and blosc require `hdf5plugin` — use them if compatibility with other tools
+is not a major concern.
+
+### HDF5 Sessions — Incremental Writes and Random Access
+
+For large or long-running data, `versionable.hdf5.open()` provides incremental writes to chunked, resizable datasets and
+random access reads without loading the whole file into memory.
+
+```python
+from dataclasses import dataclass, field
+
+import numpy as np
+from numpy.typing import NDArray
+
+import versionable
+import versionable.hdf5
+from versionable import Versionable
+
+
+@dataclass
+class Experiment(Versionable, version=1, hash="536849"):
+    name: str
+    traces: NDArray[np.float64] = field(default_factory=lambda: np.empty((0, 1024)))
+
+# Write incrementally — each append extends the dataset on disk
+session = versionable.hdf5.open(Experiment, "run.h5")
+with session as obj:
+    obj.name = "acquisition-001"
+    for batch in data_source:
+        obj.traces.append(batch)
+        session.flush()             # flush HDF5 buffers to OS
+
+# Resume an existing file
+session = versionable.hdf5.open(Experiment, "run.h5", mode="resume")
+with session as obj:
+    obj.traces.append(more_data)
+
+# Random access — read slices directly from disk
+with versionable.hdf5.open(Experiment, "run.h5", mode="read") as obj:
+    print(obj.traces[1000])         # reads only row 1000
+    print(obj.traces[50:100])       # reads only this slice
+```
+
+**Session modes:**
+
+| Mode       | Description                                      |
+| ---------- | ------------------------------------------------ |
+| `"create"` | New file (default). Fails if file exists         |
+| `"resume"` | Append to existing file. Version/hash must match |
+| `"read"`   | Read-only access. No writes allowed              |
+
+**Field types in sessions:**
+
+| Type                  | Behavior                                                 |
+| --------------------- | -------------------------------------------------------- |
+| Scalars               | Assignment writes through to disk                        |
+| `NDArray` / `ndarray` | `DatasetArray` with `append()`, `resize()`, slice access |
+| `list[np.ndarray]`    | `TrackedList` — `append()`/`extend()` write through      |
+| `dict[str, ndarray]`  | `TrackedDict` — `__setitem__`/`update()` write through   |
+
+Sessions do not support migrations. The file's version and hash must exactly match the class. `DatasetArray` fields
+raise `BackendError` after the session is closed — copy data before closing if needed.
+
+**Compression on resume:** Appending to an existing dataset uses the original dataset's compression filter, not the
+session's `compression` parameter. The session compression only applies to newly created datasets.
 
 ## Supported Types
 
@@ -385,7 +451,19 @@ match type(obj).__name__:
         processResult(obj)
 ```
 
-### Custom backend
+### Registering existing backends for custom extensions
+
+Use `registerBackend` to map new file extensions to a built-in backend class:
+
+```python
+from versionable import JsonBackend, registerBackend
+
+registerBackend([".jsonc", ".json5"], JsonBackend)
+```
+
+All four backend classes are importable from `versionable`: `JsonBackend`, `TomlBackend`, `YamlBackend`, `Hdf5Backend`.
+
+### Writing a custom backend
 
 ```python
 from versionable import Backend, registerBackend

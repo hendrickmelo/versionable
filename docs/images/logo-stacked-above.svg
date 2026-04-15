@@ -41,7 +41,7 @@
 </style>
 
 <!-- Wordmark above v3 — aligned to v3 width (x=76, 148px wide) -->
-<text y="82" x="76" font-family="ui-monospace,monospace" font-size="18" textLength="148" lengthAdjust="spacing"><tspan class="t0" font-weight="700" fill="#085041">v</tspan><tspan class="t1" font-weight="700" fill="#085041">e</tspan><tspan class="t2" font-weight="700" fill="#085041">r</tspan><tspan class="t3" font-weight="700" fill="#085041">s</tspan><tspan class="t4" font-weight="700" fill="#085041">i</tspan><tspan class="t5" font-weight="700" fill="#085041">o</tspan><tspan class="t6" font-weight="700" fill="#085041">n</tspan><tspan class="t7" font-weight="400" fill="#1D9E75">a</tspan><tspan class="t8" font-weight="400" fill="#1D9E75">b</tspan><tspan class="t9" font-weight="400" fill="#1D9E75">l</tspan><tspan class="t10" font-weight="400" fill="#1D9E75">e</tspan></text>
+<text y="82" x="70" font-family="ui-monospace,monospace" font-size="18" textLength="128" lengthAdjust="spacing"><tspan class="t0" font-weight="700" fill="#085041">v</tspan><tspan class="t1" font-weight="700" fill="#085041">e</tspan><tspan class="t2" font-weight="700" fill="#085041">r</tspan><tspan class="t3" font-weight="700" fill="#085041">s</tspan><tspan class="t4" font-weight="700" fill="#085041">i</tspan><tspan class="t5" font-weight="700" fill="#085041">o</tspan><tspan class="t6" font-weight="700" fill="#085041">n</tspan><tspan class="t7" font-weight="400" fill="#1D9E75">a</tspan><tspan class="t8" font-weight="400" fill="#1D9E75">b</tspan><tspan class="t9" font-weight="400" fill="#1D9E75">l</tspan><tspan class="t10" font-weight="400" fill="#1D9E75">e</tspan></text>
 
 <!-- Mark shifted down 30px to make room for text above -->
 <g transform="translate(0,30)">
@@ -52,7 +52,7 @@
   <!-- Dashed connectors -->
   <line class="a-l1" x1="49" y1="154" x2="54" y2="154" stroke="#5DCAA5" stroke-width="1.5" stroke-dasharray="4 3" stroke-linecap="round"/>
   <line class="a-l2" x1="49" y1="127" x2="62" y2="127" stroke="#0F6E56" stroke-width="1.5" stroke-dasharray="4 3" stroke-linecap="round"/>
-  <line class="a-l3" x1="49" y1="88" x2="76" y2="88" stroke="#0F6E56" stroke-width="1.5" stroke-dasharray="4 3" stroke-linecap="round"/>
+  <line class="a-l3" x1="49" y1="88" x2="70" y2="88" stroke="#0F6E56" stroke-width="1.5" stroke-dasharray="4 3" stroke-linecap="round"/>
 
   <!-- Version circles -->
   <circle class="a-c1" cx="42" cy="154" r="7" fill="#9FE1CB" stroke="#5DCAA5" stroke-width="1.2"/>
@@ -77,12 +77,12 @@
 
   <!-- v3 -->
   <g class="c3">
-    <rect x="76" y="60" width="148" height="56" rx="8" fill="#1D9E75" stroke="#085041" stroke-width=".8"/>
-    <text x="83" y="84" font-family="ui-monospace,monospace" font-size="12" font-weight="600" fill="#fff">v3</text>
-    <line x1="111" y1="74" x2="202" y2="74" stroke="#9FE1CB" stroke-width="1.2" stroke-linecap="round"/>
-    <line x1="111" y1="85" x2="178" y2="85" stroke="#E1F5EE" stroke-width="1.2" stroke-linecap="round"/>
-    <line x1="111" y1="96" x2="192" y2="96" stroke="#9FE1CB" stroke-width="1.2" stroke-linecap="round"/>
-    <line x1="111" y1="107" x2="166" y2="107" stroke="#E1F5EE" stroke-width="1.2" stroke-linecap="round"/>
+    <rect x="70" y="60" width="128" height="56" rx="8" fill="#1D9E75" stroke="#085041" stroke-width=".8"/>
+    <text x="77" y="84" font-family="ui-monospace,monospace" font-size="12" font-weight="600" fill="#fff">v3</text>
+    <line x1="105" y1="74" x2="176" y2="74" stroke="#9FE1CB" stroke-width="1.2" stroke-linecap="round"/>
+    <line x1="105" y1="85" x2="152" y2="85" stroke="#E1F5EE" stroke-width="1.2" stroke-linecap="round"/>
+    <line x1="105" y1="96" x2="166" y2="96" stroke="#9FE1CB" stroke-width="1.2" stroke-linecap="round"/>
+    <line x1="105" y1="107" x2="140" y2="107" stroke="#E1F5EE" stroke-width="1.2" stroke-linecap="round"/>
   </g>
 </g>
 </svg>

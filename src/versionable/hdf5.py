@@ -2,8 +2,9 @@
 
 Usage::
 
-    from versionable.hdf5 import Hdf5Compression, ZSTD_DEFAULT
-    versionable.save(obj, "out.h5", compression=ZSTD_DEFAULT)
+    import versionable
+    from versionable.hdf5 import Hdf5Compression, GZIP_DEFAULT
+    versionable.save(obj, "out.h5", compression=GZIP_DEFAULT)
 
     # Save-as-you-go session
     import versionable.hdf5
@@ -18,6 +19,7 @@ from typing import Literal, overload
 
 from versionable._base import Versionable
 from versionable._hdf5_compression import BLOSC_DEFAULT as BLOSC_DEFAULT
+from versionable._hdf5_compression import DEFAULT_COMPRESSION as DEFAULT_COMPRESSION
 from versionable._hdf5_compression import GZIP_DEFAULT as GZIP_DEFAULT
 from versionable._hdf5_compression import LZF as LZF
 from versionable._hdf5_compression import UNCOMPRESSED as UNCOMPRESSED
@@ -68,7 +70,7 @@ def open[T: Versionable](  # noqa: A001 — intentional; mirrors stdlib pattern 
             ``"resume"`` — open existing file, restore state, continue.
             ``"overwrite"`` — delete existing file if present, create new.
             ``"read"`` — open existing file read-only, no mutations allowed.
-        compression: Compression preset (default: ZSTD_DEFAULT).
+        compression: Compression preset (default: DEFAULT_COMPRESSION, currently gzip level 4).
 
     Returns:
         Context manager yielding a file-backed instance of cls.
@@ -82,6 +84,7 @@ def open[T: Versionable](  # noqa: A001 — intentional; mirrors stdlib pattern 
 
 __all__ = [
     "BLOSC_DEFAULT",
+    "DEFAULT_COMPRESSION",
     "GZIP_DEFAULT",
     "LZF",
     "UNCOMPRESSED",

@@ -81,11 +81,12 @@ pixi run ci                     # Full CI pipeline (check-only mode)
 
 ```python
 import versionable
+from versionable.hdf5 import GZIP_DEFAULT
 
 # Save/load with auto-detected backend
 versionable.save(obj, "config.yaml")
 versionable.save(obj, "config.yaml", commentDefaults=True)      # Comment out defaults
-versionable.save(obj, "data.h5", compression=ZSTD_DEFAULT)      # HDF5 with compression
+versionable.save(obj, "data.h5", compression=GZIP_DEFAULT)      # HDF5 with compression
 
 loaded = versionable.load(MyClass, "config.yaml")
 loaded = versionable.load(MyClass, "data.h5", preload=["big"])   # Eager-load specific arrays
@@ -228,8 +229,8 @@ Backend is auto-selected by file extension. Custom backends: subclass `Backend`,
 **TOML caveat:** No native `null` — `None` fields are omitted on save, restored from defaults on load. Every TOML field
 should have a default.
 
-**HDF5 compression presets** (from `versionable.hdf5`): `ZSTD_DEFAULT`, `ZSTD_FAST`, `ZSTD_BEST`, `BLOSC_DEFAULT`,
-`GZIP_DEFAULT`, `LZF`, `UNCOMPRESSED`. zstd/blosc require `hdf5plugin`; gzip/lzf are universal.
+**HDF5 compression presets** (from `versionable.hdf5`): `GZIP_DEFAULT` (default), `ZSTD_DEFAULT`, `ZSTD_FAST`,
+`ZSTD_BEST`, `BLOSC_DEFAULT`, `LZF`, `UNCOMPRESSED`. gzip/lzf are universal; zstd/blosc require `hdf5plugin`.
 
 ### Error Hierarchy
 

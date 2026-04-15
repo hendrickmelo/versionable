@@ -7,7 +7,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-import hdf5plugin
+
+def _requireHdf5plugin() -> Any:
+    """Lazy-import hdf5plugin — only needed for zstd/blosc algorithms."""
+    try:
+        import hdf5plugin
+
+        return hdf5plugin
+    except ImportError as e:
+        raise ImportError(
+            "zstd/blosc compression requires hdf5plugin — install it with: `pip install hdf5plugin`"
+        ) from e
+
 
 type Hdf5CompressionAlgorithm = Literal["zstd", "gzip", "lzf", "blosc"]
 type BloscCompressor = Literal["zstd", "blosclz", "lz4", "lz4hc", "zlib"]
@@ -17,12 +28,14 @@ type BloscCompressor = Literal["zstd", "blosclz", "lz4", "lz4hc", "zlib"]
 class Hdf5Compression:
     """Compression settings for HDF5 dataset creation.
 
-    The default uses zstd (level 3) — a good balance of speed and ratio.
+    The default uses gzip (level 4) for maximum compatibility across tools
+    (MATLAB, HDFView, h5py without plugins). Use zstd or blosc for better
+    speed/ratio when all readers have hdf5plugin.
 
     Usage::
 
-        from versionable.hdf5 import Hdf5Compression, ZSTD_DEFAULT
-        versionable.save(obj, "out.h5", compression=ZSTD_DEFAULT)
+        from versionable.hdf5 import Hdf5Compression, GZIP_DEFAULT
+        versionable.save(obj, "out.h5", compression=GZIP_DEFAULT)
 
     Or with custom settings::
 
@@ -33,8 +46,8 @@ class Hdf5Compression:
     for details on filter parameters.
     """
 
-    algorithm: Hdf5CompressionAlgorithm | None = "zstd"
-    level: int | None = 3
+    algorithm: Hdf5CompressionAlgorithm | None
+    level: int | None
     shuffle: bool = True
     bloscCompressor: BloscCompressor = "zstd"
 
@@ -44,9 +57,11 @@ class Hdf5Compression:
             return {}
 
         if self.algorithm == "zstd":
+            hdf5plugin = _requireHdf5plugin()
             return dict(**hdf5plugin.Zstd(clevel=3 if self.level is None else self.level))
 
         if self.algorithm == "blosc":
+            hdf5plugin = _requireHdf5plugin()
             shuffleFilter = hdf5plugin.Blosc2.SHUFFLE if self.shuffle else hdf5plugin.Blosc2.NOFILTER
             return dict(
                 **hdf5plugin.Blosc2(
@@ -69,10 +84,12 @@ class Hdf5Compression:
 # Presets
 # ---------------------------------------------------------------------------
 
-ZSTD_DEFAULT = Hdf5Compression()
-BLOSC_DEFAULT = Hdf5Compression(algorithm="blosc", level=5, bloscCompressor="zstd")
+GZIP_DEFAULT = Hdf5Compression(algorithm="gzip", level=4)
+ZSTD_DEFAULT = Hdf5Compression(algorithm="zstd", level=3)
 ZSTD_FAST = Hdf5Compression(algorithm="zstd", level=1)
 ZSTD_BEST = Hdf5Compression(algorithm="zstd", level=9)
-GZIP_DEFAULT = Hdf5Compression(algorithm="gzip", level=4)
+BLOSC_DEFAULT = Hdf5Compression(algorithm="blosc", level=5, bloscCompressor="zstd")
 LZF = Hdf5Compression(algorithm="lzf", level=None, shuffle=False)
 UNCOMPRESSED = Hdf5Compression(algorithm=None, level=None, shuffle=False)
+
+DEFAULT_COMPRESSION = GZIP_DEFAULT

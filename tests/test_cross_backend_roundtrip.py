@@ -2,6 +2,9 @@
 
 Saves objects through every backend and verifies that the loaded data
 matches the original exactly — values, types, and structure.
+
+Hash validation is tested separately in test_hash.py and test_base.py.
+Classes here omit the hash parameter to keep declarations concise.
 """
 
 from __future__ import annotations
@@ -19,7 +22,6 @@ import pytest
 
 import versionable
 from versionable import Versionable
-from versionable._hash import computeHash
 
 # ---------------------------------------------------------------------------
 # Test classes — defined at module level for type-annotation resolution
@@ -101,7 +103,21 @@ class _EmptyCollections(Versionable, version=1, hash="6c8e40", register=False):
 # Backend extensions
 # ---------------------------------------------------------------------------
 
-_DICT_BACKENDS = [".json", ".yaml", ".toml"]
+_DICT_BACKENDS: list[str] = [".json"]
+
+try:
+    import toml as _toml  # noqa: F401
+
+    _DICT_BACKENDS.append(".toml")
+except ImportError:
+    pass
+
+try:
+    import yaml as _yaml  # noqa: F401
+
+    _DICT_BACKENDS.append(".yaml")
+except ImportError:
+    pass
 
 try:
     import versionable._hdf5_backend
@@ -111,7 +127,7 @@ except ImportError:
     _HDF5_BACKENDS = []
 
 _ALL_BACKENDS = [*_DICT_BACKENDS, *_HDF5_BACKENDS]
-_NONE_SAFE_BACKENDS = [".json", ".yaml", *_HDF5_BACKENDS]  # TOML omits None
+_NONE_SAFE_BACKENDS = [ext for ext in [".json", ".yaml", *_HDF5_BACKENDS] if ext in _ALL_BACKENDS]
 
 
 def _roundtrip(cls: type, obj: Versionable, tmp_path: Path, ext: str) -> Versionable:
@@ -310,6 +326,7 @@ class TestOptionalFieldsRoundtrip:
         assert type(loaded.label) is str, f"[{ext}] label type"
         assert loaded.count is None, f"[{ext}] count should be None"
 
+    @pytest.mark.skipif(".toml" not in _DICT_BACKENDS, reason="toml not installed")
     def test_tomlOmitsNone(self, tmp_path: Path) -> None:
         """TOML omits None fields; they restore from defaults."""
         obj = _WithOptional(name="test", label=None, count=None)
@@ -378,10 +395,9 @@ class TestNumpyDtypeRoundtrip:
     @pytest.mark.parametrize("ext", _ALL_BACKENDS)
     def test_scalarDtype(self, tmp_path: Path, dtype: type, ext: str) -> None:
         """1-D array of each dtype roundtrips with correct dtype."""
-        h = computeHash({"arr": npt.NDArray[np.generic]})
 
         @dataclass
-        class DtypeTest(Versionable, version=1, hash=h, register=False):
+        class DtypeTest(Versionable, version=1, register=False):
             arr: npt.NDArray[np.generic]
 
         arr = np.array([1, 2, 3], dtype=dtype)
@@ -393,10 +409,9 @@ class TestNumpyDtypeRoundtrip:
     @pytest.mark.parametrize("ext", _ALL_BACKENDS)
     def test_2dArray(self, tmp_path: Path, ext: str) -> None:
         """2-D array preserves shape and dtype."""
-        h = computeHash({"matrix": npt.NDArray[np.float64]})
 
         @dataclass
-        class Matrix(Versionable, version=1, hash=h, register=False):
+        class Matrix(Versionable, version=1, register=False):
             matrix: npt.NDArray[np.float64]
 
         arr = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], dtype=np.float64)
@@ -408,10 +423,9 @@ class TestNumpyDtypeRoundtrip:
     @pytest.mark.parametrize("ext", _ALL_BACKENDS)
     def test_3dArray(self, tmp_path: Path, ext: str) -> None:
         """3-D array preserves shape."""
-        h = computeHash({"cube": npt.NDArray[np.float32]})
 
         @dataclass
-        class Cube(Versionable, version=1, hash=h, register=False):
+        class Cube(Versionable, version=1, register=False):
             cube: npt.NDArray[np.float32]
 
         arr = np.ones((2, 3, 4), dtype=np.float32)
@@ -424,10 +438,9 @@ class TestNumpyDtypeRoundtrip:
     @pytest.mark.parametrize("ext", _ALL_BACKENDS)
     def test_emptyArray(self, tmp_path: Path, ext: str) -> None:
         """Zero-length array preserves dtype."""
-        h = computeHash({"arr": npt.NDArray[np.float64]})
 
         @dataclass
-        class EmptyArr(Versionable, version=1, hash=h, register=False):
+        class EmptyArr(Versionable, version=1, register=False):
             arr: npt.NDArray[np.float64]
 
         arr = np.array([], dtype=np.float64)
@@ -450,3 +463,27 @@ class TestEmptyCollectionsRoundtrip:
         assert isinstance(loaded.tags, list)
         assert isinstance(loaded.scores, list)
         assert isinstance(loaded.counts, list)
+
+
+@dataclass
+class _WithUnion(Versionable, version=1, register=False):
+    label: str
+    value: int | str
+
+
+class TestUnionTypeRoundtrip:
+    """int | str union field across backends."""
+
+    @pytest.mark.parametrize("ext", _DICT_BACKENDS)
+    def test_strValue(self, tmp_path: Path, ext: str) -> None:
+        obj = _WithUnion(label="test", value="hello")
+        loaded = _roundtrip(_WithUnion, obj, tmp_path, ext)
+        assert loaded.value == "hello"
+        assert type(loaded.value) is str
+
+    @pytest.mark.parametrize("ext", _DICT_BACKENDS)
+    def test_intValue(self, tmp_path: Path, ext: str) -> None:
+        obj = _WithUnion(label="test", value=42)
+        loaded = _roundtrip(_WithUnion, obj, tmp_path, ext)
+        assert loaded.value == 42
+        assert type(loaded.value) is int

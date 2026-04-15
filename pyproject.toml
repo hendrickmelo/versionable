@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "versionable"
-version = "0.0.1.dev6"
+version = "0.1.0"
 description = "Versioned persistence for Python dataclasses with hash validation, declarative migrations, and pluggable backends"
 readme = "README.md"
 license = "MIT"
@@ -23,12 +23,12 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "toml>=0.10",
-    "pyyaml>=6.0",
     "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
+toml = ["toml>=0.10"]
+yaml = ["pyyaml>=6.0"]
 hdf5 = ["h5py>=3.10", "hdf5plugin>=4.0"]
 docs = ["sphinx>=7", "myst-parser>=2", "furo"]
 dev = [

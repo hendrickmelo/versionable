@@ -51,16 +51,17 @@ The version lives in `pyproject.toml` (`version = "X.Y.Z"` or `"X.Y.Z.dev0"`).
 
 **Release cycle:**
 
-1. Between releases, `pyproject.toml` has a dev version (e.g., `0.0.2.dev0`)
-2. To release: update `pyproject.toml` to the release version (e.g., `0.0.2`), merge, tag `v0.0.2`
-3. The publish workflow (`publish.yml`) overrides the version from the git tag and publishes to PyPI
-4. Immediately after tagging, bump `pyproject.toml` to the next dev version (e.g., `0.0.3.dev0`)
+1. Between releases, `pyproject.toml` has a dev version (e.g., `0.1.1.dev0`) — PRs do not need to increment it
+2. To release: update `pyproject.toml` to the release version (e.g., `0.1.1`), merge to `main`, create a GitHub Release
+   tagged `v0.1.1`
+3. The publish workflow (`publish.yml`) triggers on the published GitHub Release and publishes to PyPI
+4. After publishing, the workflow automatically opens a PR to bump `pyproject.toml` to the next dev version (e.g.,
+   `0.1.2.dev0`)
 
 **Rules:**
 
-- Never leave a release version (without `.devN`) on `main` after a release — always bump to the next dev version
-- Each PR to `main` must increment the dev number (e.g., `0.0.2.dev3` → `0.0.2.dev4`) so source installs are distinguishable
-- The `pixi.lock` depends on this version being stable between releases; `.devN` versions keep it stable
+- Never leave a release version (without `.dev0`) on `main` — always bump to the next dev version immediately after tagging
+- Release branches (e.g., `release/v0.1.1`) are created from the tag only if hotfixes are needed — not before
 - `__version__` is read at runtime via `importlib.metadata` — it reflects whatever is installed
 
 ## Pre-Commit Checklist
@@ -117,8 +118,8 @@ suppression is truly unavoidable (e.g., broken third-party type stubs), use the 
     - Example: `_registry`, `_ops`, `def _resolveFields()`
 - **Private modules**: Leading underscore
     - Example: `_api.py`, `_types.py` (public API exposed only through `__init__.py`)
-- **Test functions**: `snake_case` with `test_` prefix (pytest convention)
-    - Example: `def test_roundtrip()`, `def test_changesOnFieldAdd()`
+- **Test functions and all code inside test files**: `snake_case` with `test_` prefix for test functions (pytest convention); all other identifiers in test files (helpers, variables, parameters) also use `snake_case`
+    - Example: `def test_roundtrip()`, `def test_dtype_preserved()`, `def _has_toml()`, `src_dtype`
 
 ### Type Annotations
 
@@ -164,18 +165,6 @@ Initialize logger: `logger = logging.getLogger(__name__)`
 - Reraise with context: `raise BackendError(...) from e`
 
 ## Architecture
-
-- **`__init__.py`** — Public API re-exports with `__all__`
-- **`_base.py`** — `Versionable` base class using `__init_subclass__`, class registry, metadata
-- **`_hash.py`** — Deterministic schema hash computation
-- **`_types.py`** — Type converter registry, serialize/deserialize dispatch
-- **`_backend.py`** — Backend ABC, extension-based auto-detection
-- **`_json_backend.py`**, **`_toml_backend.py`**, **`_yaml_backend.py`**, **`_hdf5_backend.py`** — Storage backends
-- **`_migration.py`** — Declarative + imperative migration system
-- **`_lazy.py`** — Lazy HDF5 loading: `LazyArray`, `LazyArrayList`, `LazyArrayDict`, dynamic subclass
-- **`_api.py`** — `save()`, `load()`, `loadDynamic()` entry points
-- **`errors.py`** — Exception hierarchy (`VersionableError` and subclasses)
-- **`hdf5.py`** — HDF5 submodule re-exports (compression presets)
 
 Key design decisions:
 - `__init_subclass__` (not metaclass) for `Versionable`

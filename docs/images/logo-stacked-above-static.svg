@@ -1,0 +1,48 @@
+<svg viewBox="20 22.5 219 219" xmlns="http://www.w3.org/2000/svg">
+
+<!-- Wordmark above v3 — aligned to v3 width -->
+<text y="82" x="70" font-family="ui-monospace,monospace" font-size="18" textLength="128" lengthAdjust="spacing"><tspan font-weight="700" fill="#085041">version</tspan><tspan font-weight="400" fill="#1D9E75">able</tspan></text>
+
+<!-- Mark shifted down 30px to make room for text above -->
+<g transform="translate(0,30)">
+  <!-- Timeline spine -->
+  <path d="M42,160 L42,50" fill="none" stroke="#0F6E56" stroke-width="2.5"/>
+  <path d="M36,55 L42,42 L48,55 Z" fill="#085041" stroke="#085041" stroke-width="1.5" stroke-linejoin="round"/>
+
+  <!-- Dashed connectors -->
+  <line x1="49" y1="154" x2="54" y2="154" stroke="#5DCAA5" stroke-width="1.5" stroke-dasharray="4 3" stroke-linecap="round"/>
+  <line x1="49" y1="127" x2="62" y2="127" stroke="#0F6E56" stroke-width="1.5" stroke-dasharray="4 3" stroke-linecap="round"/>
+  <line x1="49" y1="88" x2="70" y2="88" stroke="#0F6E56" stroke-width="1.5" stroke-dasharray="4 3" stroke-linecap="round"/>
+
+  <!-- Version circles -->
+  <circle cx="42" cy="154" r="7" fill="#9FE1CB" stroke="#5DCAA5" stroke-width="1.2"/>
+  <circle cx="42" cy="127" r="7" fill="#5DCAA5" stroke="#0F6E56" stroke-width="1.2"/>
+  <circle cx="42" cy="88" r="7" fill="#1D9E75" stroke="#085041" stroke-width="1.2"/>
+
+  <!-- v1 -->
+  <g>
+    <rect x="54" y="138" width="128" height="32" rx="7" fill="#E1F5EE" stroke="#5DCAA5" stroke-width=".8"/>
+    <text x="61" y="158" font-family="ui-monospace,monospace" font-size="12" font-weight="600" fill="#085041">v1</text>
+    <line x1="89" y1="151" x2="160" y2="151" stroke="#5DCAA5" stroke-width="1.2" stroke-linecap="round"/>
+    <line x1="89" y1="162" x2="138" y2="162" stroke="#9FE1CB" stroke-width="1.2" stroke-linecap="round"/>
+  </g>
+
+  <!-- v2 -->
+  <g>
+    <rect x="62" y="111" width="128" height="32" rx="7" fill="#5DCAA5" stroke="#0F6E56" stroke-width=".8"/>
+    <text x="69" y="131" font-family="ui-monospace,monospace" font-size="12" font-weight="600" fill="#085041">v2</text>
+    <line x1="97" y1="124" x2="168" y2="124" stroke="#0F6E56" stroke-width="1.2" stroke-linecap="round"/>
+    <line x1="97" y1="135" x2="146" y2="135" stroke="#1D9E75" stroke-width="1.2" stroke-linecap="round"/>
+  </g>
+
+  <!-- v3 -->
+  <g>
+    <rect x="70" y="60" width="128" height="56" rx="8" fill="#1D9E75" stroke="#085041" stroke-width=".8"/>
+    <text x="77" y="84" font-family="ui-monospace,monospace" font-size="12" font-weight="600" fill="#fff">v3</text>
+    <line x1="105" y1="74" x2="176" y2="74" stroke="#9FE1CB" stroke-width="1.2" stroke-linecap="round"/>
+    <line x1="105" y1="85" x2="152" y2="85" stroke="#E1F5EE" stroke-width="1.2" stroke-linecap="round"/>
+    <line x1="105" y1="96" x2="166" y2="96" stroke="#9FE1CB" stroke-width="1.2" stroke-linecap="round"/>
+    <line x1="105" y1="107" x2="140" y2="107" stroke="#E1F5EE" stroke-width="1.2" stroke-linecap="round"/>
+  </g>
+</g>
+</svg>
