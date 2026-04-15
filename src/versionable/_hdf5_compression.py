@@ -4,12 +4,11 @@
 
 from __future__ import annotations
 
-import types
 from dataclasses import dataclass
 from typing import Any, Literal
 
 
-def _requireHdf5plugin() -> types.ModuleType:
+def _requireHdf5plugin() -> Any:
     """Lazy-import hdf5plugin — only needed for zstd/blosc algorithms."""
     try:
         import hdf5plugin
