@@ -2,10 +2,10 @@
 
 ## Is this production-ready?
 
-Version 0.1.0 reflects a new *release*, not a new *idea*. The versioned-serialization pattern behind versionable has
-been used in production C++ systems for over 15 years. From `CArchive`-based serialization through C++11 variadic
-macros and modern template metaprogramming. Some version of this pattern has shipped in every project the authors have
-worked on.
+Version 0.1.0 reflects a new _release_, not a new _idea_. The versioned-serialization pattern behind versionable has
+been used in production C++ systems for over 15 years. From `CArchive`-based serialization through C++11 variadic macros
+and modern template metaprogramming. Some version of this pattern has shipped in every project the authors have worked
+on.
 
 This Python implementation is new, but the design decisions are informed by hard-won experience:
 
@@ -36,13 +36,13 @@ class Config(Versionable, version=1):
 Without a hash, versionable still handles versioning, migrations, and serialization. You just won't get import-time
 validation when your schema changes.
 
-The hash exists to create *intentional friction*. When you change a field — rename it, change its type, add or remove
+The hash exists to create _intentional friction_. When you change a field — rename it, change its type, add or remove
 one — the hash forces you to acknowledge the change. You can't accidentally ship a schema change without writing a
 migration. That friction is the feature: it moves data-format breakage from "silent corruption in production" to "error
 during development."
 
-Think of it like a type annotation or a lockfile hash: optional, zero runtime cost, catches mistakes before they
-matter. If you're familiar with database migrations, it's the same idea — you'd never alter a production table without a
+Think of it like a type annotation or a lockfile hash: optional, zero runtime cost, catches mistakes before they matter.
+If you're familiar with database migrations, it's the same idea — you'd never alter a production table without a
 migration script. The hash enforces that same discipline for your data files. We recommend using it for any class whose
 data files outlive a single session.
 
@@ -55,8 +55,8 @@ workflows (JSON, TOML, YAML with scalars and strings) should have zero heavy dep
 
 ## Can I use this with Python 3.11 or earlier?
 
-Not currently. Versionable requires Python 3.12+ and uses modern syntax features like the `type` statement and
-`list[T]` / `dict[K, V]` built-in generics. There are no plans to backport to earlier Python versions.
+Not currently. Versionable requires Python 3.12+ and uses modern syntax features like the `type` statement and `list[T]`
+/ `dict[K, V]` built-in generics. There are no plans to backport to earlier Python versions.
 
 ## What happens if I load a file written by a newer version of my class?
 
@@ -67,8 +67,9 @@ This is intentional — automatic downgrades risk data loss.
 
 However, not every change requires a version bump. If you're adding a new field with a default value and it doesn't
 affect older versions of your software, you can add the field without bumping the version — just update the hash. Older
-files will load fine because the missing field falls back to its default. This way, you only break forwards compatibility when it's on purpose: a version bump means "older code can't read
-these files," and the absence of one means "this change is safe to ignore."
+files will load fine because the missing field falls back to its default. This way, you only break forwards
+compatibility when it's on purpose: a version bump means "older code can't read these files," and the absence of one
+means "this change is safe to ignore."
 
 Forwards incompatibility is the trade-off you make for simple migration code. Migrations only need to go in one
 direction, which keeps them straightforward and composable. In practice, upgrading readers is far easier than
@@ -78,7 +79,7 @@ maintaining bidirectional migrations.
 
 Pydantic and attrs are validation and data-modeling libraries. They answer "is this data shaped correctly right now?"
 
-Versionable answers a different question: "this data was shaped correctly *when it was written* — how do I load it now
+Versionable answers a different question: "this data was shaped correctly _when it was written_ — how do I load it now
 that the code has changed?" It adds versioning, schema fingerprinting, and declarative migrations on top of standard
 Python dataclasses. The two concerns are complementary — you could use Pydantic for API validation and versionable for
 file persistence in the same project.
@@ -96,7 +97,6 @@ years ago, and the naming conventions carried forward intentionally. The Python 
 been implemented in.
 
 We're aware this goes against PEP 8 convention for functions and variables. In practice, libraries like `unittest`
-(`assertEqual`, `setUp`), `logging` (`getLogger`, `setLevel`), and Qt bindings (`paintEvent`, `setLayout`) use
-camelCase throughout their public APIs and it hasn't blocked adoption. We chose consistency with the pattern's history
-over convention conformance.
-
+(`assertEqual`, `setUp`), `logging` (`getLogger`, `setLevel`), and Qt bindings (`paintEvent`, `setLayout`) use camelCase
+throughout their public APIs and it hasn't blocked adoption. We chose consistency with the pattern's history over
+convention conformance.

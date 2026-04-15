@@ -18,8 +18,8 @@ versionable uses [Pixi](https://pixi.sh) for environment management:
 pixi install
 ```
 
-This installs all dependencies, including optional backends (TOML, YAML, HDF5) and dev tools (pytest, mypy, ruff).
-When you're ready, open a PR from your fork against `main`.
+This installs all dependencies, including optional backends (TOML, YAML, HDF5) and dev tools (pytest, mypy, ruff). When
+you're ready, open a PR from your fork against `main`.
 
 ## Running Checks
 
@@ -30,8 +30,8 @@ pixi run cleanup          # formatters, linters, type checkers
 pixi run test             # pytest
 ```
 
-`cleanup` runs ruff (format + lint), mypy, pyright, prettier (markdown), and markdownlint. Fix all errors before
-pushing — CI runs the same checks.
+`cleanup` runs ruff (format + lint), mypy, pyright, prettier (markdown), and markdownlint. Fix all errors before pushing
+— CI runs the same checks.
 
 To run checks individually:
 
@@ -75,13 +75,13 @@ This project uses **camelCase** for functions, methods, and variables — see th
 [FAQ](https://versionable.readthedocs.io/faq.html#why-camelcase-instead-of-snake-case) for why. Test files use
 `snake_case` (pytest convention).
 
-| What | Style | Example |
-| --- | --- | --- |
-| Functions / methods / variables | `camelCase` | `computeHash()`, `fieldType` |
-| Classes / types | `PascalCase` | `Versionable`, `JsonBackend` |
-| Constants | `SCREAMING_SNAKE_CASE` | `_CANONICAL_NAMES` |
-| Private members | Leading underscore | `_registry`, `_resolveFields()` |
-| Test functions | `snake_case` with `test_` prefix | `test_roundtrip()` |
+| What                            | Style                            | Example                         |
+| ------------------------------- | -------------------------------- | ------------------------------- |
+| Functions / methods / variables | `camelCase`                      | `computeHash()`, `fieldType`    |
+| Classes / types                 | `PascalCase`                     | `Versionable`, `JsonBackend`    |
+| Constants                       | `SCREAMING_SNAKE_CASE`           | `_CANONICAL_NAMES`              |
+| Private members                 | Leading underscore               | `_registry`, `_resolveFields()` |
+| Test functions                  | `snake_case` with `test_` prefix | `test_roundtrip()`              |
 
 ### Type Annotations
 

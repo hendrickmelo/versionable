@@ -14,7 +14,7 @@ formats.
 Your data lives in files. Your code keeps changing. Without versioning, old files silently load with missing fields,
 wrong types, or stale values.
 
-**`versionable`** fixes that.  Like database migrations, but for files. Every file is stamped with a version number and a
+**`versionable`** fixes that. Like database migrations, but for files. Every file is stamped with a version number and a
 fingerprint of its structure. Files written by v1 of your code load cleanly into v5, automatically migrated, never
 silently broken. Save to standard formats out of the box: JSON, HDF5, YAML, and TOML.
 
@@ -117,7 +117,7 @@ The `hash` parameter is optional — everything works without it. But when prese
 Without it, here's what happens: you rename a field, forget to add a migration, and old files load with a missing field
 that silently defaults to zero. Your experiment runs with wrong calibration data for a week before anyone notices.
 
-The hash prevents that. It's a fingerprint of your fields and their types, validated at *import time* — not at runtime,
+The hash prevents that. It's a fingerprint of your fields and their types, validated at _import time_ — not at runtime,
 not in production. Change a field and forget to update the version? Python won't even import:
 
 ```python
@@ -182,8 +182,8 @@ For custom type converters, HDF5 support, and more, see the
 
 The pattern behind **`versionable`** has been used in production C++ systems for over 15 years — from `CArchive`-based
 serialization to modern C++11 variadic macros. Some version of this pattern has been a part of every project the authors
-have worked on. This is our second Python implementation of a proven approach, built with modern type-safe Python. The test
-suite has a ~1:1 ratio of test code to source code, with cross-backend round-trip coverage and edge-case validation
+have worked on. This is our second Python implementation of a proven approach, built with modern type-safe Python. The
+test suite has a ~1:1 ratio of test code to source code, with cross-backend round-trip coverage and edge-case validation
 across all four backends.
 
 Have questions? See the **[FAQ](docs/faq.md)**. Want to contribute? See the **[contributing guide](CONTRIBUTING.md)**.
