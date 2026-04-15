@@ -164,22 +164,6 @@ Initialize logger: `logger = logging.getLogger(__name__)`
 
 ## Architecture
 
-- **`__init__.py`** — Public API re-exports with `__all__`
-- **`_base.py`** — `Versionable` base class using `__init_subclass__`, class registry, metadata
-- **`_hash.py`** — Deterministic schema hash computation
-- **`_types.py`** — Type converter registry, serialize/deserialize dispatch
-- **`_backend.py`** — Backend ABC, extension-based auto-detection
-- **`_json_backend.py`**, **`_toml_backend.py`**, **`_yaml_backend.py`**, **`_hdf5_backend.py`** — Storage backends
-- **`_migration.py`** — Declarative + imperative migration system
-- **`_lazy.py`** — Lazy HDF5 loading: `LazyArray`, `LazyArrayList`, `LazyArrayDict`, dynamic subclass
-- **`_hdf5_session.py`** — `Hdf5Session` context manager for save-as-you-go HDF5 sessions
-- **`_dataset_array.py`** — `DatasetArray` wrapper for resizable HDF5 datasets
-- **`_hdf5_compression.py`** — `Hdf5Compression` dataclass and compression presets
-- **`_hdf5_field.py`** — `Hdf5FieldInfo` annotation for optional `chunkRows`/`axis` hints
-- **`_api.py`** — `save()`, `load()`, `loadDynamic()` entry points
-- **`errors.py`** — Exception hierarchy (`VersionableError` and subclasses)
-- **`hdf5.py`** — HDF5 submodule re-exports (`open()`, compression presets)
-
 Key design decisions:
 - `__init_subclass__` (not metaclass) for `Versionable`
 - Hash validated at class definition time (import time)
