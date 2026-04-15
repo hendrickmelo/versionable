@@ -51,15 +51,15 @@ The version lives in `pyproject.toml` (`version = "X.Y.Z"` or `"X.Y.Z.dev0"`).
 
 **Release cycle:**
 
-1. Between releases, `pyproject.toml` has a dev version (e.g., `0.0.2.dev0`)
-2. To release: update `pyproject.toml` to the release version (e.g., `0.0.2`), merge, tag `v0.0.2`
-3. The publish workflow (`publish.yml`) overrides the version from the git tag and publishes to PyPI
-4. Immediately after tagging, bump `pyproject.toml` to the next dev version (e.g., `0.0.3.dev0`)
+1. Between releases, `pyproject.toml` has a dev version (e.g., `0.1.1.dev0`) — PRs do not need to increment it
+2. To release: update `pyproject.toml` to the release version (e.g., `0.1.1`), merge to `main`, tag `v0.1.1`
+3. The publish workflow (`publish.yml`) triggers on the tag and publishes to PyPI
+4. Immediately after tagging, bump `pyproject.toml` to the next dev version (e.g., `0.1.2.dev0`) and merge to `main`
 
 **Rules:**
 
-- Never leave a release version (without `.dev0`) on `main` after a release — always bump to the next dev version immediately after tagging
-- PRs do not need to increment the dev number — `dev0` stays until the next release
+- Never leave a release version (without `.dev0`) on `main` — always bump to the next dev version immediately after tagging
+- Release branches (e.g., `release/v0.1.1`) are created from the tag only if hotfixes are needed — not before
 - `__version__` is read at runtime via `importlib.metadata` — it reflects whatever is installed
 
 ## Pre-Commit Checklist
