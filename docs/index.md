@@ -23,9 +23,12 @@ migrations
 backends
 types
 reference
+faq
+contributing
 ai-agents
 ```
 
 ```{include} ../README.md
 :start-after: "**[full documentation](https://versionable.readthedocs.io)**."
+:end-before: "## Background"
 ```
