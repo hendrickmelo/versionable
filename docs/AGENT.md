@@ -33,8 +33,8 @@ class SensorConfig(Versionable, version=1, hash="<TBD>"):
 print(SensorConfig.hash())  # e.g. "a3f1c9"
 # Paste it into hash="a3f1c9", then:
 
-versionable.save(SensorConfig(sampleRate_Hz=1000.0), "config.yaml")
-loaded = versionable.load(SensorConfig, "config.yaml")
+versionable.save(SensorConfig(sampleRate_Hz=1000.0), "config.json")
+loaded = versionable.load(SensorConfig, "config.json")
 ```
 
 During development, call `ignoreHashErrors(True)` to get warnings instead of errors while you iterate on fields. Compute
@@ -152,7 +152,7 @@ loaded = versionable.load(MyClass, "data.h5", metadataOnly=True)
 | --------------- | ---------------------------------------- |
 | `ZSTD_DEFAULT`  | zstd level 3 — fast, good ratio          |
 | `ZSTD_FAST`     | zstd level 1 — fastest                   |
-| `ZSTD_BEST`     | zstd level 19 — best ratio, slow         |
+| `ZSTD_BEST`     | zstd level 9 — best ratio, slow          |
 | `BLOSC_DEFAULT` | Blosc + zstd — fast for large arrays     |
 | `GZIP_DEFAULT`  | gzip level 4 — default, universal compat |
 | `LZF`           | LZF — fastest, no extra deps             |
@@ -181,7 +181,7 @@ with session as obj:
     obj.name = "acquisition-001"
     for batch in data_source:
         obj.traces.append(batch)
-        session.flush()             # fsync for crash resilience
+        session.flush()             # flush HDF5 buffers to OS
 
 # Resume an existing file
 session = versionable.hdf5.open(Experiment, "run.h5", mode="resume")

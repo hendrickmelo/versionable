@@ -2,6 +2,7 @@
 
 Usage::
 
+    import versionable
     from versionable.hdf5 import Hdf5Compression, GZIP_DEFAULT
     versionable.save(obj, "out.h5", compression=GZIP_DEFAULT)
 

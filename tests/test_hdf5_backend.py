@@ -34,7 +34,7 @@ from .conftest import Inner, SimpleConfig, WithArray, WithNested
 
 
 @dataclass
-class _Measurement(Versionable, version=1, name="Measurement"):
+class _Measurement(Versionable, version=1, name="Measurement", register=False):
     label: str
     data: npt.NDArray[np.float64]
 
@@ -59,7 +59,7 @@ class _Experiment(Versionable, version=1, register=False):
 
 # Deeply nested: Sensor has list[ndarray], Lab has dict[str, Sensor]
 @dataclass
-class _Sensor(Versionable, version=1, name="Sensor"):
+class _Sensor(Versionable, version=1, name="Sensor", register=False):
     name: str
     traces: list[npt.NDArray[np.float64]]
 
@@ -146,6 +146,7 @@ class TestHdf5Compression:
             ds = f["data"]
             assert isinstance(ds, h5py.Dataset)
             assert ds.compression == "gzip"
+            assert ds.compression_opts == 4
 
 
 class TestLazyLoading:

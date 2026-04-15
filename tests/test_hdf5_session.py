@@ -421,7 +421,8 @@ class TestTrackedListScalars:
             obj.tags.append("beta")
 
         loaded = versionable.load(_WithLists, path)
-        assert loaded.timestamps == list(range(100))
+        assert loaded.timestamps == [float(i) for i in range(100)]
+        assert all(type(v) is float for v in loaded.timestamps)
         assert loaded.tags == ["alpha", "beta"]
 
 

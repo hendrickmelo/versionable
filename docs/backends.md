@@ -284,7 +284,7 @@ By default, array datasets are compressed with **gzip (level 4)** for maximum co
 HDFView, h5py without plugins). You can change the algorithm and level per-save by passing a `compression` kwarg:
 
 ```python
-from versionable.hdf5 import Hdf5Compression, BLOSC_DEFAULT, GZIP_DEFAULT, UNCOMPRESSED
+from versionable.hdf5 import Hdf5Compression, BLOSC_DEFAULT, GZIP_DEFAULT, ZSTD_DEFAULT, UNCOMPRESSED
 
 # Use a preset
 versionable.save(rec, "recording.h5", compression=GZIP_DEFAULT)

@@ -88,7 +88,7 @@ class SensorConfig(Versionable, version=1, hash="4b7866"):
     value: float
 
 config = SensorConfig(name="experiment-A", value=9.81)
-versionable.save(config, "config.yaml")
+versionable.save(config, "config.json")
 ```
 
 A few weeks later you rename `value` to `magnitude`. Without versionable, old files silently load with missing data.
@@ -152,7 +152,7 @@ with session as obj:
     obj.name = "long-running-acquisition"
     for batch in data_source:
         obj.traces.append(batch)    # extends the dataset on disk
-        session.flush()             # fsync — data survives a crash
+        session.flush()             # flush HDF5 buffers to OS
 
 # Read slices directly from disk without loading the whole file
 with versionable.hdf5.open(Experiment, "run.h5", mode="read") as obj:

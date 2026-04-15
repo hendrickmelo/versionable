@@ -81,6 +81,7 @@ pixi run ci                     # Full CI pipeline (check-only mode)
 
 ```python
 import versionable
+from versionable.hdf5 import GZIP_DEFAULT
 
 # Save/load with auto-detected backend
 versionable.save(obj, "config.yaml")
