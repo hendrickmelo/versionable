@@ -82,12 +82,12 @@ class Outer(Versionable, version=1, hash="..."):
 import versionable
 
 # Backend auto-selected by extension
-versionable.save(obj, "config.yaml")
 versionable.save(obj, "config.json")
-versionable.save(obj, "config.toml")
-versionable.save(obj, "data.h5")
+versionable.save(obj, "config.yaml")   # requires pyyaml
+versionable.save(obj, "config.toml")   # requires toml
+versionable.save(obj, "data.h5")       # requires h5py + hdf5plugin
 
-loaded = versionable.load(MyClass, "config.yaml")
+loaded = versionable.load(MyClass, "config.json")
 ```
 
 **Load without knowing the type** (class must be registered and imported):
@@ -134,6 +134,7 @@ Arrays and array collections are lazy-loaded by default — `load()` returns ins
 Accessing an array field or indexing into a `list[np.ndarray]` triggers the disk read.
 
 ```python
+import versionable
 from versionable.hdf5 import GZIP_DEFAULT, ZSTD_DEFAULT
 
 # Save with compression (gzip is the default)
@@ -167,8 +168,15 @@ For large or long-running data, `versionable.hdf5.open()` provides incremental w
 random access reads without loading the whole file into memory.
 
 ```python
+from dataclasses import dataclass, field
+
 import numpy as np
 from numpy.typing import NDArray
+
+import versionable
+import versionable.hdf5
+from versionable import Versionable
+
 
 @dataclass
 class Experiment(Versionable, version=1, hash="536849"):
@@ -443,7 +451,19 @@ match type(obj).__name__:
         processResult(obj)
 ```
 
-### Custom backend
+### Registering existing backends for custom extensions
+
+Use `registerBackend` to map new file extensions to a built-in backend class:
+
+```python
+from versionable import JsonBackend, registerBackend
+
+registerBackend([".jsonc", ".json5"], JsonBackend)
+```
+
+All four backend classes are importable from `versionable`: `JsonBackend`, `TomlBackend`, `YamlBackend`, `Hdf5Backend`.
+
+### Writing a custom backend
 
 ```python
 from versionable import Backend, registerBackend
