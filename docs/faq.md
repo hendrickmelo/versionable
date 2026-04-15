@@ -55,8 +55,10 @@ workflows (JSON, TOML, YAML with scalars and strings) should have zero heavy dep
 
 ## Can I use this with Python 3.11 or earlier?
 
-Not currently. Versionable requires Python 3.12+ and uses modern syntax features like the `type` statement and `list[T]`
-/ `dict[K, V]` built-in generics. There are no plans to backport to earlier Python versions.
+Not currently. Versionable requires Python 3.12+ because it uses [PEP 695](https://peps.python.org/pep-0695/) syntax
+throughout — `type` aliases (`type MigrationOp = ...`) and generic type parameters on classes and functions
+(`class Hdf5Session[T: Versionable]`, `def load[T: Versionable](...)`). There are no plans to backport to earlier Python
+versions.
 
 ## What happens if I load a file written by a newer version of my class?
 
