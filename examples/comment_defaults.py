@@ -43,22 +43,23 @@ if __name__ == "__main__":
         database=DatabaseConfig(port=3306)
     )  # override default port to show how it appears in output files
 
-    toml_path = Path(tempfile.mktemp(suffix=".toml"))
-    versionable.save(cfg, toml_path, commentDefaults=True)
-    print("=== TOML ===\n")
-    print(toml_path.read_text())
+    with tempfile.TemporaryDirectory() as tmp:
+        toml_path = Path(tmp) / "config.toml"
+        versionable.save(cfg, toml_path, commentDefaults=True)
+        print("=== TOML ===\n")
+        print(toml_path.read_text())
 
-    yaml_path = Path(tempfile.mktemp(suffix=".yaml"))
-    versionable.save(cfg, yaml_path, commentDefaults=True)
-    print("=== YAML ===\n")
-    print(yaml_path.read_text())
+        yaml_path = Path(tmp) / "config.yaml"
+        versionable.save(cfg, yaml_path, commentDefaults=True)
+        print("=== YAML ===\n")
+        print(yaml_path.read_text())
 
 # Output TOML file:
 #
 # # name = "my-server"
 # # debug = false
 #
-# [__meta__]
+# [__versionable__]
 # __OBJECT__ = "ServerConfig"
 # __VERSION__ = 1
 # __HASH__ = ""
@@ -100,7 +101,7 @@ if __name__ == "__main__":
 # #   level: INFO
 # #   filePath: /var/log/app.log
 # #   rotateAfterMB: 100
-# __meta__:
+# __versionable__:
 #   __OBJECT__: ServerConfig
 #   __VERSION__: 1
 #   __HASH__: ''

@@ -52,9 +52,11 @@ The version lives in `pyproject.toml` (`version = "X.Y.Z"` or `"X.Y.Z.dev0"`).
 **Release cycle:**
 
 1. Between releases, `pyproject.toml` has a dev version (e.g., `0.1.1.dev0`) — PRs do not need to increment it
-2. To release: update `pyproject.toml` to the release version (e.g., `0.1.1`), merge to `main`, tag `v0.1.1`
-3. The publish workflow (`publish.yml`) triggers on the tag and publishes to PyPI
-4. Immediately after tagging, bump `pyproject.toml` to the next dev version (e.g., `0.1.2.dev0`) and merge to `main`
+2. To release: update `pyproject.toml` to the release version (e.g., `0.1.1`), merge to `main`, create a GitHub Release
+   tagged `v0.1.1`
+3. The publish workflow (`publish.yml`) triggers on the published GitHub Release and publishes to PyPI
+4. After publishing, the workflow automatically opens a PR to bump `pyproject.toml` to the next dev version (e.g.,
+   `0.1.2.dev0`)
 
 **Rules:**
 

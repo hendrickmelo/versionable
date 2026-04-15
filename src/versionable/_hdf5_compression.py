@@ -4,13 +4,22 @@
 
 from __future__ import annotations
 
+import types
 from dataclasses import dataclass
 from typing import Any, Literal
 
-try:
-    import hdf5plugin
-except ImportError as e:
-    raise ImportError("HDF5 compression presets require hdf5plugin — install it with: `pip install hdf5plugin`") from e
+
+def _requireHdf5plugin() -> types.ModuleType:
+    """Lazy-import hdf5plugin — only needed for zstd/blosc algorithms."""
+    try:
+        import hdf5plugin
+
+        return hdf5plugin
+    except ImportError as e:
+        raise ImportError(
+            "zstd/blosc compression requires hdf5plugin — install it with: `pip install hdf5plugin`"
+        ) from e
+
 
 type Hdf5CompressionAlgorithm = Literal["zstd", "gzip", "lzf", "blosc"]
 type BloscCompressor = Literal["zstd", "blosclz", "lz4", "lz4hc", "zlib"]
@@ -49,9 +58,11 @@ class Hdf5Compression:
             return {}
 
         if self.algorithm == "zstd":
+            hdf5plugin = _requireHdf5plugin()
             return dict(**hdf5plugin.Zstd(clevel=3 if self.level is None else self.level))
 
         if self.algorithm == "blosc":
+            hdf5plugin = _requireHdf5plugin()
             shuffleFilter = hdf5plugin.Blosc2.SHUFFLE if self.shuffle else hdf5plugin.Blosc2.NOFILTER
             return dict(
                 **hdf5plugin.Blosc2(
