@@ -33,7 +33,7 @@ from versionable._base import (
     metadata,
     registeredClasses,
 )
-from versionable._hdf5_field import Appendable, Hdf5FieldInfo
+from versionable._hdf5_field import Hdf5FieldInfo
 from versionable._migration import Migration, MigrationContext, migration
 from versionable._types import VersionableValue, literalFallback, registerConverter
 
@@ -51,7 +51,6 @@ from versionable.errors import (
 )
 
 __all__ = [
-    "Appendable",
     "ArrayNotLoadedError",
     "Backend",
     "BackendError",

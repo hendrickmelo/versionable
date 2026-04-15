@@ -299,7 +299,7 @@ class TestSessionHdf5FieldInfoArray:
             ds = f["data"]
             assert ds.chunks[0] == 16  # explicit chunkRows
 
-    def test_reassign_appendable_field(self, tmp_path: object) -> None:
+    def test_reassignHdf5FieldAnnotation(self, tmp_path: object) -> None:
         """Reassigning an Hdf5FieldInfo-annotated field replaces the dataset."""
         path = f"{tmp_path}/test.h5"
         with versionable.hdf5.open(_SessionBasic, path) as obj:
@@ -587,7 +587,7 @@ class TestResumeMode:
             assert obj.name == "original"
             assert obj.sampleRate_Hz == 48000.0
 
-    def test_resume_appendable_continues(self, tmp_path: object) -> None:
+    def test_resumeHdf5FieldContinues(self, tmp_path: object) -> None:
         path = f"{tmp_path}/test.h5"
         with versionable.hdf5.open(_SessionBasic, path) as obj:
             obj.waveform = np.empty((0, 4), dtype=np.float64)
@@ -788,7 +788,7 @@ class TestInstanceOpen:
         np.testing.assert_array_equal(loaded.data, np.arange(10, dtype=np.float64))
         assert loaded.waveform.shape == (5, 4)
 
-    def test_instance_appendable_then_append(self, tmp_path: object) -> None:
+    def test_instanceWithAnnotationThenAppend(self, tmp_path: object) -> None:
         path = f"{tmp_path}/test.h5"
         obj = _SessionBasic(
             name="append test",
@@ -858,7 +858,7 @@ class TestAllNdarraysAreDatasetArray:
         loaded = versionable.load(_SessionBasic, path)
         np.testing.assert_array_equal(loaded.data, np.arange(10, dtype=np.float64))
 
-    def test_appendable_still_works_as_override(self, tmp_path: object) -> None:
+    def test_hdf5FieldInfoOverride(self, tmp_path: object) -> None:
         """Hdf5FieldInfo annotation still works for chunkRows/axis overrides."""
         path = f"{tmp_path}/test.h5"
         with versionable.hdf5.open(_SessionBasic, path) as obj:

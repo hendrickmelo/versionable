@@ -117,8 +117,8 @@ suppression is truly unavoidable (e.g., broken third-party type stubs), use the 
     - Example: `_registry`, `_ops`, `def _resolveFields()`
 - **Private modules**: Leading underscore
     - Example: `_api.py`, `_types.py` (public API exposed only through `__init__.py`)
-- **Test functions**: `snake_case` with `test_` prefix (pytest convention)
-    - Example: `def test_roundtrip()`, `def test_changesOnFieldAdd()`
+- **Test functions and all code inside test files**: `snake_case` with `test_` prefix for test functions (pytest convention); all other identifiers in test files (helpers, variables, parameters) also use `snake_case`
+    - Example: `def test_roundtrip()`, `def test_dtype_preserved()`, `def _has_toml()`, `src_dtype`
 
 ### Type Annotations
 
