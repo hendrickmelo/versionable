@@ -19,9 +19,9 @@ from enum import Enum
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Protocol, runtime_checkable
 
-import numpy as np
-
 from versionable._base import Versionable, _resolveFields
+from versionable._numpy_compat import _np as np
+from versionable._numpy_compat import requireNumpy
 from versionable.errors import ConverterError
 
 logger = logging.getLogger(__name__)
@@ -251,7 +251,7 @@ def _serializeTyped(value: Any, nativeTypes: set[type]) -> Any:
         return value.value
     if isinstance(value, Versionable):
         return _serializeVersionable(value)
-    if isinstance(value, np.ndarray):
+    if np is not None and isinstance(value, np.ndarray):
         return _serializeNdarray(value)
 
     return _UNHANDLED
@@ -394,7 +394,9 @@ def _deserializeConcrete(
         return _deserializeVersionable(data, concreteType)
 
     # numpy ndarray (both explicit ndarray and npt.NDArray alias)
-    if concreteType is np.ndarray or (isinstance(concreteType, type) and issubclass(concreteType, np.ndarray)):
+    if np is not None and (
+        concreteType is np.ndarray or (isinstance(concreteType, type) and issubclass(concreteType, np.ndarray))
+    ):
         return _deserializeNdarray(data)
 
     # Collections
@@ -509,25 +511,26 @@ def _deserializeVersionable(data: dict[str, Any], cls: type[Versionable]) -> Ver
 # ---------------------------------------------------------------------------
 
 
-def _serializeNdarray(arr: np.ndarray) -> dict[str, Any]:
+def _serializeNdarray(arr: Any) -> dict[str, Any]:
     """Serialize a numpy array to a base64-encoded npz representation."""
+    numpy = requireNumpy("ndarray serialization")
     buf = io.BytesIO()
-    np.savez_compressed(buf, data=arr)
+    numpy.savez_compressed(buf, data=arr)
     encoded = base64.b64encode(buf.getvalue()).decode("ascii")
     return {"__ndarray__": True, "dtype": str(arr.dtype), "shape": list(arr.shape), "data": encoded}
 
 
-def _deserializeNdarray(data: Any) -> np.ndarray:
+def _deserializeNdarray(data: Any) -> Any:
     """Deserialize a numpy array from its serialized representation."""
-    if isinstance(data, np.ndarray):
+    numpy = requireNumpy("ndarray deserialization")
+    if isinstance(data, numpy.ndarray):
         return data
     if isinstance(data, dict) and data.get("__ndarray__"):
         raw = base64.b64decode(data["data"])
         buf = io.BytesIO(raw)
-        arr: np.ndarray = np.load(buf)["data"]
-        return arr
+        return numpy.load(buf)["data"]
     if isinstance(data, list):
-        return np.asarray(data)
+        return numpy.asarray(data)
     raise ConverterError(f"Cannot deserialize ndarray from {type(data).__name__}")
 
 

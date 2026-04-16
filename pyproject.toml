@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["serialization", "dataclass", "hdf5", "toml", "json", "schema", "migration"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -22,14 +22,13 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Typing :: Typed",
 ]
-dependencies = [
-    "numpy>=1.26",
-]
+dependencies = []
 
 [project.optional-dependencies]
 toml = ["toml>=0.10"]
 yaml = ["pyyaml>=6.0"]
-hdf5 = ["h5py>=3.10", "hdf5plugin>=4.0"]
+hdf5 = ["numpy>=1.26", "h5py>=3.10", "hdf5plugin>=4.0"]
+all = ["numpy>=1.26", "h5py>=3.10", "hdf5plugin>=4.0", "toml>=0.10", "pyyaml>=6.0"]
 docs = ["sphinx>=7", "myst-parser>=2", "furo"]
 dev = [
     "pytest>=8.0",
@@ -84,7 +83,7 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 
 [[tool.mypy.overrides]]
-module = ["h5py.*", "hdf5plugin.*", "toml.*", "yaml.*"]
+module = ["numpy.*", "h5py.*", "hdf5plugin.*", "toml.*", "yaml.*"]
 ignore_missing_imports = true
 
 

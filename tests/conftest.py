@@ -7,9 +7,6 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-import numpy as np  # noqa: TC002 — needed at runtime for NDArray type resolution
-import numpy.typing as npt  # noqa: TC002
-
 from versionable._base import Versionable
 from versionable._types import literalFallback
 
@@ -32,17 +29,6 @@ class WithOptional(
 ):
     label: str
     description: str | None = None
-
-
-@dataclass
-class WithArray(
-    Versionable,
-    version=1,
-    hash="c0dc53",
-    register=False,
-):
-    name: str
-    data: npt.NDArray[np.float64]
 
 
 class Priority(Enum):

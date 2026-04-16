@@ -11,7 +11,6 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
 import pytest
 
 from versionable._base import Versionable
@@ -225,7 +224,10 @@ class TestCollections:
 
 
 class TestNdarray:
+    np = pytest.importorskip("numpy")
+
     def test_roundtrip(self) -> None:
+        np = self.np
         arr = np.array([1.0, 2.0, 3.0], dtype=np.float64)
         serialized = serialize(arr, np.ndarray)
         assert isinstance(serialized, dict)
@@ -234,6 +236,7 @@ class TestNdarray:
         np.testing.assert_array_equal(result, arr)
 
     def test_2dArray(self) -> None:
+        np = self.np
         arr = np.array([[1, 2], [3, 4]], dtype=np.int32)
         serialized = serialize(arr, np.ndarray)
         result = deserialize(serialized, np.ndarray)
@@ -241,11 +244,13 @@ class TestNdarray:
 
     def test_nativeBypass(self) -> None:
         """If ndarray is in nativeTypes, it passes through."""
+        np = self.np
         arr = np.array([1.0, 2.0])
         result = serialize(arr, np.ndarray, nativeTypes={np.ndarray})
         assert isinstance(result, np.ndarray)
 
     def test_fromList(self) -> None:
+        np = self.np
         result = deserialize([1, 2, 3], np.ndarray)
         np.testing.assert_array_equal(result, np.array([1, 2, 3]))
 

@@ -6,8 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-import numpy as np
-import numpy.typing as npt
+import pytest
 
 from versionable._hash import canonicalTypeName, computeHash
 
@@ -93,10 +92,14 @@ class TestCanonicalTypeName:
         assert result == "list[dict[str, int]]"
 
     def test_numpyNdarray(self) -> None:
+        np = pytest.importorskip("numpy")
         result = canonicalTypeName(np.ndarray)
         assert result == "ndarray"
 
     def test_numpyTypedArray(self) -> None:
+        np = pytest.importorskip("numpy")
+        import numpy.typing as npt
+
         result = canonicalTypeName(npt.NDArray[np.float64])
         assert "ndarray" in result
 

@@ -20,8 +20,6 @@ import typing
 from dataclasses import dataclass
 from typing import Annotated, Any
 
-import numpy as np
-
 from versionable.errors import BackendError
 
 TARGET_CHUNK_BYTES = 256 * 1024  # 256 KB
@@ -82,10 +80,12 @@ def _resolveAppendAxis(shape: tuple[int, ...], hdf5Field: Hdf5FieldInfo) -> int:
     return 0
 
 
-def _computeChunkSize(shape: tuple[int, ...], dtype: np.dtype[Any], axis: int) -> int:
+def _computeChunkSize(shape: tuple[int, ...], dtype: Any, axis: int) -> int:
     """Compute elements per chunk along the append axis targeting TARGET_CHUNK_BYTES."""
+    import numpy as np  # deferred to keep Hdf5FieldInfo importable without numpy
+
     nonAppendShape = shape[:axis] + shape[axis + 1 :]
     sliceBytes = int(np.prod(nonAppendShape)) * dtype.itemsize if nonAppendShape else dtype.itemsize
     if sliceBytes == 0:
         return 1
-    return max(1, TARGET_CHUNK_BYTES // sliceBytes)
+    return int(max(1, TARGET_CHUNK_BYTES // sliceBytes))

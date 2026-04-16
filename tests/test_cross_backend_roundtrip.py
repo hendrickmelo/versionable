@@ -16,9 +16,15 @@ from pathlib import Path, PurePosixPath
 from typing import Literal
 from uuid import UUID
 
-import numpy as np
-import numpy.typing as npt
 import pytest
+
+try:
+    import numpy as np
+    import numpy.typing as npt
+
+    _HAS_NUMPY = True
+except ImportError:
+    _HAS_NUMPY = False
 
 import versionable
 from versionable import Versionable
@@ -83,13 +89,15 @@ class _WithOptional(Versionable, version=1, hash="c599a5", register=False):
     count: int | None = None
 
 
-@dataclass
-class _WithArrays(Versionable, version=1, hash="e9fc06", register=False):
-    name: str
-    data: npt.NDArray[np.float64]
-    matrix: npt.NDArray[np.int32]
-    traces: list[npt.NDArray[np.float64]]
-    channels: dict[str, npt.NDArray[np.float64]]
+if _HAS_NUMPY:
+
+    @dataclass
+    class _WithArrays(Versionable, version=1, hash="e9fc06", register=False):
+        name: str
+        data: npt.NDArray[np.float64]
+        matrix: npt.NDArray[np.int32]
+        traces: list[npt.NDArray[np.float64]]
+        channels: dict[str, npt.NDArray[np.float64]]
 
 
 @dataclass
@@ -147,20 +155,20 @@ def _assertFieldMatch(original: object, loaded: object, fieldName: str, ext: str
     orig = getattr(original, fieldName)
     load = getattr(loaded, fieldName)
 
-    if isinstance(orig, np.ndarray):
+    if _HAS_NUMPY and isinstance(orig, np.ndarray):
         assert isinstance(load, np.ndarray), f"[{ext}] {fieldName}: expected np.ndarray, got {type(load).__name__}"
         np.testing.assert_array_equal(load, orig, err_msg=f"[{ext}] {fieldName}")
         assert load.dtype == orig.dtype, f"[{ext}] {fieldName}: dtype mismatch {load.dtype} != {orig.dtype}"
         return
 
-    if isinstance(orig, list) and orig and isinstance(orig[0], np.ndarray):
+    if _HAS_NUMPY and isinstance(orig, list) and orig and isinstance(orig[0], np.ndarray):
         assert isinstance(load, list), f"[{ext}] {fieldName}: expected list, got {type(load).__name__}"
         assert len(load) == len(orig), f"[{ext}] {fieldName}: length mismatch {len(load)} != {len(orig)}"
         for i, (origArr, loadArr) in enumerate(zip(orig, load, strict=True)):
             np.testing.assert_array_equal(loadArr, origArr, err_msg=f"[{ext}] {fieldName}[{i}]")
         return
 
-    if isinstance(orig, dict) and orig and isinstance(next(iter(orig.values())), np.ndarray):
+    if _HAS_NUMPY and isinstance(orig, dict) and orig and isinstance(next(iter(orig.values())), np.ndarray):
         assert isinstance(load, dict), f"[{ext}] {fieldName}: expected dict, got {type(load).__name__}"
         assert set(load.keys()) == set(orig.keys()), f"[{ext}] {fieldName}: key mismatch"
         for k in orig:
@@ -336,118 +344,119 @@ class TestOptionalFieldsRoundtrip:
         assert loaded.count is None
 
 
-class TestArrayFieldsRoundtrip:
-    """Array and array-collection fields across backends."""
+if _HAS_NUMPY:
 
-    @pytest.fixture
-    def obj(self) -> _WithArrays:
-        return _WithArrays(
-            name="arrays",
-            data=np.array([1.0, 2.0, 3.0], dtype=np.float64),
-            matrix=np.array([[1, 2], [3, 4]], dtype=np.int32),
-            traces=[np.array([10.0, 20.0]), np.array([30.0, 40.0, 50.0])],
-            channels={"ch0": np.array([1.0, 2.0]), "ch1": np.array([3.0, 4.0])},
+    class TestArrayFieldsRoundtrip:
+        """Array and array-collection fields across backends."""
+
+        @pytest.fixture
+        def obj(self) -> _WithArrays:
+            return _WithArrays(
+                name="arrays",
+                data=np.array([1.0, 2.0, 3.0], dtype=np.float64),
+                matrix=np.array([[1, 2], [3, 4]], dtype=np.int32),
+                traces=[np.array([10.0, 20.0]), np.array([30.0, 40.0, 50.0])],
+                channels={"ch0": np.array([1.0, 2.0]), "ch1": np.array([3.0, 4.0])},
+            )
+
+        @pytest.mark.skipif(not _HDF5_BACKENDS, reason="HDF5 backend not available")
+        def test_hdf5Roundtrip(self, obj: _WithArrays, tmp_path: Path) -> None:
+            loaded = _roundtrip(_WithArrays, obj, tmp_path, ".h5")
+            _assertFullMatch(obj, loaded, ".h5")
+
+        @pytest.mark.parametrize("ext", _DICT_BACKENDS)
+        def test_dictBackendRoundtrip(self, obj: _WithArrays, tmp_path: Path, ext: str) -> None:
+            """Dict backends serialize arrays as base64 npz and roundtrip correctly."""
+            loaded = _roundtrip(_WithArrays, obj, tmp_path, ext)
+            np.testing.assert_array_equal(loaded.data, obj.data)
+            assert loaded.data.dtype == obj.data.dtype
+            np.testing.assert_array_equal(loaded.matrix, obj.matrix)
+            assert loaded.matrix.dtype == obj.matrix.dtype
+
+        @pytest.mark.skipif(not _HDF5_BACKENDS, reason="HDF5 backend not available")
+        def test_hdf5ArrayDtypes(self, obj: _WithArrays, tmp_path: Path) -> None:
+            """HDF5 preserves exact dtypes."""
+            loaded = _roundtrip(_WithArrays, obj, tmp_path, ".h5")
+            assert loaded.data.dtype == np.float64
+            assert loaded.matrix.dtype == np.int32
+
+    class TestNumpyDtypeRoundtrip:
+        """Verify that various numpy dtypes survive the roundtrip."""
+
+        @pytest.mark.parametrize(
+            "dtype",
+            [
+                np.float32,
+                np.float64,
+                np.int8,
+                np.int16,
+                np.int32,
+                np.int64,
+                np.uint8,
+                np.uint16,
+                np.uint32,
+                np.uint64,
+                np.bool_,
+                np.complex64,
+                np.complex128,
+            ],
         )
+        @pytest.mark.parametrize("ext", _ALL_BACKENDS)
+        def test_scalarDtype(self, tmp_path: Path, dtype: type, ext: str) -> None:
+            """1-D array of each dtype roundtrips with correct dtype."""
 
-    @pytest.mark.skipif(not _HDF5_BACKENDS, reason="HDF5 backend not available")
-    def test_hdf5Roundtrip(self, obj: _WithArrays, tmp_path: Path) -> None:
-        loaded = _roundtrip(_WithArrays, obj, tmp_path, ".h5")
-        _assertFullMatch(obj, loaded, ".h5")
+            @dataclass
+            class DtypeTest(Versionable, version=1, register=False):
+                arr: npt.NDArray[np.generic]
 
-    @pytest.mark.parametrize("ext", _DICT_BACKENDS)
-    def test_dictBackendRoundtrip(self, obj: _WithArrays, tmp_path: Path, ext: str) -> None:
-        """Dict backends serialize arrays as base64 npz and roundtrip correctly."""
-        loaded = _roundtrip(_WithArrays, obj, tmp_path, ext)
-        np.testing.assert_array_equal(loaded.data, obj.data)
-        assert loaded.data.dtype == obj.data.dtype
-        np.testing.assert_array_equal(loaded.matrix, obj.matrix)
-        assert loaded.matrix.dtype == obj.matrix.dtype
+            arr = np.array([1, 2, 3], dtype=dtype)
+            obj = DtypeTest(arr=arr)
+            loaded = _roundtrip(DtypeTest, obj, tmp_path, ext)
+            np.testing.assert_array_equal(loaded.arr, arr)
+            assert loaded.arr.dtype == dtype, f"[{ext}] dtype: {loaded.arr.dtype} != {dtype}"
 
-    @pytest.mark.skipif(not _HDF5_BACKENDS, reason="HDF5 backend not available")
-    def test_hdf5ArrayDtypes(self, obj: _WithArrays, tmp_path: Path) -> None:
-        """HDF5 preserves exact dtypes."""
-        loaded = _roundtrip(_WithArrays, obj, tmp_path, ".h5")
-        assert loaded.data.dtype == np.float64
-        assert loaded.matrix.dtype == np.int32
+        @pytest.mark.parametrize("ext", _ALL_BACKENDS)
+        def test_2dArray(self, tmp_path: Path, ext: str) -> None:
+            """2-D array preserves shape and dtype."""
 
+            @dataclass
+            class Matrix(Versionable, version=1, register=False):
+                matrix: npt.NDArray[np.float64]
 
-class TestNumpyDtypeRoundtrip:
-    """Verify that various numpy dtypes survive the roundtrip."""
+            arr = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], dtype=np.float64)
+            obj = Matrix(matrix=arr)
+            loaded = _roundtrip(Matrix, obj, tmp_path, ext)
+            np.testing.assert_array_equal(loaded.matrix, arr)
+            assert loaded.matrix.shape == (3, 2), f"[{ext}] shape: {loaded.matrix.shape}"
 
-    @pytest.mark.parametrize(
-        "dtype",
-        [
-            np.float32,
-            np.float64,
-            np.int8,
-            np.int16,
-            np.int32,
-            np.int64,
-            np.uint8,
-            np.uint16,
-            np.uint32,
-            np.uint64,
-            np.bool_,
-            np.complex64,
-            np.complex128,
-        ],
-    )
-    @pytest.mark.parametrize("ext", _ALL_BACKENDS)
-    def test_scalarDtype(self, tmp_path: Path, dtype: type, ext: str) -> None:
-        """1-D array of each dtype roundtrips with correct dtype."""
+        @pytest.mark.parametrize("ext", _ALL_BACKENDS)
+        def test_3dArray(self, tmp_path: Path, ext: str) -> None:
+            """3-D array preserves shape."""
 
-        @dataclass
-        class DtypeTest(Versionable, version=1, register=False):
-            arr: npt.NDArray[np.generic]
+            @dataclass
+            class Cube(Versionable, version=1, register=False):
+                cube: npt.NDArray[np.float32]
 
-        arr = np.array([1, 2, 3], dtype=dtype)
-        obj = DtypeTest(arr=arr)
-        loaded = _roundtrip(DtypeTest, obj, tmp_path, ext)
-        np.testing.assert_array_equal(loaded.arr, arr)
-        assert loaded.arr.dtype == dtype, f"[{ext}] dtype: {loaded.arr.dtype} != {dtype}"
+            arr = np.ones((2, 3, 4), dtype=np.float32)
+            obj = Cube(cube=arr)
+            loaded = _roundtrip(Cube, obj, tmp_path, ext)
+            np.testing.assert_array_equal(loaded.cube, arr)
+            assert loaded.cube.shape == (2, 3, 4), f"[{ext}] shape: {loaded.cube.shape}"
+            assert loaded.cube.dtype == np.float32, f"[{ext}] dtype: {loaded.cube.dtype}"
 
-    @pytest.mark.parametrize("ext", _ALL_BACKENDS)
-    def test_2dArray(self, tmp_path: Path, ext: str) -> None:
-        """2-D array preserves shape and dtype."""
+        @pytest.mark.parametrize("ext", _ALL_BACKENDS)
+        def test_emptyArray(self, tmp_path: Path, ext: str) -> None:
+            """Zero-length array preserves dtype."""
 
-        @dataclass
-        class Matrix(Versionable, version=1, register=False):
-            matrix: npt.NDArray[np.float64]
+            @dataclass
+            class EmptyArr(Versionable, version=1, register=False):
+                arr: npt.NDArray[np.float64]
 
-        arr = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], dtype=np.float64)
-        obj = Matrix(matrix=arr)
-        loaded = _roundtrip(Matrix, obj, tmp_path, ext)
-        np.testing.assert_array_equal(loaded.matrix, arr)
-        assert loaded.matrix.shape == (3, 2), f"[{ext}] shape: {loaded.matrix.shape}"
-
-    @pytest.mark.parametrize("ext", _ALL_BACKENDS)
-    def test_3dArray(self, tmp_path: Path, ext: str) -> None:
-        """3-D array preserves shape."""
-
-        @dataclass
-        class Cube(Versionable, version=1, register=False):
-            cube: npt.NDArray[np.float32]
-
-        arr = np.ones((2, 3, 4), dtype=np.float32)
-        obj = Cube(cube=arr)
-        loaded = _roundtrip(Cube, obj, tmp_path, ext)
-        np.testing.assert_array_equal(loaded.cube, arr)
-        assert loaded.cube.shape == (2, 3, 4), f"[{ext}] shape: {loaded.cube.shape}"
-        assert loaded.cube.dtype == np.float32, f"[{ext}] dtype: {loaded.cube.dtype}"
-
-    @pytest.mark.parametrize("ext", _ALL_BACKENDS)
-    def test_emptyArray(self, tmp_path: Path, ext: str) -> None:
-        """Zero-length array preserves dtype."""
-
-        @dataclass
-        class EmptyArr(Versionable, version=1, register=False):
-            arr: npt.NDArray[np.float64]
-
-        arr = np.array([], dtype=np.float64)
-        obj = EmptyArr(arr=arr)
-        loaded = _roundtrip(EmptyArr, obj, tmp_path, ext)
-        assert len(loaded.arr) == 0
-        assert loaded.arr.dtype == np.float64, f"[{ext}] dtype: {loaded.arr.dtype}"
+            arr = np.array([], dtype=np.float64)
+            obj = EmptyArr(arr=arr)
+            loaded = _roundtrip(EmptyArr, obj, tmp_path, ext)
+            assert len(loaded.arr) == 0
+            assert loaded.arr.dtype == np.float64, f"[{ext}] dtype: {loaded.arr.dtype}"
 
 
 class TestEmptyCollectionsRoundtrip:
