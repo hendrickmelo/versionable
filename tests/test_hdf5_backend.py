@@ -26,7 +26,19 @@ from versionable.hdf5 import (
     Hdf5Compression,
 )
 
-from .conftest import Inner, SimpleConfig, WithArray, WithNested
+from .conftest import Inner, SimpleConfig, WithNested
+
+
+@dataclass
+class WithArray(
+    Versionable,
+    version=1,
+    hash="c0dc53",
+    register=False,
+):
+    name: str
+    data: npt.NDArray[np.float64]
+
 
 # Module-level classes for tests that need type resolution across nested Versionables.
 # Defining inside test functions causes forward-reference resolution failures with

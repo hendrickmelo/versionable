@@ -46,13 +46,6 @@ If you're familiar with database migrations, it's the same idea — you'd never 
 migration script. The hash enforces that same discipline for your data files. We recommend using it for any class whose
 data files outlive a single session.
 
-## Why does the base install require numpy?
-
-It shouldn't — this is a known issue ([#17](https://github.com/hendrickmelo/versionable/issues/17)). A future release
-will make numpy optional, required only when using ndarray fields or the HDF5 backend. The base install for config-only
-workflows (JSON, TOML, YAML with scalars and strings) should have zero heavy dependencies. If this matters to you,
-**please upvote the issue** — it helps us prioritize.
-
 ## Can I use this with Python 3.11 or earlier?
 
 Not currently. Versionable requires Python 3.12+ because it uses [PEP 695](https://peps.python.org/pep-0695/) syntax

@@ -279,4 +279,4 @@ pixi run -- pytest -k "test_name"        # Single test by name
 - Versionable types use their serialization `name` in hashes — stable across file moves
 - Lazy HDF5 loading via dynamically created subclass with `__getattribute__` override
 - `save()`/`load()` accessed via qualified import (`import versionable`), not direct import
-- numpy is a base dependency; HDF5 support (`h5py`, `hdf5plugin`) is optional via `[hdf5]` extra
+- numpy is optional — auto-detected if installed; HDF5 extra (`[hdf5]`) pulls it in with `h5py` and `hdf5plugin`

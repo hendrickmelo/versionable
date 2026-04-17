@@ -6,7 +6,7 @@ type converters, and pluggable storage backends.
 ## Installation
 
 ```bash
-pip install versionable            # Core (JSON backend, numpy)
+pip install versionable            # Core (JSON backend, no heavy deps)
 pip install pyyaml                 # Add YAML backend
 pip install toml                   # Add TOML backend
 pip install h5py hdf5plugin        # Add HDF5 backend

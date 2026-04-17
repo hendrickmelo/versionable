@@ -51,7 +51,7 @@ silently broken. Save to standard formats out of the box: JSON, HDF5, YAML, and 
 
 ## Installation
 
-The base install includes the JSON backend (no extra dependencies beyond numpy):
+The base install includes the JSON backend with zero heavy dependencies:
 
 ```bash
 pip install versionable
