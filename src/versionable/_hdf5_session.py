@@ -41,6 +41,7 @@ from versionable._hdf5_field import (
     _getHdf5FieldInfo,
     _resolveAppendAxis,
 )
+from versionable._hdf5_plugin import missingFilterHint
 from versionable._types import _appendIndex, _appendKey
 from versionable.errors import BackendError
 
@@ -188,7 +189,10 @@ class Hdf5Session[T: Versionable]:
             raise BackendError(f"Cannot resume: file has hash {fileMeta['hash']!r}, but class has hash {meta.hash!r}.")
 
         # Load existing fields
-        fields, _ = _readFields(self._root, self._fieldTypes)
+        try:
+            fields, _ = _readFields(self._root, self._fieldTypes)
+        except OSError as e:
+            raise BackendError(f"Failed to read HDF5 from {self._path}: {e}{missingFilterHint(e)}") from e
 
         # Populate proxy and wrap with tracked proxies
         for name, value in fields.items():

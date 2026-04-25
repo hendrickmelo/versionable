@@ -160,6 +160,53 @@ class TestHdf5Compression:
             assert ds.compression == "gzip"
             assert ds.compression_opts == 4
 
+    def test_hdf5pluginAutoRegistered(self) -> None:
+        """Importing the HDF5 backend should register hdf5plugin filters.
+
+        Uses a subprocess for a clean interpreter — otherwise pytest's own
+        imports might pollute sys.modules and hide the bug this fix prevents.
+        """
+        pytest.importorskip("hdf5plugin")
+        import subprocess
+        import sys
+
+        code = "from versionable import _hdf5_backend; import sys; assert 'hdf5plugin' in sys.modules"
+        result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+
+    def test_missingFilterHintSuggestsPipInstall(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When hdf5plugin is missing, filter-related errors should suggest installing it."""
+        from versionable import _hdf5_plugin
+
+        monkeypatch.setattr(_hdf5_plugin, "HDF5PLUGIN_AVAILABLE", False)
+
+        # Simulate an h5py filter error
+        err = OSError("Can't read data (filter not available)")
+        hint = _hdf5_plugin.missingFilterHint(err)
+        assert "pip install hdf5plugin" in hint
+
+        # Non-filter OSError → no hint
+        other = OSError("Permission denied")
+        assert _hdf5_plugin.missingFilterHint(other) == ""
+
+    def test_loadErrorIncludesHdf5pluginHint(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """load() surfaces the hdf5plugin install hint for filter-related failures."""
+        from versionable import _hdf5_plugin
+
+        monkeypatch.setattr(_hdf5_plugin, "HDF5PLUGIN_AVAILABLE", False)
+
+        # Craft a file that triggers a filter-like OSError by poisoning h5py.File
+        p = tmp_path / "needs-plugin.h5"
+        obj = SimpleConfig(name="x", debug=False, retries=0)
+        versionable.save(obj, p)
+
+        def boom(*_args: object, **_kwargs: object) -> None:
+            raise OSError("Can't read data (filter 'zstd' not available)")
+
+        monkeypatch.setattr("versionable._hdf5_backend.h5py.File", boom)
+        with pytest.raises(BackendError, match=r"pip install hdf5plugin"):
+            versionable.load(SimpleConfig, p)
+
 
 class TestLazyLoading:
     def test_lazyByDefault(self, tmp_path: Path) -> None:
