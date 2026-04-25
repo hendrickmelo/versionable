@@ -13,13 +13,17 @@ turns that into a clear "install hdf5plugin" message.
 
 from __future__ import annotations
 
-import contextlib
-
+# hdf5plugin can fail with OSError (not just ImportError) when its bundled native
+# shared libraries can't be loaded — e.g. dlopen "undefined symbol" against an
+# incompatible libhdf5. Catch both so a broken install of the optional dependency
+# doesn't crash the whole HDF5 backend.
 HDF5PLUGIN_AVAILABLE = False
-with contextlib.suppress(ImportError):
+try:
     import hdf5plugin  # noqa: F401  — side-effect import: registers HDF5 filter plugins
 
     HDF5PLUGIN_AVAILABLE = True
+except (ImportError, OSError):
+    pass
 
 
 _FILTER_ERROR_KEYWORDS = ("filter", "pipeline", "plugin")
