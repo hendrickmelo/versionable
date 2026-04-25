@@ -16,6 +16,7 @@ The mechanism uses a dynamically created subclass that overrides
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, overload
@@ -23,11 +24,26 @@ from typing import TYPE_CHECKING, Any, overload
 import h5py
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     import numpy as np
 
-from versionable.errors import ArrayNotLoadedError
+from versionable._hdf5_plugin import missingFilterHint
+from versionable.errors import ArrayNotLoadedError, BackendError
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _rewrapFilterErrors(filePath: Path) -> Iterator[None]:
+    """Re-raise filter-related OSError as BackendError with a hdf5plugin install hint."""
+    try:
+        yield
+    except OSError as e:
+        hint = missingFilterHint(e)
+        if hint:
+            raise BackendError(f"Failed to read HDF5 from {filePath}: {e}{hint}") from e
+        raise
 
 
 def _loadDataset(f: h5py.File, path: str) -> np.ndarray:
@@ -75,7 +91,7 @@ class LazyArray:
         self.datasetPath = datasetPath
 
     def load(self) -> np.ndarray:
-        with h5py.File(self.filePath, "r") as f:
+        with _rewrapFilterErrors(self.filePath), h5py.File(self.filePath, "r") as f:
             return _loadDataset(f, self.datasetPath)
 
     def __repr__(self) -> str:
@@ -115,7 +131,7 @@ class LazyArrayList:
             raise IndexError(f"index {index} out of range for LazyArrayList of length {len(self)}")
         if index not in self._cache:
             key = self._keys[index]
-            with h5py.File(self.filePath, "r") as f:
+            with _rewrapFilterErrors(self.filePath), h5py.File(self.filePath, "r") as f:
                 self._cache[index] = _loadDataset(f, f"{self.groupPath}/{key}")
             logger.debug("Lazy-loaded %s/%s", self.groupPath, key)
         return self._cache[index]
@@ -162,7 +178,7 @@ class LazyArrayDict:
             if key not in self._keyToHdf5:
                 raise KeyError(key)
             hdf5Key = self._keyToHdf5[key]
-            with h5py.File(self.filePath, "r") as f:
+            with _rewrapFilterErrors(self.filePath), h5py.File(self.filePath, "r") as f:
                 self._cache[key] = _loadDataset(f, f"{self.groupPath}/{hdf5Key}")
             logger.debug("Lazy-loaded %s/%s", self.groupPath, hdf5Key)
         return self._cache[key]
