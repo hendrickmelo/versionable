@@ -12,6 +12,7 @@
     "src/versionable/_yaml_backend.py",
     "src/versionable/_hdf5_backend.py",
     "src/versionable/_hdf5_compression.py",
+    "src/versionable/_hdf5_plugin.py",
     "src/versionable/_hdf5_session.py",
     "src/versionable/_dataset_array.py",
     "src/versionable/_hdf5_field.py",

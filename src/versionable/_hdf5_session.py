@@ -41,6 +41,7 @@ from versionable._hdf5_field import (
     _getHdf5FieldInfo,
     _resolveAppendAxis,
 )
+from versionable._hdf5_plugin import missingFilterHint
 from versionable.errors import BackendError
 
 logger = logging.getLogger(__name__)
@@ -190,7 +191,10 @@ class Hdf5Session[T: Versionable]:
             )
 
         # Load existing fields
-        fields, _ = _readFields(self._root, self._fieldTypes)
+        try:
+            fields, _ = _readFields(self._root, self._fieldTypes)
+        except OSError as e:
+            raise BackendError(f"Failed to read HDF5 from {self._path}: {e}{missingFilterHint(e)}") from e
 
         # Populate proxy and wrap with tracked proxies
         for name, value in fields.items():

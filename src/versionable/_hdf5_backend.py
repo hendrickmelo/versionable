@@ -39,6 +39,11 @@ import numpy as np
 from versionable._backend import Backend, registerBackend
 from versionable._base import Versionable, _resolveFields, metadata
 from versionable._hdf5_compression import DEFAULT_COMPRESSION, Hdf5Compression
+
+# Importing ``_hdf5_plugin`` registers optional HDF5 compression filter plugins
+# (zstd, blosc, etc.) so that files written with those filters can be read
+# without the consumer having to import ``hdf5plugin`` manually.
+from versionable._hdf5_plugin import missingFilterHint
 from versionable._lazy import ArrayNotLoaded, LazyArray, LazyContext
 from versionable._types import _registry
 from versionable.errors import BackendError
@@ -93,7 +98,7 @@ class Hdf5Backend(Backend):
                 fields, _ = _readFields(f, fieldTypes)
             return fields, meta
         except OSError as e:
-            raise BackendError(f"Failed to read HDF5 from {path}: {e}") from e
+            raise BackendError(f"Failed to read HDF5 from {path}: {e}{missingFilterHint(e)}") from e
 
     def loadLazy(
         self,
@@ -131,7 +136,7 @@ class Hdf5Backend(Backend):
 
             return fields, meta, lazyFields
         except OSError as e:
-            raise BackendError(f"Failed to read HDF5 from {path}: {e}") from e
+            raise BackendError(f"Failed to read HDF5 from {path}: {e}{missingFilterHint(e)}") from e
 
 
 # ---------------------------------------------------------------------------
