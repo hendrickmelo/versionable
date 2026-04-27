@@ -22,7 +22,7 @@ from typing import Any, Protocol, runtime_checkable
 from versionable._base import Versionable, _resolveFields
 from versionable._numpy_compat import _np as np
 from versionable._numpy_compat import requireNumpy
-from versionable.errors import ConverterError
+from versionable.errors import CircularReferenceError, ConverterError
 
 logger = logging.getLogger(__name__)
 
@@ -207,32 +207,70 @@ def literalFallback(value: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def serialize(value: Any, fieldType: Any, *, nativeTypes: set[type] | None = None) -> Any:
+def serialize(
+    value: Any,
+    fieldType: Any,
+    *,
+    nativeTypes: set[type] | None = None,
+    _visited: set[int] | None = None,
+    _path: str = "",
+) -> Any:
     """Serialize *value* to a JSON-compatible primitive.
 
     Args:
         value: The Python value to serialize.
         fieldType: The declared type annotation for the field.
         nativeTypes: Types that the backend handles natively (skip conversion).
+        _visited: Set of ``id()`` values for ``Versionable`` instances
+            currently on the serialization stack.  Used internally for
+            cycle detection.  Backends should not pass this argument.
+        _path: Field path of *value* relative to the root being
+            serialized, used in cycle-error messages.  Internal.
     """
     if value is None:
         return None
 
     nativeTypes = nativeTypes or set()
+    if _visited is None:
+        _visited = set()
 
     # Try typed value dispatch first
-    result = _serializeTyped(value, nativeTypes)
+    result = _serializeTyped(value, nativeTypes, _visited, _path)
     if result is not _UNHANDLED:
         return result
 
     # Collections (need fieldType for element type info)
-    return _serializeCollection(value, fieldType, nativeTypes)
+    return _serializeCollection(value, fieldType, nativeTypes, _visited, _path)
 
 
 _UNHANDLED = object()  # sentinel
 
 
-def _serializeTyped(value: Any, nativeTypes: set[type]) -> Any:
+# ---------------------------------------------------------------------------
+# Cycle-detection path helpers
+# ---------------------------------------------------------------------------
+#
+# Path format mirrors pytest-style: dotted field names (``parent.children``)
+# with bracketed list indices (``children[0]``) and dict keys
+# (``partners["alice"]``).  An empty path prints as ``<root>``.
+
+
+def _appendField(path: str, fieldName: str) -> str:
+    """Return *path* with *fieldName* appended as a dotted field segment."""
+    return f"{path}.{fieldName}" if path else fieldName
+
+
+def _appendIndex(path: str, index: int) -> str:
+    """Return *path* with a bracketed list/sequence *index* appended."""
+    return f"{path}[{index}]"
+
+
+def _appendKey(path: str, key: Any) -> str:
+    """Return *path* with a bracketed dict *key* appended (repr'd)."""
+    return f"{path}[{key!r}]"
+
+
+def _serializeTyped(value: Any, nativeTypes: set[type], visited: set[int], path: str) -> Any:
     """Try to serialize based on value type.  Returns _UNHANDLED if not matched."""
     valueType = type(value)
 
@@ -250,28 +288,61 @@ def _serializeTyped(value: Any, nativeTypes: set[type]) -> Any:
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, Versionable):
-        return _serializeVersionable(value)
+        return _serializeVersionable(value, visited, path)
     if np is not None and isinstance(value, np.ndarray):
         return _serializeNdarray(value)
 
     return _UNHANDLED
 
 
-def _serializeCollection(value: Any, fieldType: Any, nativeTypes: set[type]) -> Any:
+def _serializeCollection(
+    value: Any,
+    fieldType: Any,
+    nativeTypes: set[type],
+    visited: set[int],
+    path: str,
+) -> Any:
     """Serialize collection types (dict, list, tuple, set, frozenset)."""
     args = typing.get_args(fieldType)
 
     if isinstance(value, dict):
         valType = args[1] if len(args) > 1 else Any
-        return {str(k): serialize(v, valType, nativeTypes=nativeTypes) for k, v in value.items()}
+        return {
+            str(k): serialize(
+                v,
+                valType,
+                nativeTypes=nativeTypes,
+                _visited=visited,
+                _path=_appendKey(path, k),
+            )
+            for k, v in value.items()
+        }
 
     if isinstance(value, (list, tuple)):
         elemType = args[0] if args else Any
-        return [serialize(v, elemType, nativeTypes=nativeTypes) for v in value]
+        return [
+            serialize(
+                v,
+                elemType,
+                nativeTypes=nativeTypes,
+                _visited=visited,
+                _path=_appendIndex(path, i),
+            )
+            for i, v in enumerate(value)
+        ]
 
     if isinstance(value, (set, frozenset)):
         elemType = args[0] if args else Any
-        return [serialize(v, elemType, nativeTypes=nativeTypes) for v in sorted(value, key=repr)]
+        return [
+            serialize(
+                v,
+                elemType,
+                nativeTypes=nativeTypes,
+                _visited=visited,
+                _path=_appendIndex(path, i),
+            )
+            for i, v in enumerate(sorted(value, key=repr))
+        ]
 
     # Fallback
     return value
@@ -447,9 +518,26 @@ def _deserializeDict(
 # ---------------------------------------------------------------------------
 
 
-def _serializeVersionable(obj: Versionable) -> dict[str, Any]:
-    """Serialize a Versionable instance to a dict with metadata envelope."""
+def _serializeVersionable(obj: Versionable, visited: set[int], path: str) -> dict[str, Any]:
+    """Serialize a Versionable instance to a dict with metadata envelope.
+
+    Tracks ``id(obj)`` on a "currently-on-stack" set so cycles raise
+    :class:`CircularReferenceError` instead of recursing until Python's
+    stack limit.  The id is removed on the way back up so that a single
+    instance reachable from two unrelated branches (a diamond) does not
+    trip the check — diamonds are still duplicated on disk in 0.2.x.
+    """
     from versionable._base import metadata as getMeta
+
+    objId = id(obj)
+    if objId in visited:
+        raise CircularReferenceError(
+            f"Circular reference detected at field path "
+            f"{path or '<root>'} → {type(obj).__name__}@{objId:x}. "
+            f"versionable cannot serialize cycles in 0.2.x. "
+            f"Lossless shared-reference support is planned for 0.3.0 "
+            f"via an opt-in shared_refs=True flag."
+        )
 
     meta = getMeta(type(obj))
     fields = _resolveFields(type(obj))
@@ -458,9 +546,18 @@ def _serializeVersionable(obj: Versionable) -> dict[str, Any]:
         "__VERSION__": meta.version,
         "__HASH__": meta.hash,
     }
-    for fieldName, fieldType in fields.items():
-        value = getattr(obj, fieldName)
-        result[fieldName] = serialize(value, fieldType)
+    visited.add(objId)
+    try:
+        for fieldName, fieldType in fields.items():
+            value = getattr(obj, fieldName)
+            result[fieldName] = serialize(
+                value,
+                fieldType,
+                _visited=visited,
+                _path=_appendField(path, fieldName),
+            )
+    finally:
+        visited.discard(objId)
     return result
 
 

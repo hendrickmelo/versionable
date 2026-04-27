@@ -41,6 +41,7 @@ from versionable._hdf5_field import (
     _getHdf5FieldInfo,
     _resolveAppendAxis,
 )
+from versionable._types import _appendIndex, _appendKey
 from versionable.errors import BackendError
 
 logger = logging.getLogger(__name__)
@@ -327,7 +328,7 @@ class Hdf5Session[T: Versionable]:
                 self._createResizableScalarList(name, value, args[0])
                 return
 
-        _writeValue(self._root, name, value, fieldType, datasetKwargs, self._comp)
+        _writeValue(self._root, name, value, fieldType, datasetKwargs, self._comp, set(), name)
 
     def _createResizableScalarList(self, name: str, values: list[Any], elemType: type) -> None:
         """Create a resizable 1-D dataset for a scalar list field."""
@@ -451,7 +452,9 @@ class Hdf5Session[T: Versionable]:
                     ds[-1] = value
         else:
             group = self._root.require_group(fieldName)
-            _writeValue(group, str(index), value, elemType, datasetKwargs, self._comp)
+            _writeValue(
+                group, str(index), value, elemType, datasetKwargs, self._comp, set(), _appendIndex(fieldName, index)
+            )
 
     def _onListSetItem(self, fieldName: str, index: int, value: Any) -> None:
         elemType = self._elemType(fieldName)
@@ -467,7 +470,9 @@ class Hdf5Session[T: Versionable]:
                 key = str(index)
                 if key in item:
                     del item[key]
-                _writeValue(item, key, value, elemType, datasetKwargs, self._comp)
+                _writeValue(
+                    item, key, value, elemType, datasetKwargs, self._comp, set(), _appendIndex(fieldName, index)
+                )
 
     def _onListExtend(self, fieldName: str, startIdx: int, values: list[Any]) -> None:
         for i, v in enumerate(values):
@@ -486,7 +491,7 @@ class Hdf5Session[T: Versionable]:
             del group[strKey]
         if strKey in group.attrs:
             del group.attrs[strKey]
-        _writeValue(group, strKey, value, valType, datasetKwargs, self._comp)
+        _writeValue(group, strKey, value, valType, datasetKwargs, self._comp, set(), _appendKey(fieldName, key))
 
     def _onDictDelItem(self, fieldName: str, key: Any) -> None:
         item = self._root[fieldName]

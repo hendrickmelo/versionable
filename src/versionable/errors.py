@@ -66,3 +66,18 @@ class ConverterError(VersionableError):
 
 class BackendError(VersionableError):
     """A storage backend operation failed."""
+
+
+class CircularReferenceError(VersionableError):
+    """A cycle was detected in the object graph during serialization.
+
+    Raised when ``serialize()`` (JSON/YAML/TOML) or the HDF5 writer
+    encounters a ``Versionable`` instance that is already on the
+    serialization stack — i.e. an object reaches itself by following its
+    own fields.
+
+    The message includes the field path of the revisit and the type and
+    ``id()`` of the offending instance, so a self-cycle can be told
+    apart from a legitimate diamond (same instance referenced from two
+    unrelated branches; not a cycle).
+    """

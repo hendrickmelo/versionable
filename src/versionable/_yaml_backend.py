@@ -51,7 +51,9 @@ class YamlBackend(Backend):
         **kwargs: Any,
     ) -> None:
         fieldTypes = _resolveFields(cls)
-        fields = {k: serialize(v, fieldTypes[k], nativeTypes=self.nativeTypes) for k, v in fields.items()}
+        # Pass _path=k so cycle-detection error messages include the
+        # top-level field name (e.g. "children[0]" rather than "[0]").
+        fields = {k: serialize(v, fieldTypes[k], nativeTypes=self.nativeTypes, _path=k) for k, v in fields.items()}
         data: dict[str, Any] = {}
         for key, value in fields.items():
             data[key] = _toYamlSafe(value)

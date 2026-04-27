@@ -406,14 +406,15 @@ registeredClasses()  # dict[name, type]
 
 ```text
 VersionableError (base — catch-all)
-├── HashMismatchError      — hash= doesn't match fields (raised at import time)
-├── VersionError           — file is newer than class, or missing migrations
-├── MigrationError         — migration failed to apply
-├── ArrayNotLoadedError    — accessing array loaded with metadataOnly=True
-├── UpgradeRequiredError   — migration needs upgradeInPlace=True
-├── UnknownFieldError      — file has field not in class (only with unknown="error")
-├── ConverterError         — type conversion failed
-└── BackendError           — file I/O or backend operation failed
+├── HashMismatchError       — hash= doesn't match fields (raised at import time)
+├── VersionError            — file is newer than class, or missing migrations
+├── MigrationError          — migration failed to apply
+├── ArrayNotLoadedError     — accessing array loaded with metadataOnly=True
+├── UpgradeRequiredError    — migration needs upgradeInPlace=True
+├── UnknownFieldError       — file has field not in class (only with unknown="error")
+├── ConverterError          — type conversion failed
+├── BackendError            — file I/O or backend operation failed
+└── CircularReferenceError  — cycle detected in object graph during save
 ```
 
 All exceptions are importable from `versionable`:
@@ -421,6 +422,20 @@ All exceptions are importable from `versionable`:
 ```python
 from versionable import VersionableError, HashMismatchError, BackendError
 ```
+
+## Limitations
+
+### Object graphs: trees only, no cycles or shared references
+
+versionable serializes object trees, not arbitrary graphs.
+
+- **Cycles raise `CircularReferenceError`.** A `Versionable` instance that reaches itself by following its own fields
+  (self-cycle, mutual cycle, three-way cycle, cycle through a list or dict) is rejected at save time with the field path
+  of the revisit.
+- **Shared references are duplicated.** If two fields point at the same `Versionable` instance (a "diamond"), the file
+  contains two independent copies and `loaded.left is loaded.right` is `False` after a round-trip.
+
+Lossless preservation of shared references — and therefore cycles, on opt-in — is planned for the 0.3.0 release.
 
 ## Common Patterns
 

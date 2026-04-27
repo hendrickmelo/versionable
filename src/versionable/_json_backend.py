@@ -31,7 +31,10 @@ class JsonBackend(Backend):
         **kwargs: Any,
     ) -> None:
         fieldTypes = _resolveFields(cls)
-        fields = {k: serialize(v, fieldTypes[k], nativeTypes=self.nativeTypes) for k, v in fields.items()}
+        # Pass _path=k so cycle-detection error messages include the
+        # top-level field name (e.g. "children[0]" rather than "[0]").
+        # _path/_visited are private helpers in _types; safe to pass here.
+        fields = {k: serialize(v, fieldTypes[k], nativeTypes=self.nativeTypes, _path=k) for k, v in fields.items()}
 
         data = {
             "__versionable__": {

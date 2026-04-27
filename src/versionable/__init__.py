@@ -42,6 +42,7 @@ __version__ = _version("versionable")
 from versionable.errors import (
     ArrayNotLoadedError,
     BackendError,
+    CircularReferenceError,
     ConverterError,
     HashMismatchError,
     MigrationError,
@@ -74,6 +75,7 @@ __all__ = [
     "ArrayNotLoadedError",
     "Backend",
     "BackendError",
+    "CircularReferenceError",
     "ConverterError",
     "HashMismatchError",
     "Hdf5Backend",

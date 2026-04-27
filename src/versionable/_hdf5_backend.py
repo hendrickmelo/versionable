@@ -40,8 +40,8 @@ from versionable._backend import Backend, registerBackend
 from versionable._base import Versionable, _resolveFields, metadata
 from versionable._hdf5_compression import DEFAULT_COMPRESSION, Hdf5Compression
 from versionable._lazy import ArrayNotLoaded, LazyArray, LazyContext
-from versionable._types import _registry
-from versionable.errors import BackendError
+from versionable._types import _appendField, _appendIndex, _appendKey, _registry
+from versionable.errors import BackendError, CircularReferenceError
 
 logger = logging.getLogger(__name__)
 
@@ -144,13 +144,21 @@ def _writeFields(
     fields: dict[str, Any],
     fieldTypes: dict[str, Any],
     comp: Hdf5Compression,
+    visited: set[int] | None = None,
+    path: str = "",
 ) -> None:
-    """Write fields into an HDF5 group using native type dispatch."""
+    """Write fields into an HDF5 group using native type dispatch.
+
+    *visited* and *path* are threaded through recursive calls to detect
+    cycles in the object graph (see :func:`_writeVersionable`).
+    """
     datasetKwargs = comp.datasetKwargs()
+    if visited is None:
+        visited = set()
 
     for name, value in fields.items():
         fieldType = fieldTypes.get(name)
-        _writeValue(group, name, value, fieldType, datasetKwargs, comp)
+        _writeValue(group, name, value, fieldType, datasetKwargs, comp, visited, _appendField(path, name))
 
 
 def _writeValue(
@@ -160,6 +168,8 @@ def _writeValue(
     fieldType: Any,
     datasetKwargs: dict[str, Any],
     comp: Hdf5Compression,
+    visited: set[int],
+    path: str,
 ) -> None:
     """Write a single value to the group using recursive type dispatch.
 
@@ -177,7 +187,7 @@ def _writeValue(
 
     # Nested Versionable → subgroup with __versionable__
     if isinstance(value, Versionable):
-        _writeVersionable(group, name, value, comp)
+        _writeVersionable(group, name, value, comp, visited, path)
         return
 
     # Enum → store .value as attribute
@@ -203,12 +213,12 @@ def _writeValue(
     if isinstance(value, (list, set, frozenset, tuple)) and origin in (list, set, frozenset, tuple) and args:
         elemType = args[0]
         items = sorted(value, key=repr) if isinstance(value, (set, frozenset)) else list(value)
-        _writeSequence(group, name, items, elemType, datasetKwargs, comp)
+        _writeSequence(group, name, items, elemType, datasetKwargs, comp, visited, path)
         return
 
     if isinstance(value, dict) and origin is dict and args:
         valType = args[1]
-        _writeDict(group, name, value, valType, datasetKwargs, comp)
+        _writeDict(group, name, value, valType, datasetKwargs, comp, visited, path)
         return
 
     # Fallback: try as attribute (will raise if h5py can't store it)
@@ -233,6 +243,8 @@ def _writeSequence(
     elemType: Any,
     datasetKwargs: dict[str, Any],
     comp: Hdf5Compression,
+    visited: set[int],
+    path: str,
 ) -> None:
     """Write a sequence (list/set/tuple/frozenset) to the group.
 
@@ -253,7 +265,7 @@ def _writeSequence(
     # Non-scalar → group with integer keys, recurse
     subgroup = group.create_group(name)
     for i, item in enumerate(values):
-        _writeValue(subgroup, str(i), item, elemType, datasetKwargs, comp)
+        _writeValue(subgroup, str(i), item, elemType, datasetKwargs, comp, visited, _appendIndex(path, i))
 
 
 def _writeDict(
@@ -263,12 +275,14 @@ def _writeDict(
     valType: Any,
     datasetKwargs: dict[str, Any],
     comp: Hdf5Compression,
+    visited: set[int],
+    path: str,
 ) -> None:
     """Write a dict to the group. Keys are converted to strings; values are recursive."""
     subgroup = group.create_group(name)
     for key, val in values.items():
         strKey = _keyToStr(key)
-        _writeValue(subgroup, strKey, val, valType, datasetKwargs, comp)
+        _writeValue(subgroup, strKey, val, valType, datasetKwargs, comp, visited, _appendKey(path, key))
 
 
 def _keyToStr(key: Any) -> str:
@@ -302,8 +316,27 @@ def _writeVersionable(
     name: str,
     obj: Versionable,
     comp: Hdf5Compression,
+    visited: set[int],
+    path: str,
 ) -> None:
-    """Write a nested Versionable as a subgroup with __versionable__ metadata."""
+    """Write a nested Versionable as a subgroup with __versionable__ metadata.
+
+    Tracks ``id(obj)`` on a "currently-on-stack" set so cycles raise
+    :class:`CircularReferenceError` instead of recursing until Python's
+    stack limit.  The id is removed on the way back up so that diamonds
+    (same instance referenced from two unrelated branches) are not
+    flagged — they are still duplicated on disk in 0.2.x.
+    """
+    objId = id(obj)
+    if objId in visited:
+        raise CircularReferenceError(
+            f"Circular reference detected at field path "
+            f"{path or '<root>'} → {type(obj).__name__}@{objId:x}. "
+            f"versionable cannot serialize cycles in 0.2.x. "
+            f"Lossless shared-reference support is planned for 0.3.0 "
+            f"via an opt-in shared_refs=True flag."
+        )
+
     subgroup = parent.create_group(name)
     objType = type(obj)
     meta = metadata(objType)
@@ -317,7 +350,11 @@ def _writeVersionable(
 
     # Recursively write fields
     fields = {fieldName: getattr(obj, fieldName) for fieldName in fieldTypes}
-    _writeFields(subgroup, fields, fieldTypes, comp)
+    visited.add(objId)
+    try:
+        _writeFields(subgroup, fields, fieldTypes, comp, visited, path)
+    finally:
+        visited.discard(objId)
 
 
 # ---------------------------------------------------------------------------
