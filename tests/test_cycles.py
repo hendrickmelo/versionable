@@ -95,15 +95,23 @@ class TestSelfCycle:
     def test_raises_circular_reference_error(self, tmp_path: Path, ext: str) -> None:
         n = _Node(name="root")
         n.children.append(n)
-        with pytest.raises(CircularReferenceError, match=r"children\[0\]"):
+        # The root is seeded into the visited set, so the cycle is
+        # reported at the closing edge ("children[0]"), not one hop
+        # deeper.
+        with pytest.raises(CircularReferenceError, match=r"path children\[0\] →"):
             versionable.save(n, tmp_path / f"out{ext}")
 
-    def test_error_includes_type_and_id(self, tmp_path: Path) -> None:
+    def test_error_carries_structured_attributes(self, tmp_path: Path) -> None:
         n = _Node(name="root")
         n.children.append(n)
         with pytest.raises(CircularReferenceError) as excinfo:
             versionable.save(n, tmp_path / "out.json")
-        msg = str(excinfo.value)
+        err = excinfo.value
+        assert err.path == "children[0]"
+        assert err.objType is _Node
+        assert err.objId == id(n)
+        # Message reflects the same structured data.
+        msg = str(err)
         assert "_Node" in msg
         assert f"@{id(n):x}" in msg
 
@@ -122,7 +130,8 @@ class TestMutualCycle:
         bob = _Person(name="bob")
         alice.partner = bob
         bob.partner = alice
-        with pytest.raises(CircularReferenceError, match=r"partner"):
+        # Closing edge is ``alice.partner.partner`` (back to alice).
+        with pytest.raises(CircularReferenceError, match=r"path partner\.partner →"):
             versionable.save(alice, tmp_path / f"out{ext}")
 
 
@@ -142,7 +151,8 @@ class TestThreeWayCycle:
         a.partner = b
         b.partner = c
         c.partner = a
-        with pytest.raises(CircularReferenceError, match=r"partner\.partner\.partner"):
+        # Closing edge is ``a.partner.partner.partner`` (back to a).
+        with pytest.raises(CircularReferenceError, match=r"path partner\.partner\.partner →"):
             versionable.save(a, tmp_path / f"out{ext}")
 
 
@@ -160,7 +170,8 @@ class TestCycleThroughList:
         b = _Node(name="b")
         a.children.append(b)
         b.children.append(a)
-        with pytest.raises(CircularReferenceError, match=r"children\[0\]\.children\[0\]"):
+        # Closing edge is ``a.children[0].children[0]`` (back to a).
+        with pytest.raises(CircularReferenceError, match=r"path children\[0\]\.children\[0\] →"):
             versionable.save(a, tmp_path / f"out{ext}")
 
 
@@ -176,7 +187,8 @@ class TestCycleThroughDict:
     def test_raises_circular_reference_error(self, tmp_path: Path, ext: str) -> None:
         alice = _PersonWithPartners(name="alice")
         alice.partners["self"] = alice
-        with pytest.raises(CircularReferenceError, match=r"partners\['self'\]"):
+        # Closing edge is ``alice.partners['self']`` (back to alice).
+        with pytest.raises(CircularReferenceError, match=r"path partners\['self'\] →"):
             versionable.save(alice, tmp_path / f"out{ext}")
 
 
@@ -215,6 +227,45 @@ class TestDiamondNotFlagged:
         assert loaded.right.value == 42
         # Identity is NOT preserved in 0.2.x — two distinct instances on load.
         assert loaded.left is not loaded.right
+
+
+# ---------------------------------------------------------------------------
+# HDF5 session — cycles introduced via the live proxy must raise immediately,
+# before any partial subgroup state lands on disk.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(".h5" not in _HDF5_BACKENDS, reason="HDF5 backend not available")
+class TestHdf5SessionCycle:
+    """``proxy.field = proxy`` must raise CircularReferenceError without
+    touching the file."""
+
+    def test_self_cycle_via_setattr_raises(self, tmp_path: Path) -> None:
+        import versionable.hdf5
+
+        path = tmp_path / "session.h5"
+        # Closing edge: the proxy is seeded into the visited set, so
+        # the assignment fails immediately at "partner".
+        with (
+            versionable.hdf5.open(_Person, path) as p,
+            pytest.raises(CircularReferenceError, match=r"path partner →"),
+        ):
+            p.name = "alice"
+            p.partner = p
+
+    def test_self_cycle_via_dict_setitem_raises(self, tmp_path: Path) -> None:
+        import versionable.hdf5
+
+        path = tmp_path / "session.h5"
+        # Pass an instance so ``partners`` is wrapped as a TrackedDict
+        # before mutation; otherwise the proxy has no ``partners``
+        # attribute to ``__setitem__`` into.
+        alice = _PersonWithPartners(name="alice")
+        with (
+            versionable.hdf5.open(alice, path) as p,
+            pytest.raises(CircularReferenceError, match=r"path partners\['self'\] →"),
+        ):
+            p.partners["self"] = p
 
 
 # ---------------------------------------------------------------------------

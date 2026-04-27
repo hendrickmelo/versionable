@@ -48,12 +48,19 @@ class YamlBackend(Backend):
         path: Path,
         *,
         cls: type,
+        _rootId: int | None = None,
         **kwargs: Any,
     ) -> None:
         fieldTypes = _resolveFields(cls)
-        # Pass _path=k so cycle-detection error messages include the
-        # top-level field name (e.g. "children[0]" rather than "[0]").
-        fields = {k: serialize(v, fieldTypes[k], nativeTypes=self.nativeTypes, _path=k) for k, v in fields.items()}
+        # Seed cycle detection with the root object's id (when provided
+        # by ``_api.save``) so a self-reference is reported at the
+        # closing edge.  ``_path=k`` puts the top-level field name into
+        # the error path.
+        visited: set[int] = {_rootId} if _rootId is not None else set()
+        fields = {
+            k: serialize(v, fieldTypes[k], nativeTypes=self.nativeTypes, _visited=visited, _path=k)
+            for k, v in fields.items()
+        }
         data: dict[str, Any] = {}
         for key, value in fields.items():
             data[key] = _toYamlSafe(value)

@@ -531,13 +531,7 @@ def _serializeVersionable(obj: Versionable, visited: set[int], path: str) -> dic
 
     objId = id(obj)
     if objId in visited:
-        raise CircularReferenceError(
-            f"Circular reference detected at field path "
-            f"{path or '<root>'} → {type(obj).__name__}@{objId:x}. "
-            f"versionable cannot serialize cycles in 0.2.x. "
-            f"Lossless shared-reference support is planned for 0.3.0 "
-            f"via an opt-in shared_refs=True flag."
-        )
+        raise CircularReferenceError(path, obj)
 
     meta = getMeta(type(obj))
     fields = _resolveFields(type(obj))

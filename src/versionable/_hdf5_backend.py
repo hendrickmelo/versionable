@@ -61,10 +61,16 @@ class Hdf5Backend(Backend):
         *,
         cls: type,
         compression: Hdf5Compression | None = None,
+        _rootId: int | None = None,
         **kwargs: Any,
     ) -> None:
         comp = compression or DEFAULT_COMPRESSION
         fieldTypes = _resolveFields(cls)
+        # Seed cycle detection with the root object's id (when provided
+        # by ``_api.save``) so a self-reference is reported at the
+        # closing edge — and we never create a stale subgroup before
+        # raising.
+        visited: set[int] = {_rootId} if _rootId is not None else set()
         try:
             with h5py.File(path, "w") as f:
                 # Write metadata into __versionable__ child group
@@ -74,7 +80,7 @@ class Hdf5Backend(Backend):
                 metaGroup.attrs["__HASH__"] = meta["hash"]
 
                 # Write fields
-                _writeFields(f, fields, fieldTypes, comp)
+                _writeFields(f, fields, fieldTypes, comp, visited)
         except OSError as e:
             raise BackendError(f"Failed to write HDF5 to {path}: {e}") from e
 
@@ -329,13 +335,7 @@ def _writeVersionable(
     """
     objId = id(obj)
     if objId in visited:
-        raise CircularReferenceError(
-            f"Circular reference detected at field path "
-            f"{path or '<root>'} → {type(obj).__name__}@{objId:x}. "
-            f"versionable cannot serialize cycles in 0.2.x. "
-            f"Lossless shared-reference support is planned for 0.3.0 "
-            f"via an opt-in shared_refs=True flag."
-        )
+        raise CircularReferenceError(path, obj)
 
     subgroup = parent.create_group(name)
     objType = type(obj)
