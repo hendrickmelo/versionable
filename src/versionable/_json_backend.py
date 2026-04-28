@@ -28,10 +28,20 @@ class JsonBackend(Backend):
         path: Path,
         *,
         cls: type,
+        _rootId: int | None = None,
         **kwargs: Any,
     ) -> None:
         fieldTypes = _resolveFields(cls)
-        fields = {k: serialize(v, fieldTypes[k], nativeTypes=self.nativeTypes) for k, v in fields.items()}
+        # Seed cycle detection with the root object's id (when provided
+        # by ``_api.save``) so a self-reference is reported at the
+        # closing edge.  ``_path=k`` puts the top-level field name into
+        # the error path.  ``_path``/``_visited``/``_rootId`` are
+        # private helpers; custom backends can ignore ``_rootId``.
+        visited: set[int] = {_rootId} if _rootId is not None else set()
+        fields = {
+            k: serialize(v, fieldTypes[k], nativeTypes=self.nativeTypes, _visited=visited, _path=k)
+            for k, v in fields.items()
+        }
 
         data = {
             "__versionable__": {

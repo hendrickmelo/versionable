@@ -78,7 +78,10 @@ def save(
         "version": meta.version,
         "hash": meta.hash,
     }
-    be.save(rawFields, metaDict, path, cls=objType, commentDefaults=commentDefaults, **kwargs)
+    # Seed cycle detection with the root object's id so a self-reference
+    # (e.g. ``n.children.append(n)``) is reported at the closing edge
+    # ("children[0]") rather than one hop deeper.
+    be.save(rawFields, metaDict, path, cls=objType, commentDefaults=commentDefaults, _rootId=id(obj), **kwargs)
 
 
 def load[T: Versionable](

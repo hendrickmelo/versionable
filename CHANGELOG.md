@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0 (unreleased)
+
+- Cycles in object graphs now raise `CircularReferenceError` at save time, with the field path of the revisit, instead
+  of `RecursionError`. Detection covers all four backends (JSON, YAML, TOML, HDF5).
+- Shared references are still duplicated on save and load as separate instances. Lossless shared-reference support (and
+  therefore cycles, on opt-in) is planned for 0.3.0.
+
 ## 0.1.0
 
 First stable release of **versionable**.

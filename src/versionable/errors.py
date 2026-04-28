@@ -66,3 +66,40 @@ class ConverterError(VersionableError):
 
 class BackendError(VersionableError):
     """A storage backend operation failed."""
+
+
+class CircularReferenceError(VersionableError):
+    """A cycle was detected in the object graph during serialization.
+
+    Raised when ``serialize()`` (JSON/YAML/TOML) or the HDF5 writer
+    encounters a ``Versionable`` instance that is already on the
+    serialization stack — i.e. an object reaches itself by following its
+    own fields.
+
+    Carries structured data so callers can inspect the cycle without
+    parsing the message string:
+
+    Attributes:
+        path: Field path to the revisit (e.g. ``children[0]``,
+            ``partner.partner``, ``partners['alice']``).  Empty string
+            denotes the root object (rare — the root is only reported
+            here when the same instance is reassigned to itself in a
+            session).
+        objType: Type of the revisited instance.
+        objId: ``id()`` of the revisited instance, as an int.  The
+            message renders this in hex so a self-cycle can be told
+            apart from a legitimate diamond (same instance referenced
+            from two unrelated branches; not a cycle).
+    """
+
+    def __init__(self, path: str, obj: object) -> None:
+        self.path = path
+        self.objType = type(obj)
+        self.objId = id(obj)
+        super().__init__(
+            f"Circular reference detected at field path "
+            f"{path or '<root>'} → {self.objType.__name__}@{self.objId:x}. "
+            f"versionable cannot serialize cycles in 0.2.x. "
+            f"Lossless shared-reference support is planned for 0.3.0 "
+            f"via an opt-in shared_refs=True flag."
+        )
