@@ -165,12 +165,19 @@ class TestHdf5Compression:
 
         Uses a subprocess for a clean interpreter — otherwise pytest's own
         imports might pollute sys.modules and hide the bug this fix prevents.
+        Asserts hdf5plugin is *not* loaded before the backend import to prove
+        the backend itself is what triggered registration.
         """
         pytest.importorskip("hdf5plugin")
         import subprocess
         import sys
 
-        code = "from versionable import _hdf5_backend; import sys; assert 'hdf5plugin' in sys.modules"
+        code = (
+            "import sys; "
+            "assert 'hdf5plugin' not in sys.modules, 'hdf5plugin pre-loaded by startup hook'; "
+            "from versionable import _hdf5_backend; "
+            "assert 'hdf5plugin' in sys.modules, 'backend did not import hdf5plugin'"
+        )
         result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
         assert result.returncode == 0, f"stderr: {result.stderr}"
 
