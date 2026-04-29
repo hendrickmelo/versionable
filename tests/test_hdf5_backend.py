@@ -907,6 +907,67 @@ class TestHdf5Migration:
         assert loaded.rate_Hz == 1000.0
 
 
+class TestHdf5BackCompat:
+    """Read-side compatibility for files written by versionable 0.1.x."""
+
+    def test_loadOldFormatEnvelope(self, tmp_path: Path) -> None:
+        """A file with legacy __OBJECT__/__VERSION__/__HASH__ attrs still loads."""
+        p = tmp_path / "old.h5"
+        with h5py.File(p, "w") as f:
+            meta = f.create_group("__versionable__")
+            meta.attrs["__OBJECT__"] = "SimpleConfig"
+            meta.attrs["__VERSION__"] = 1
+            meta.attrs["__HASH__"] = "ed3a90"
+            f.attrs["name"] = "legacy"
+            f.attrs["debug"] = True
+            f.attrs["retries"] = 7
+
+        loaded = versionable.load(SimpleConfig, p)
+        assert loaded.name == "legacy"
+        assert loaded.debug is True
+        assert loaded.retries == 7
+
+    def test_oldFormatFutureFormatRaises(self, tmp_path: Path) -> None:
+        """The legacy __FORMAT__ attr still triggers the upgrade-required error."""
+        p = tmp_path / "old_future.h5"
+        with h5py.File(p, "w") as f:
+            meta = f.create_group("__versionable__")
+            meta.attrs["__OBJECT__"] = "SimpleConfig"
+            meta.attrs["__VERSION__"] = 1
+            meta.attrs["__HASH__"] = ""
+            meta.attrs["__FORMAT__"] = 2
+
+        with pytest.raises(BackendError, match="Upgrade versionable"):
+            versionable.load(SimpleConfig, p)
+
+    def test_loadOldFormatNestedVersionable(self, tmp_path: Path) -> None:
+        """A nested Versionable subgroup with legacy attrs loads correctly."""
+        from .conftest import Inner, WithNested
+
+        p = tmp_path / "old_nested.h5"
+        with h5py.File(p, "w") as f:
+            # Outer envelope (legacy attrs)
+            outer = f.create_group("__versionable__")
+            outer.attrs["__OBJECT__"] = "WithNested"
+            outer.attrs["__VERSION__"] = 1
+            outer.attrs["__HASH__"] = "db925f"
+            f.attrs["name"] = "origin"
+            # Nested point with legacy envelope
+            point = f.create_group("point")
+            inner = point.create_group("__versionable__")
+            inner.attrs["__OBJECT__"] = "Inner"
+            inner.attrs["__VERSION__"] = 1
+            inner.attrs["__HASH__"] = "e37514"
+            point.attrs["x"] = 1.5
+            point.attrs["y"] = 2.5
+
+        loaded = versionable.load(WithNested, p)
+        assert loaded.name == "origin"
+        assert isinstance(loaded.point, Inner)
+        assert loaded.point.x == 1.5
+        assert loaded.point.y == 2.5
+
+
 def _assertNoJsonAttrs(group: h5py.Group) -> None:
     """Recursively verify no attributes contain JSON strings."""
     for attrName in group.attrs:

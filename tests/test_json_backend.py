@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
+try:
+    import numpy as np
+    import numpy.typing as npt
+
+    _HAS_NUMPY = True
+except ImportError:
+    _HAS_NUMPY = False
+
 import versionable
+from versionable._base import Versionable
 from versionable.errors import BackendError, ConverterError, VersionError
 
 from .conftest import (
@@ -15,6 +25,15 @@ from .conftest import (
     WithLiteral,
     WithSkipDefaults,
 )
+
+if _HAS_NUMPY:
+
+    @dataclass
+    class _JsonArrLegacy(Versionable, version=1, name="JsonArrLegacy", register=True):
+        """Test class for back-compat ndarray reads in JSON files."""
+
+        label: str
+        data: npt.NDArray[np.float64]
 
 
 class TestJsonMetadata:
@@ -210,3 +229,91 @@ class TestErrors:
         )
         with pytest.raises(BackendError, match="Upgrade versionable"):
             versionable.load(SimpleConfig, p)
+
+
+class TestJsonBackCompat:
+    """Read-side compatibility for files written by versionable 0.1.x."""
+
+    def test_loadOldFormatEnvelope(self, tmp_path: Path) -> None:
+        """A file with the legacy __OBJECT__/__VERSION__/__HASH__ keys still loads."""
+        p = tmp_path / "old.json"
+        p.write_text(
+            json.dumps(
+                {
+                    "__versionable__": {
+                        "__OBJECT__": "SimpleConfig",
+                        "__VERSION__": 1,
+                        "__HASH__": "ed3a90",
+                    },
+                    "name": "legacy",
+                    "debug": True,
+                    "retries": 7,
+                }
+            )
+        )
+        loaded = versionable.load(SimpleConfig, p)
+        assert loaded.name == "legacy"
+        assert loaded.debug is True
+        assert loaded.retries == 7
+
+    def test_oldFormatFutureFormatRaises(self, tmp_path: Path) -> None:
+        """The legacy __FORMAT__ key still triggers the upgrade-required error."""
+        p = tmp_path / "old_future.json"
+        p.write_text(
+            json.dumps(
+                {
+                    "__versionable__": {
+                        "__OBJECT__": "SimpleConfig",
+                        "__VERSION__": 1,
+                        "__HASH__": "",
+                        "__FORMAT__": 2,
+                    },
+                    "name": "test",
+                }
+            )
+        )
+        with pytest.raises(BackendError, match="Upgrade versionable"):
+            versionable.load(SimpleConfig, p)
+
+    @pytest.mark.skipif(not _HAS_NUMPY, reason="numpy not installed")
+    def test_loadOldFormatNdarray(self, tmp_path: Path) -> None:
+        """A file with the legacy __ndarray__ sentinel still loads as a numpy array."""
+        # Save a fresh file then rewrite the envelope + sentinel keys to legacy form.
+        obj = _JsonArrLegacy(label="legacy-array", data=np.array([1.5, 2.5, 3.5], dtype=np.float64))
+        p = tmp_path / "old_arr.json"
+        versionable.save(obj, p)
+        text = p.read_text()
+        legacy = (
+            text.replace('"object":', '"__OBJECT__":')
+            .replace('"version":', '"__VERSION__":')
+            .replace('"hash":', '"__HASH__":')
+            .replace('"__ver_ndarray__":', '"__ndarray__":')
+        )
+        p.write_text(legacy)
+
+        loaded = versionable.load(_JsonArrLegacy, p)
+        assert loaded.label == "legacy-array"
+        np.testing.assert_array_equal(loaded.data, np.array([1.5, 2.5, 3.5]))
+
+    def test_newKeysPreferredWhenBothPresent(self, tmp_path: Path) -> None:
+        """Mixed old + new envelope keys: new wins, no errors."""
+        p = tmp_path / "mixed.json"
+        p.write_text(
+            json.dumps(
+                {
+                    "__versionable__": {
+                        # Old keys point at a different class — must be ignored
+                        "__OBJECT__": "WrongClass",
+                        "__VERSION__": 99,
+                        "__HASH__": "deadbe",
+                        # New keys are correct — must win
+                        "object": "SimpleConfig",
+                        "version": 1,
+                        "hash": "ed3a90",
+                    },
+                    "name": "winner",
+                }
+            )
+        )
+        loaded = versionable.load(SimpleConfig, p)
+        assert loaded.name == "winner"

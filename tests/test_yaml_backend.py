@@ -8,9 +8,19 @@ import pytest
 
 yaml = pytest.importorskip("yaml")
 
+from dataclasses import dataclass
 from pathlib import Path
 
+try:
+    import numpy as np
+    import numpy.typing as npt
+
+    _HAS_NUMPY = True
+except ImportError:
+    _HAS_NUMPY = False
+
 import versionable
+from versionable._base import Versionable
 from versionable.errors import BackendError, ConverterError, VersionError
 
 from .conftest import (
@@ -21,6 +31,15 @@ from .conftest import (
     WithLiteralNoValidation,
     WithSkipDefaults,
 )
+
+if _HAS_NUMPY:
+
+    @dataclass
+    class _YamlArrLegacy(Versionable, version=1, name="YamlArrLegacy", register=True):
+        """Test class for back-compat ndarray reads in YAML files."""
+
+        label: str
+        data: npt.NDArray[np.float64]
 
 
 class TestYamlRoundTrip:
@@ -295,3 +314,69 @@ class TestYamlErrors:
         )
         with pytest.raises(BackendError, match="Upgrade versionable"):
             versionable.load(SimpleConfig, p)
+
+
+class TestYamlBackCompat:
+    """Read-side compatibility for files written by versionable 0.1.x."""
+
+    def test_loadOldFormatEnvelope(self, tmp_path: Path) -> None:
+        """A file with the legacy __OBJECT__/__VERSION__/__HASH__ keys still loads."""
+        p = tmp_path / "old.yaml"
+        p.write_text(
+            yaml.dump(
+                {
+                    "__versionable__": {
+                        "__OBJECT__": "SimpleConfig",
+                        "__VERSION__": 1,
+                        "__HASH__": "ed3a90",
+                    },
+                    "name": "legacy",
+                    "debug": True,
+                    "retries": 7,
+                }
+            )
+        )
+        loaded = versionable.load(SimpleConfig, p)
+        assert loaded.name == "legacy"
+        assert loaded.debug is True
+        assert loaded.retries == 7
+
+    def test_oldFormatFutureFormatRaises(self, tmp_path: Path) -> None:
+        """The legacy __FORMAT__ key still triggers the upgrade-required error."""
+        p = tmp_path / "old_future.yaml"
+        p.write_text(
+            yaml.dump(
+                {
+                    "__versionable__": {
+                        "__OBJECT__": "SimpleConfig",
+                        "__VERSION__": 1,
+                        "__HASH__": "",
+                        "__FORMAT__": 2,
+                    },
+                    "name": "test",
+                }
+            )
+        )
+        with pytest.raises(BackendError, match="Upgrade versionable"):
+            versionable.load(SimpleConfig, p)
+
+    @pytest.mark.skipif(not _HAS_NUMPY, reason="numpy not installed")
+    def test_loadOldFormatNdarray(self, tmp_path: Path) -> None:
+        """A file with the legacy __json__ wrapper and __ndarray__ sentinel loads."""
+        obj = _YamlArrLegacy(label="legacy-array", data=np.array([4.0, 5.0, 6.0], dtype=np.float64))
+        p = tmp_path / "old_arr.yaml"
+        versionable.save(obj, p)
+        # Rewrite both the envelope keys and the YAML/ndarray sentinels to legacy form.
+        text = p.read_text()
+        legacy = (
+            text.replace("object:", "__OBJECT__:")
+            .replace("version:", "__VERSION__:")
+            .replace("hash:", "__HASH__:")
+            .replace("__ver_json__:", "__json__:")
+            .replace("__ver_ndarray__", "__ndarray__")
+        )
+        p.write_text(legacy)
+
+        loaded = versionable.load(_YamlArrLegacy, p)
+        assert loaded.label == "legacy-array"
+        np.testing.assert_array_equal(loaded.data, np.array([4.0, 5.0, 6.0]))
