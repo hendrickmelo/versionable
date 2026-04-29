@@ -6,6 +6,15 @@
   of `RecursionError`. Detection covers all four backends (JSON, YAML, TOML, HDF5).
 - Shared references are still duplicated on save and load as separate instances. Lossless shared-reference support (and
   therefore cycles, on opt-in) is planned for 0.3.0.
+- File format: dropped the redundant dunders inside the `__versionable__` envelope (`__OBJECT__` → `object`,
+  `__VERSION__` → `version`, `__HASH__` → `hash`, `__FORMAT__` → `format`), and re-namespaced the user-data sentinels
+  with a `__ver_*__` prefix (`__ndarray__` → `__ver_ndarray__`, `__json__` → `__ver_json__`). The `__versionable__`
+  wrapper key itself is unchanged.
+- Backwards compatibility: `load()` continues to accept the old key names from 0.1.x files for the entire 0.2.x line
+  (preferring new keys when both are present); the legacy read path will be removed in 1.0. Saved files always use the
+  new keys.
+- The warning emitted by `load()` for files missing version metadata now reads `No version found …` (was
+  `No __VERSION__ found …`).
 
 ## 0.1.0
 
