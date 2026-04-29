@@ -3,8 +3,8 @@
 # Envelope Keys: Drop Redundant Dunders
 
 - **Created:** 2026-04-27
-- **Last updated:** 2026-04-27
-- **Status:** Proposed
+- **Last updated:** 2026-04-29
+- **Status:** Implemented
 - **Branch:** `feature/envelope-keys`
 - **Targets release:** 0.2.0
 

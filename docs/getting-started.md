@@ -72,9 +72,9 @@ The YAML file on disk looks like:
 name: experiment-A
 value: 9.81
 __versionable__:
-  __OBJECT__: MyConfig
-  __VERSION__: 1
-  __HASH__: 4b7866
+  object: MyConfig
+  version: 1
+  hash: 4b7866
 ```
 
 Now you rename the field without updating the hash:

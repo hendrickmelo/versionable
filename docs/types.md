@@ -83,7 +83,7 @@ class Shape(Versionable, version=1, hash="..."):
   integer-keyed datasets; `dict[str, np.ndarray]` becomes a group of named datasets. Both support per-element lazy
   loading. See [Backends](backends.md).
 - **JSON / TOML:** Stored as base64-compressed npz blobs.
-- **YAML:** Stored as a `__json__` wrapper containing the base64-compressed npz blob as a JSON string.
+- **YAML:** Stored as a `__ver_json__` wrapper containing the base64-compressed npz blob as a JSON string.
 
 ## Custom Converters
 

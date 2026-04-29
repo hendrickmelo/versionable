@@ -15,8 +15,9 @@ migrate between formats or write tests against a lighter-weight backend than you
 | `.toml`         | `TomlBackend` | Human-editable config files          |
 | `.h5`, `.hdf5`  | `Hdf5Backend` | Large numpy arrays, lazy loading     |
 
-All backends store the same schema metadata (`__OBJECT__`, `__VERSION__`, `__HASH__`) alongside your data, so `load()`
-can validate the schema and apply migrations regardless of which backend wrote the file.
+All backends store the same schema metadata (`object`, `version`, `hash` inside the `__versionable__` envelope)
+alongside your data, so `load()` can validate the schema and apply migrations regardless of which backend wrote the
+file.
 
 ## Feature comparison
 
@@ -52,9 +53,9 @@ channels:
   - 1
   - 2
 __versionable__:
-  __OBJECT__: SensorConfig
-  __VERSION__: 1
-  __HASH__: 9d6951
+  object: SensorConfig
+  version: 1
+  hash: 9d6951
 ```
 
 Both `.yaml` and `.yml` extensions are supported.
@@ -84,9 +85,9 @@ sampleRate_Hz: 120000
 # - 1
 # - 2
 __versionable__:
-  __OBJECT__: SensorConfig
-  __VERSION__: 1
-  __HASH__: 9d6951
+  object: SensorConfig
+  version: 1
+  hash: 9d6951
 ```
 
 ## JSON
@@ -104,9 +105,11 @@ The output includes schema metadata alongside the data:
 
 ```json
 {
-  "__OBJECT__": "SensorConfig",
-  "__VERSION__": 1,
-  "__HASH__": "9d6951",
+  "__versionable__": {
+    "object": "SensorConfig",
+    "version": 1,
+    "hash": "9d6951"
+  },
   "name": "probe-A",
   "sampleRate_Hz": 120000,
   "channels": [0, 1, 2]
@@ -132,9 +135,9 @@ sampleRate_Hz = 120000
 channels = [0, 1, 2]
 
 [__versionable__]
-__OBJECT__ = "SensorConfig"
-__VERSION__ = 1
-__HASH__ = "9d6951"
+object = "SensorConfig"
+version = 1
+hash = "9d6951"
 ```
 
 Fields come first deliberately — if a user opens the file to hand-edit a value, the data is right at the top and the
@@ -177,14 +180,14 @@ The saved TOML looks like:
 name = "worker"
 
 [__versionable__]
-__OBJECT__ = "WorkerConfig"
-__VERSION__ = 1
-__HASH__ = "8bdfa7"
+object = "WorkerConfig"
+version = 1
+hash = "8bdfa7"
 
 [retry]
-__OBJECT__ = "RetryPolicy"
-__VERSION__ = 1
-__HASH__ = "f907a9"
+object = "RetryPolicy"
+version = 1
+hash = "f907a9"
 retries = 3
 backoff_s = 1.0
 ```
@@ -204,9 +207,9 @@ sampleRate_Hz = 120000
 # channels = [0, 1, 2]
 
 [__versionable__]
-__OBJECT__ = "SensorConfig"
-__VERSION__ = 1
-__HASH__ = "9d6951"
+object = "SensorConfig"
+version = 1
+hash = "9d6951"
 ```
 
 ## HDF5
@@ -271,9 +274,9 @@ Every field maps to a native HDF5 construct:
 | `Enum`                                                | Attribute (stores `.value`)                    |
 | Converted types (datetime, Path, etc.)                | Attribute (converter output)                   |
 
-Metadata (`__OBJECT__`, `__VERSION__`, `__HASH__`) is stored in a `__versionable__` child group at the root and inside
-each nested Versionable subgroup. This distinguishes Versionable groups from plain collection groups. `__FORMAT__` is
-reserved in this group for future versionable versioning.
+Metadata (`object`, `version`, `hash`) is stored as attributes on a `__versionable__` child group at the root and inside
+each nested Versionable subgroup. This distinguishes Versionable groups from plain collection groups. The `format`
+attribute is reserved in this group for future versionable file format versioning.
 
 Files are readable with h5dump, HDFView, MATLAB, or any HDF5-compatible tool. Reconstructing exact Python types (e.g.,
 distinguishing `list[float]` from `np.ndarray`) requires the class's type annotations.

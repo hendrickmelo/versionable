@@ -93,7 +93,7 @@ loaded = versionable.load(MyClass, "data.h5", preload=["big"])   # Eager-load sp
 loaded = versionable.load(MyClass, "data.h5", preload="*")       # Eager-load all arrays
 loaded = versionable.load(MyClass, "data.h5", metadataOnly=True) # Skip arrays entirely
 
-obj = versionable.loadDynamic("file.yaml")                      # Type from __OBJECT__ metadata
+obj = versionable.loadDynamic("file.yaml")                      # Type from `object` metadata
 
 # Introspection
 meta = versionable.metadata(MyClass)  # VersionableMetadata(version, hash, name, fields, ...)
@@ -133,8 +133,9 @@ class SensorConfig(
 **Serialized fields:** annotated, non-private (no `_` prefix), non-`ClassVar`. Private fields, unannotated attributes,
 and `ClassVar` are excluded.
 
-**Reserved metadata keys (cannot be field names):** `__OBJECT__`, `__VERSION__`, `__HASH__`, `__versionable__`,
-`__ndarray__`, `__json__`.
+**Reserved metadata keys (cannot be field names):** `__versionable__` (envelope wrapper), `__ver_ndarray__`,
+`__ver_json__`. Inside the `__versionable__` envelope: `object`, `version`, `hash`, `format`. The 0.1.x dunder forms
+(`__OBJECT__`, `__ndarray__`, `__json__`, etc.) are still accepted on read for back-compat.
 
 ### Type System
 

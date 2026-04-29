@@ -60,23 +60,23 @@ if __name__ == "__main__":
 # # debug = false
 #
 # [__versionable__]
-# __OBJECT__ = "ServerConfig"
-# __VERSION__ = 1
-# __HASH__ = ""
+# object = "ServerConfig"
+# version = 1
+# hash = ""
 #
 # [database]
-# __OBJECT__ = "DatabaseConfig"
-# __VERSION__ = 1
-# __HASH__ = ""
+# object = "DatabaseConfig"
+# version = 1
+# hash = ""
 # # host = "localhost"
 # port = 3306
 # # maxConnections = 10
 # # timeoutSec = 30.0
 #
 # [logging]
-# __OBJECT__ = "LoggingConfig"
-# __VERSION__ = 1
-# __HASH__ = ""
+# object = "LoggingConfig"
+# version = 1
+# hash = ""
 # # level = "INFO"
 # # filePath = "/var/log/app.log"
 # # rotateAfterMB = 100
@@ -87,21 +87,21 @@ if __name__ == "__main__":
 # # name: my-server
 # # debug: false
 # database:
-#   __OBJECT__: DatabaseConfig
-#   __VERSION__: 1
-#   __HASH__: ''
+#   object: DatabaseConfig
+#   version: 1
+#   hash: ''
 #   host: localhost
 #   port: 3306
 #   maxConnections: 10
 #   timeoutSec: 30.0
 # logging:
-#   __OBJECT__: LoggingConfig
-#   __VERSION__: 1
-#   __HASH__: ''
+#   object: LoggingConfig
+#   version: 1
+#   hash: ''
 # #   level: INFO
 # #   filePath: /var/log/app.log
 # #   rotateAfterMB: 100
 # __versionable__:
-#   __OBJECT__: ServerConfig
-#   __VERSION__: 1
-#   __HASH__: ''
+#   object: ServerConfig
+#   version: 1
+#   hash: ''

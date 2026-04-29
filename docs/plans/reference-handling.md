@@ -31,8 +31,8 @@ Two-step rollout, two PRs:
    `CircularReferenceError` carrying the field path. Strict additive change; no file format change; no public
    API change beyond a new exception class.
 2. **PR 2 — Shared references (ships in 0.3.0).** Opt-in, per-class, lossless preservation of shared instances
-   (and therefore cycles, for non-frozen classes). Each backend uses its idiomatic primitive: `__ID__` /
-   `__REF__` envelopes for JSON/TOML, native YAML anchors, HDF5 hard links.
+   (and therefore cycles, for non-frozen classes). Each backend uses its idiomatic primitive: `__ver_id__` /
+   `__ver_ref__` envelopes for JSON/TOML, native YAML anchors, HDF5 hard links.
 
 PR 1 is a strict correctness improvement that any release should ship. It also establishes the threading and
 error machinery that PR 2 builds on.
@@ -211,27 +211,27 @@ flows in.
 
 ### File format — JSON / TOML
 
-A first-occurrence object gets an `__ID__` field; subsequent occurrences are replaced by a one-key envelope:
+A first-occurrence object gets an `__ver_id__` field; subsequent occurrences are replaced by a one-key envelope:
 
 ```json
 {
-  "__versionable__": {"__OBJECT__": "Node", "__VERSION__": 1, "__HASH__": "...", "__SHARED_REFS__": true},
-  "__ID__": "#0",
+  "__versionable__": {"object": "Node", "version": 1, "hash": "...", "shared_refs": true},
+  "__ver_id__": "#0",
   "name": "root",
   "children": [
-    {"__OBJECT__": "Node", "__VERSION__": 1, "__HASH__": "...", "__ID__": "#1", "name": "left", "children": []},
-    {"__REF__": "#1"}
+    {"object": "Node", "version": 1, "hash": "...", "__ver_id__": "#1", "name": "left", "children": []},
+    {"__ver_ref__": "#1"}
   ]
 }
 ```
 
 Notes:
 
-- `__SHARED_REFS__: true` on the root metadata declares the file uses ref semantics — readers can fast-path
+- `shared_refs: true` on the root metadata declares the file uses ref semantics — readers can fast-path
   files without it (no two-pass needed).
 - IDs are local to the file (`"#0"`, `"#1"`, …) and assigned in pre-order traversal. They're opaque strings, not
   numbers, so users don't read meaning into them.
-- Refs to the root use `{"__REF__": "#0"}` like any other.
+- Refs to the root use `{"__ver_ref__": "#0"}` like any other.
 - Non-`Versionable` shared values (numpy arrays, dataclasses-but-not-Versionable, dicts) are still duplicated.
   This is a deliberate scope limit — Versionable owns identity tracking only for its own instances.
 
@@ -242,34 +242,34 @@ Python object is encountered twice during dumping. To get this for free we need 
 intermediate representation**: when serializing a `Versionable` we've already seen, emit the *same* dict
 object (not a fresh copy with `__REF__`).
 
-This makes YAML files cleaner than JSON's `__REF__` envelopes:
+This makes YAML files cleaner than JSON's `__ver_ref__` envelopes:
 
 ```yaml
 __versionable__:
-  __OBJECT__: Node
-  __VERSION__: 1
-  __HASH__: "..."
-  __SHARED_REFS__: true
-__ID__: "#0"
+  object: Node
+  version: 1
+  hash: "..."
+  shared_refs: true
+__ver_id__: "#0"
 name: root
 children:
   - &id001
-    __OBJECT__: Node
-    __ID__: "#1"
+    object: Node
+    __ver_id__: "#1"
     name: left
     children: []
   - *id001
 ```
 
 On load, PyYAML restores identity automatically — `parent["children"][0] is parent["children"][1]` is `True`.
-We then walk the loaded dict and `__REF__`-resolution becomes mostly a no-op; we just need to map dict
+We then walk the loaded dict and `__ver_ref__`-resolution becomes mostly a no-op; we just need to map dict
 identity to instance identity.
 
 ### File format — TOML
 
 TOML has no anchor concept and no inline references in the spec. Use the JSON envelope approach
-(`__ID__` / `__REF__`). TOML's table syntax handles this fine — a `__REF__` table is just a one-key inline
-table.
+(`__ver_id__` / `__ver_ref__`). TOML's table syntax handles this fine — a `__ver_ref__` table is just a
+one-key inline table.
 
 ### File format — HDF5
 
@@ -277,7 +277,7 @@ HDF5 has hard links and soft links natively. Use **hard links**:
 
 ```text
 /__versionable__/
-/__versionable__/__SHARED_REFS__ (attr) = True
+/__versionable__/shared_refs (attr) = True
 /name (attr) = "root"
 /children/
 /children/0/                    ← first occurrence: full subgroup
@@ -302,13 +302,13 @@ three need synthetic IDs.
 
 For JSON/TOML (and YAML pre-identity-preservation), refs need resolution after the dict is parsed. The flow:
 
-1. **Parse pass** — backend produces a raw dict tree with `__REF__` markers at the leaves where shared.
-2. **Index pass** — walk the tree; collect every `__ID__` → its dict.
+1. **Parse pass** — backend produces a raw dict tree with `__ver_ref__` markers at the leaves where shared.
+2. **Index pass** — walk the tree; collect every `__ver_id__` → its dict.
 3. **Construct pass** — for each unique ID, build a *shell* `Versionable` instance:
    - Mutable classes (default): construct with placeholder values for ref-typed fields, fill via `setattr` later.
    - Frozen classes: collect into a topological build order. If the graph has a cycle and the class is frozen,
      raise `BackendError("Cannot load cycle into frozen class X")`.
-4. **Resolve pass** — walk the tree replacing `__REF__: "#1"` with the constructed instance for `"#1"`.
+4. **Resolve pass** — walk the tree replacing `__ver_ref__: "#1"` with the constructed instance for `"#1"`.
 5. **Post-init pass** — call `__post_init__` (skipped during shell construction) on each instance in topological
    order. For cycles, run `__post_init__` last and document the caveat.
 
@@ -324,17 +324,17 @@ cycles, `__post_init__` may observe `self` in fields before construction has ful
 | `_base.py::__init_subclass__` | Accept `shared_refs: bool = False`; store on `_InternalMeta`. |
 | `_base.py::VersionableMetadata` | Add `sharedRefs: bool` field. |
 | `_types.py::serialize` | When root `shared_refs=True`, switch to ID-tracking serializer. |
-| `_types.py` | New `_serializeWithRefs(obj)` that maintains `id(obj) → assignedId` and emits `__ID__`/`__REF__`. |
+| `_types.py` | New `_serializeWithRefs(obj)` that maintains `id(obj) → assignedId` and emits `__ver_id__`/`__ver_ref__`. |
 | `_types.py` | New `_deserializeWithRefs(data, cls)` that runs the four-pass load. |
 | `_api.py::save` | Accept `sharedRefs: bool | None = None`; resolve override vs. class flag. |
-| `_api.py::load` | Detect `__SHARED_REFS__: True` in metadata; route to ref-aware path. |
+| `_api.py::load` | Detect `shared_refs: True` in metadata; route to ref-aware path. |
 | `_json_backend.py` | No format-specific changes — uses generic `serialize`/`deserialize`. |
 | `_yaml_backend.py` | Preserve dict identity in the intermediate IR so PyYAML emits anchors. Document the trick. |
 | `_toml_backend.py` | No format-specific changes. |
 | `_hdf5_backend.py::_writeFields` | When in shared-refs mode, track `id(obj) → group_path`; emit hard links. |
 | `_hdf5_backend.py::_readFields` | Track `h5py.Group.id` → Python instance; recurse into hard-linked groups only on first sight. |
 | `errors.py` | New `FrozenCycleError(BackendError)` for cycles into frozen classes. |
-| `_migration.py` | Resolve refs *before* migrations run. Migrations see Python objects, never `__REF__` dicts. Document. |
+| `_migration.py` | Resolve refs *before* migrations run. Migrations see Python objects, never `__ver_ref__` dicts. Document. |
 | `__init__.py` | Re-export new symbols. |
 
 ### Tests (`tests/test_shared_refs.py`)
@@ -357,22 +357,22 @@ Plus identity assertions on every loaded graph: `loaded.left is loaded.right`.
 
 Plus migration tests: a v1 file with shared refs migrates to v2 with the shared structure preserved.
 
-Plus a backwards-compat test: a 0.2.x file (no `__SHARED_REFS__` marker) loads under a 0.3.0 reader.
+Plus a backwards-compat test: a 0.2.x file (no `shared_refs` marker) loads under a 0.3.0 reader.
 
 ### Migration impact
 
 Refs are resolved before migrations run, so migration code stays simple. Document this for users writing
 imperative migrations: their `MigrationContext` sees a real Python object graph (with cycles intact), not
-`__REF__` dicts. Existing migrations are unaffected because the resolution pass happens transparently.
+`__ver_ref__` dicts. Existing migrations are unaffected because the resolution pass happens transparently.
 
 ### Backwards compatibility
 
-- A 0.2.x file (no `__SHARED_REFS__: true` in metadata) reads under 0.3.0 with the existing code path —
+- A 0.2.x file (no `shared_refs: true` in metadata) reads under 0.3.0 with the existing code path —
   no two-pass load, no perf hit. Detection is a single attribute check.
-- A 0.3.0 file *with* `__SHARED_REFS__: true` cannot be read by 0.2.x. This is fine — the feature is opt-in
+- A 0.3.0 file *with* `shared_refs: true` cannot be read by 0.2.x. This is fine — the feature is opt-in
   per class, so users who don't enable it keep producing 0.2.x-readable files. Document the forward-compat
   break clearly.
-- `__SHARED_REFS__: false` is never written (omission means false).
+- `shared_refs: false` is never written (omission means false).
 
 ### Risk
 
@@ -386,6 +386,8 @@ opt-in flag specifically so users who don't want the complexity don't pay for it
 - Identity assertions hold on every loaded graph.
 - Documentation covers the opt-in flag, `__post_init__` ordering, frozen-class limitation, and forward-compat
   break.
+- Reserved-keys docs in `docs/reference.md` list `__ver_id__`, `__ver_ref__`, and the `shared_refs` envelope
+  flag as reserved.
 - `pixi run cleanup && pixi run pytest` green.
 
 ---
@@ -395,7 +397,7 @@ opt-in flag specifically so users who don't want the complexity don't pay for it
 - **Sharing of non-Versionable values.** A numpy array referenced twice still duplicates. HDF5 users who
   want to dedupe arrays can use `Hdf5FieldInfo` / hard links manually. Versionable doesn't track identity for
   primitives, dicts, or arrays.
-- **Cross-file references.** Refs are local to one file. No `__REF__: "other_file.json#1"` plans.
+- **Cross-file references.** Refs are local to one file. No `__ver_ref__: "other_file.json#1"` plans.
 - **External graph databases.** This isn't a graph DB — it's a serializer that doesn't break when graphs
   show up.
 - **Reference-aware diffing.** Comparing two saved graphs by structure rather than text — interesting, not
@@ -413,7 +415,7 @@ opt-in flag specifically so users who don't want the complexity don't pay for it
    `__post_init__` on shared_refs classes? Lean toward "run after, document the caveat" but want a concrete
    user case before committing.
 4. **Should the sidecar-table layout (`__objects__: {id: {...}}, __root__: ref`) be considered as an
-   alternative to inline `__ID__`?** It's cleaner to migrate but worse for hand-editing. Inline matches
+   alternative to inline `__ver_id__`?** It's cleaner to migrate but worse for hand-editing. Inline matches
    YAML's anchor model. Tentative: inline.
 5. **Exposing `sharedRefs` on `VersionableMetadata`** — should it be public introspection? Probably yes,
    to mirror `skipDefaults` / `unknown`.

@@ -1,5 +1,9 @@
 # Save-As-You-Go for HDF5
 
+> **Historical plan — implemented.** Envelope key names in this document
+> (`__OBJECT__`, `__VERSION__`, `__HASH__`) were renamed in 0.2.0; see
+> `docs/plans/envelope-keys.md`. Current names are `object`, `version`, `hash`.
+
 ## Problem
 
 When collecting data incrementally (e.g., appending traces from a DAQ, accumulating simulation results), users
