@@ -536,9 +536,9 @@ def _serializeVersionable(obj: Versionable, visited: set[int], path: str) -> dic
     meta = getMeta(type(obj))
     fields = _resolveFields(type(obj))
     result: dict[str, Any] = {
-        "__OBJECT__": meta.name,
-        "__VERSION__": meta.version,
-        "__HASH__": meta.hash,
+        "object": meta.name,
+        "version": meta.version,
+        "hash": meta.hash,
     }
     visited.add(objId)
     try:
@@ -558,13 +558,13 @@ def _serializeVersionable(obj: Versionable, visited: set[int], path: str) -> dic
 def _deserializeVersionable(data: dict[str, Any], cls: type[Versionable]) -> Versionable:
     """Deserialize a dict to a Versionable instance.
 
-    If the dict contains a ``__lazy__`` key (set by the HDF5 backend's
+    If the dict contains a ``__ver_lazy__`` key (set by the HDF5 backend's
     recursive lazy reader), lazy sentinels are passed through without
     deserialization and the instance is wrapped with ``makeLazyInstance``.
     """
     import dataclasses
 
-    lazyFields: set[str] = data.pop("__lazy__", set())
+    lazyFields: set[str] = data.pop("__ver_lazy__", set())
 
     meta = cls._serializer_meta_
     fields = _resolveFields(cls)
@@ -608,7 +608,7 @@ def _serializeNdarray(arr: Any) -> dict[str, Any]:
     buf = io.BytesIO()
     numpy.savez_compressed(buf, data=arr)
     encoded = base64.b64encode(buf.getvalue()).decode("ascii")
-    return {"__ndarray__": True, "dtype": str(arr.dtype), "shape": list(arr.shape), "data": encoded}
+    return {"__ver_ndarray__": True, "dtype": str(arr.dtype), "shape": list(arr.shape), "data": encoded}
 
 
 def _deserializeNdarray(data: Any) -> Any:
@@ -616,7 +616,7 @@ def _deserializeNdarray(data: Any) -> Any:
     numpy = requireNumpy("ndarray deserialization")
     if isinstance(data, numpy.ndarray):
         return data
-    if isinstance(data, dict) and data.get("__ndarray__"):
+    if isinstance(data, dict) and (data.get("__ver_ndarray__") or data.get("__ndarray__")):
         raw = base64.b64decode(data["data"])
         buf = io.BytesIO(raw)
         return numpy.load(buf)["data"]

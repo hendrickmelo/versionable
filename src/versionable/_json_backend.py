@@ -45,9 +45,9 @@ class JsonBackend(Backend):
 
         data = {
             "__versionable__": {
-                "__OBJECT__": meta["name"],
-                "__VERSION__": meta["version"],
-                "__HASH__": meta["hash"],
+                "object": meta["name"],
+                "version": meta["version"],
+                "hash": meta["hash"],
             },
             **fields,
         }
@@ -70,7 +70,7 @@ class JsonBackend(Backend):
         if not isinstance(metaTable, dict):
             raise BackendError(f"Missing or invalid __versionable__ metadata in {path}")
 
-        fileFormat = metaTable.get("__FORMAT__")
+        fileFormat = metaTable.get("format", metaTable.get("__FORMAT__"))
         if fileFormat is not None:
             raise BackendError(
                 f"File {path} uses versionable format {fileFormat!r}, but this version only supports "
@@ -78,9 +78,9 @@ class JsonBackend(Backend):
             )
 
         meta = {
-            "__OBJECT__": metaTable.get("__OBJECT__", ""),
-            "__VERSION__": metaTable.get("__VERSION__"),
-            "__HASH__": metaTable.get("__HASH__", ""),
+            "object": metaTable.get("object", metaTable.get("__OBJECT__", "")),
+            "version": metaTable.get("version", metaTable.get("__VERSION__")),
+            "hash": metaTable.get("hash", metaTable.get("__HASH__", "")),
         }
 
         return data, meta

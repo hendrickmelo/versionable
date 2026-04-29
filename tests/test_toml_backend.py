@@ -30,8 +30,8 @@ class TestTomlMetadata:
 
         data = toml.loads(p.read_text())
         assert "__versionable__" in data
-        assert data["__versionable__"]["__OBJECT__"] == "SimpleConfig"
-        assert data["__versionable__"]["__VERSION__"] == 1
+        assert data["__versionable__"]["object"] == "SimpleConfig"
+        assert data["__versionable__"]["version"] == 1
 
     def test_nestedUsesNativeTable(self, tmp_path: Path) -> None:
         """Nested Versionable should use TOML table syntax, not JSON wrapper."""
@@ -42,10 +42,10 @@ class TestTomlMetadata:
         versionable.save(obj, p)
 
         data = toml.loads(p.read_text())
-        # point should be a native TOML table, not a __json__ wrapper
+        # point should be a native TOML table, not a __ver_json__ wrapper
         assert isinstance(data["point"], dict)
-        assert "__json__" not in data["point"]
-        assert data["point"]["__OBJECT__"] == "Inner"
+        assert "__ver_json__" not in data["point"]
+        assert data["point"]["object"] == "Inner"
         assert data["point"]["x"] == 1.0
 
         # Verify [point] section appears in the raw text
@@ -113,8 +113,8 @@ class TestTomlCommentDefaults:
         assert "[point]" in text
         assert "# [point]" not in text
         # __meta__ values within nested sections must never be commented
-        assert '__OBJECT__ = "Inner"' in text
-        assert "# __OBJECT__" not in text
+        assert 'object = "Inner"' in text
+        assert "# object" not in text
 
 
 class TestTomlLiteral:
@@ -132,7 +132,7 @@ class TestTomlLiteral:
         p.write_text(
             toml.dumps(
                 {
-                    "__versionable__": {"__OBJECT__": "WithLiteral", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"object": "WithLiteral", "version": 1, "hash": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -148,7 +148,7 @@ class TestTomlLiteral:
         p.write_text(
             toml.dumps(
                 {
-                    "__versionable__": {"__OBJECT__": "WithLiteral", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"object": "WithLiteral", "version": 1, "hash": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -174,7 +174,7 @@ class TestTomlMissingVersion:
         p.write_text('name = "test"\ndebug = false\nretries = 3\n')
         with caplog.at_level("WARNING"):
             versionable.load(SimpleConfig, p)
-        assert "No __VERSION__" in caplog.text
+        assert "No version" in caplog.text
         assert "SimpleConfig" in caplog.text
 
     def test_assumeVersionOverride(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -184,7 +184,7 @@ class TestTomlMissingVersion:
         with caplog.at_level("WARNING"):
             loaded = versionable.load(SimpleConfig, p, assumeVersion=1)
         assert loaded.name == "test"
-        assert "No __VERSION__" not in caplog.text
+        assert "No version" not in caplog.text
 
 
 class TestTomlErrors:
@@ -195,9 +195,7 @@ class TestTomlErrors:
     def test_futureFormatRaises(self, tmp_path: Path) -> None:
         p = tmp_path / "out.toml"
         p.write_text(
-            '[__versionable__]\n__OBJECT__ = "SimpleConfig"\n'
-            '__VERSION__ = 1\n__HASH__ = ""\n__FORMAT__ = 2\n\n'
-            'name = "test"\n'
+            '[__versionable__]\nobject = "SimpleConfig"\nversion = 1\nhash = ""\nformat = 2\n\nname = "test"\n'
         )
         with pytest.raises(BackendError, match="Upgrade versionable"):
             versionable.load(SimpleConfig, p)

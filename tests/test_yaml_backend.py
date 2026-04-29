@@ -42,9 +42,9 @@ class TestYamlMetadata:
         data = yaml.safe_load(p.read_text())
         assert "__versionable__" in data
         meta = data["__versionable__"]
-        assert meta["__OBJECT__"] == "SimpleConfig"
-        assert meta["__VERSION__"] == 1
-        assert "__HASH__" in meta
+        assert meta["object"] == "SimpleConfig"
+        assert meta["version"] == 1
+        assert "hash" in meta
 
     def test_humanReadable(self, tmp_path: Path) -> None:
         obj = SimpleConfig(name="test")
@@ -144,7 +144,7 @@ class TestYamlMissingVersion:
         p.write_text("name: test\ndebug: false\nretries: 3\n")
         with caplog.at_level("WARNING"):
             versionable.load(SimpleConfig, p)
-        assert "No __VERSION__" in caplog.text
+        assert "No version" in caplog.text
         assert "SimpleConfig" in caplog.text
 
     def test_assumeVersionOverride(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -154,7 +154,7 @@ class TestYamlMissingVersion:
         with caplog.at_level("WARNING"):
             loaded = versionable.load(SimpleConfig, p, assumeVersion=1)
         assert loaded.name == "test"
-        assert "No __VERSION__" not in caplog.text
+        assert "No version" not in caplog.text
 
 
 class TestYamlLiteral:
@@ -170,7 +170,7 @@ class TestYamlLiteral:
         p.write_text(
             yaml.dump(
                 {
-                    "__versionable__": {"__OBJECT__": "WithLiteral", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"object": "WithLiteral", "version": 1, "hash": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -184,7 +184,7 @@ class TestYamlLiteral:
         p.write_text(
             yaml.dump(
                 {
-                    "__versionable__": {"__OBJECT__": "WithLiteral", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"object": "WithLiteral", "version": 1, "hash": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -198,7 +198,7 @@ class TestYamlLiteral:
         p.write_text(
             yaml.dump(
                 {
-                    "__versionable__": {"__OBJECT__": "WithLiteralNoValidation", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"object": "WithLiteralNoValidation", "version": 1, "hash": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -213,7 +213,7 @@ class TestYamlLiteral:
         p.write_text(
             yaml.dump(
                 {
-                    "__versionable__": {"__OBJECT__": "WithLiteralFallback", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"object": "WithLiteralFallback", "version": 1, "hash": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -245,9 +245,9 @@ class TestYamlErrors:
             yaml.dump(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "SimpleConfig",
-                        "__VERSION__": 1,
-                        "__HASH__": "",
+                        "object": "SimpleConfig",
+                        "version": 1,
+                        "hash": "",
                     },
                     "debug": True,
                     "retries": 5,
@@ -267,9 +267,9 @@ class TestYamlErrors:
             yaml.dump(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "SimpleConfig",
-                        "__VERSION__": 999,
-                        "__HASH__": "",
+                        "object": "SimpleConfig",
+                        "version": 999,
+                        "hash": "",
                     },
                     "name": "test",
                 }
@@ -284,10 +284,10 @@ class TestYamlErrors:
             yaml.dump(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "SimpleConfig",
-                        "__VERSION__": 1,
-                        "__HASH__": "",
-                        "__FORMAT__": 2,
+                        "object": "SimpleConfig",
+                        "version": 1,
+                        "hash": "",
+                        "format": 2,
                     },
                     "name": "test",
                 }

@@ -26,10 +26,10 @@ class TestJsonMetadata:
         data = json.loads(p.read_text())
         assert "__versionable__" in data
         meta = data["__versionable__"]
-        assert "__OBJECT__" in meta
-        assert "__VERSION__" in meta
-        assert "__HASH__" in meta
-        assert meta["__VERSION__"] == 1
+        assert "object" in meta
+        assert "version" in meta
+        assert "hash" in meta
+        assert meta["version"] == 1
 
     def test_prettyPrinted(self, tmp_path: Path) -> None:
         obj = SimpleConfig(name="test")
@@ -78,9 +78,9 @@ class TestUnknownFields:
             json.dumps(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "SimpleConfig",
-                        "__VERSION__": 1,
-                        "__HASH__": "",
+                        "object": "SimpleConfig",
+                        "version": 1,
+                        "hash": "",
                     },
                     "name": "test",
                     "debug": False,
@@ -107,9 +107,9 @@ class TestJsonLiteral:
             json.dumps(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "WithLiteral",
-                        "__VERSION__": 1,
-                        "__HASH__": "",
+                        "object": "WithLiteral",
+                        "version": 1,
+                        "hash": "",
                     },
                     "name": "test",
                     "mode": "banana",
@@ -125,9 +125,9 @@ class TestJsonLiteral:
             json.dumps(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "WithLiteral",
-                        "__VERSION__": 1,
-                        "__HASH__": "",
+                        "object": "WithLiteral",
+                        "version": 1,
+                        "hash": "",
                     },
                     "name": "test",
                     "mode": "banana",
@@ -154,7 +154,7 @@ class TestJsonMissingVersion:
         p.write_text(json.dumps({"name": "test", "debug": False, "retries": 3}))
         with caplog.at_level("WARNING"):
             versionable.load(SimpleConfig, p)
-        assert "No __VERSION__" in caplog.text
+        assert "No version" in caplog.text
         assert "SimpleConfig" in caplog.text
 
     def test_assumeVersionOverride(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -164,7 +164,7 @@ class TestJsonMissingVersion:
         with caplog.at_level("WARNING"):
             loaded = versionable.load(SimpleConfig, p, assumeVersion=1)
         assert loaded.name == "test"
-        assert "No __VERSION__" not in caplog.text
+        assert "No version" not in caplog.text
 
 
 class TestErrors:
@@ -182,9 +182,9 @@ class TestErrors:
             json.dumps(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "SimpleConfig",
-                        "__VERSION__": 999,
-                        "__HASH__": "",
+                        "object": "SimpleConfig",
+                        "version": 999,
+                        "hash": "",
                     },
                     "name": "test",
                 }
@@ -199,10 +199,10 @@ class TestErrors:
             json.dumps(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "SimpleConfig",
-                        "__VERSION__": 1,
-                        "__HASH__": "",
-                        "__FORMAT__": 2,
+                        "object": "SimpleConfig",
+                        "version": 1,
+                        "hash": "",
+                        "format": 2,
                     },
                     "name": "test",
                 }

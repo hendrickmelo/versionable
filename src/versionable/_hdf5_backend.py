@@ -13,7 +13,7 @@ Every field maps to a native HDF5 construct — no JSON anywhere:
 - Enum → attribute (stores ``.value``)
 - Converted types (datetime, Path, etc.) → attribute (converter output)
 
-Metadata (``__OBJECT__``, ``__VERSION__``, ``__HASH__``) is stored in a
+Metadata (``object``, ``version``, ``hash``) is stored as attributes on a
 ``__versionable__`` child group, distinguishing Versionable groups from
 plain collection groups.
 
@@ -75,9 +75,9 @@ class Hdf5Backend(Backend):
             with h5py.File(path, "w") as f:
                 # Write metadata into __versionable__ child group
                 metaGroup = f.create_group(_VERSIONABLE_GROUP)
-                metaGroup.attrs["__OBJECT__"] = meta["name"]
-                metaGroup.attrs["__VERSION__"] = meta["version"]
-                metaGroup.attrs["__HASH__"] = meta["hash"]
+                metaGroup.attrs["object"] = meta["name"]
+                metaGroup.attrs["version"] = meta["version"]
+                metaGroup.attrs["hash"] = meta["hash"]
 
                 # Write fields
                 _writeFields(f, fields, fieldTypes, comp, visited)
@@ -88,7 +88,7 @@ class Hdf5Backend(Backend):
         try:
             with h5py.File(path, "r") as f:
                 meta = _readMeta(f)
-                objectName = meta["__OBJECT__"]
+                objectName = meta["object"]
                 cls = _resolveClass(objectName)
                 if cls is None:
                     raise BackendError(
@@ -125,10 +125,10 @@ class Hdf5Backend(Backend):
             with h5py.File(path, "r") as f:
                 meta = _readMeta(f)
                 if cls is None:
-                    cls = _resolveClass(meta["__OBJECT__"])
+                    cls = _resolveClass(meta["object"])
                 if cls is None:
                     raise BackendError(
-                        f"Unknown Versionable type {meta['__OBJECT__']!r} in {path}. "
+                        f"Unknown Versionable type {meta['object']!r} in {path}. "
                         f"Ensure the class is imported and registered."
                     )
                 fieldTypes = _resolveFields(cls)
@@ -344,9 +344,9 @@ def _writeVersionable(
 
     # Write metadata into __versionable__ child group
     metaGroup = subgroup.create_group(_VERSIONABLE_GROUP)
-    metaGroup.attrs["__OBJECT__"] = meta.name
-    metaGroup.attrs["__VERSION__"] = meta.version
-    metaGroup.attrs["__HASH__"] = meta.hash
+    metaGroup.attrs["object"] = meta.name
+    metaGroup.attrs["version"] = meta.version
+    metaGroup.attrs["hash"] = meta.hash
 
     # Recursively write fields
     fields = {fieldName: getattr(obj, fieldName) for fieldName in fieldTypes}
@@ -363,22 +363,27 @@ def _writeVersionable(
 
 
 def _readMeta(group: h5py.Group) -> dict[str, Any]:
-    """Read metadata from the __versionable__ child group."""
+    """Read metadata from the __versionable__ child group.
+
+    Accepts both new (``object``/``version``/``hash``) and legacy
+    (``__OBJECT__``/``__VERSION__``/``__HASH__``) attribute names; new
+    keys take precedence when both are present.
+    """
     if _VERSIONABLE_GROUP in group:
         metaGroup = group[_VERSIONABLE_GROUP]
-        fileFormat = metaGroup.attrs.get("__FORMAT__")
+        fileFormat = metaGroup.attrs.get("format", metaGroup.attrs.get("__FORMAT__"))
         if fileFormat is not None:
             raise BackendError(
                 f"File uses versionable format {fileFormat!r}, but this version only supports "
                 f"format-less files. Upgrade versionable to read this file."
             )
         return {
-            "__OBJECT__": str(metaGroup.attrs.get("__OBJECT__", "")),
-            "__VERSION__": int(metaGroup.attrs.get("__VERSION__", 1)),
-            "__HASH__": str(metaGroup.attrs.get("__HASH__", "")),
+            "object": str(metaGroup.attrs.get("object", metaGroup.attrs.get("__OBJECT__", ""))),
+            "version": int(metaGroup.attrs.get("version", metaGroup.attrs.get("__VERSION__", 1))),
+            "hash": str(metaGroup.attrs.get("hash", metaGroup.attrs.get("__HASH__", ""))),
         }
     # Should not happen for well-formed files
-    return {"__OBJECT__": "", "__VERSION__": 1, "__HASH__": ""}
+    return {"object": "", "version": 1, "hash": ""}
 
 
 def _readFields(
@@ -485,19 +490,20 @@ def _readVersionableGroup(
 
     If *declaredType* is a Versionable subclass (e.g., from the parent's field
     annotation), use it directly to resolve field types. Otherwise fall back to
-    looking up the class by the ``__OBJECT__`` name from file metadata.
+    looking up the class by the ``object`` name from file metadata. Falls
+    back to the legacy ``__OBJECT__`` attribute for 0.1.x files.
 
     When *ctx* is provided, array fields inside the nested object get lazy
-    sentinels. The set of lazy field names is stored under ``__lazy__`` so
-    ``_deserializeVersionable`` can apply ``makeLazyInstance``.
+    sentinels. The set of lazy field names is stored under ``__ver_lazy__``
+    so ``_deserializeVersionable`` can apply ``makeLazyInstance``.
     """
     metaGroup = group[_VERSIONABLE_GROUP]
-    objectName = str(metaGroup.attrs.get("__OBJECT__", ""))
+    objectName = str(metaGroup.attrs.get("object", metaGroup.attrs.get("__OBJECT__", "")))
 
     result: dict[str, Any] = {
-        "__OBJECT__": objectName,
-        "__VERSION__": int(metaGroup.attrs.get("__VERSION__", 1)),
-        "__HASH__": str(metaGroup.attrs.get("__HASH__", "")),
+        "object": objectName,
+        "version": int(metaGroup.attrs.get("version", metaGroup.attrs.get("__VERSION__", 1))),
+        "hash": str(metaGroup.attrs.get("hash", metaGroup.attrs.get("__HASH__", ""))),
     }
 
     # Use declared type if available, otherwise resolve by name
@@ -510,7 +516,7 @@ def _readVersionableGroup(
     nestedFields, lazyFields = _readFields(group, nestedFieldTypes, ctx)
     result.update(nestedFields)
     if lazyFields:
-        result["__lazy__"] = lazyFields
+        result["__ver_lazy__"] = lazyFields
     return result
 
 

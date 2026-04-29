@@ -110,8 +110,8 @@ class TestHdf5Metadata:
 
         with h5py.File(p, "r") as f:
             meta = f["__versionable__"]
-            assert meta.attrs["__OBJECT__"] == "SimpleConfig"
-            assert meta.attrs["__VERSION__"] == 1
+            assert meta.attrs["object"] == "SimpleConfig"
+            assert meta.attrs["version"] == 1
 
 
 class TestHdf5Compression:
@@ -233,40 +233,40 @@ class TestHdf5Errors:
         p = tmp_path / "future.h5"
         with h5py.File(p, "w") as f:
             meta = f.create_group("__versionable__")
-            meta.attrs["__OBJECT__"] = "SimpleConfig"
-            meta.attrs["__VERSION__"] = 1
-            meta.attrs["__HASH__"] = ""
-            meta.attrs["__FORMAT__"] = 2
+            meta.attrs["object"] = "SimpleConfig"
+            meta.attrs["version"] = 1
+            meta.attrs["hash"] = ""
+            meta.attrs["format"] = 2
 
         with pytest.raises(BackendError, match="Upgrade versionable"):
             versionable.load(SimpleConfig, p)
 
     def test_unregisteredClassInLoad(self, tmp_path: Path) -> None:
-        """load() raises when the file's __OBJECT__ isn't in the registry."""
+        """load() raises when the file's ``object`` isn't in the registry."""
         from versionable._hdf5_backend import Hdf5Backend
 
         # Write a file with a class name that won't be in the registry
         p = tmp_path / "unknown.h5"
         with h5py.File(p, "w") as f:
             meta = f.create_group("__versionable__")
-            meta.attrs["__OBJECT__"] = "NonexistentClass"
-            meta.attrs["__VERSION__"] = 1
-            meta.attrs["__HASH__"] = "abc123"
+            meta.attrs["object"] = "NonexistentClass"
+            meta.attrs["version"] = 1
+            meta.attrs["hash"] = "abc123"
 
         be = Hdf5Backend()
         with pytest.raises(BackendError, match="Unknown Versionable type"):
             be.load(p)
 
     def test_unregisteredClassInLoadLazy(self, tmp_path: Path) -> None:
-        """loadLazy() raises when cls is None and __OBJECT__ isn't registered."""
+        """loadLazy() raises when cls is None and ``object`` isn't registered."""
         from versionable._hdf5_backend import Hdf5Backend
 
         p = tmp_path / "unknown_lazy.h5"
         with h5py.File(p, "w") as f:
             meta = f.create_group("__versionable__")
-            meta.attrs["__OBJECT__"] = "NonexistentClass"
-            meta.attrs["__VERSION__"] = 1
-            meta.attrs["__HASH__"] = "abc123"
+            meta.attrs["object"] = "NonexistentClass"
+            meta.attrs["version"] = 1
+            meta.attrs["hash"] = "abc123"
 
         be = Hdf5Backend()
         with pytest.raises(BackendError, match="Unknown Versionable type"):
@@ -497,7 +497,7 @@ class TestNativeNestedVersionable:
             point = f["point"]
             assert isinstance(point, h5py.Group)
             assert "__versionable__" in point
-            assert point["__versionable__"].attrs["__OBJECT__"] == "Inner"
+            assert point["__versionable__"].attrs["object"] == "Inner"
 
     def test_listVersionable(self, tmp_path: Path) -> None:
         @dataclass
@@ -849,9 +849,9 @@ class TestUnknownFieldHandling:
         p = tmp_path / "extra.h5"
         with h5py.File(p, "w") as f:
             meta = f.create_group("__versionable__")
-            meta.attrs["__OBJECT__"] = "UnkIgnore"
-            meta.attrs["__VERSION__"] = 1
-            meta.attrs["__HASH__"] = ""
+            meta.attrs["object"] = "UnkIgnore"
+            meta.attrs["version"] = 1
+            meta.attrs["hash"] = ""
             f.attrs["name"] = "test"
             f.attrs["obsolete"] = 42
 
@@ -869,9 +869,9 @@ class TestUnknownFieldHandling:
         p = tmp_path / "extra.h5"
         with h5py.File(p, "w") as f:
             meta = f.create_group("__versionable__")
-            meta.attrs["__OBJECT__"] = "UnkError"
-            meta.attrs["__VERSION__"] = 1
-            meta.attrs["__HASH__"] = ""
+            meta.attrs["object"] = "UnkError"
+            meta.attrs["version"] = 1
+            meta.attrs["hash"] = ""
             f.attrs["name"] = "test"
             f.attrs["obsolete"] = 42
 
@@ -897,9 +897,9 @@ class TestHdf5Migration:
         p = tmp_path / "v1_sensor.h5"
         with h5py.File(p, "w") as f:
             meta = f.create_group("__versionable__")
-            meta.attrs["__OBJECT__"] = "MigSensor"
-            meta.attrs["__VERSION__"] = 1
-            meta.attrs["__HASH__"] = ""
+            meta.attrs["object"] = "MigSensor"
+            meta.attrs["version"] = 1
+            meta.attrs["hash"] = ""
             f.attrs["name"] = "accelerometer"
 
         loaded = versionable.load(SensorV2, p)

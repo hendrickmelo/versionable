@@ -11,9 +11,9 @@ TOML backend convention::
     - 1
     - 2
     __versionable__:
-      __OBJECT__: SensorConfig
-      __VERSION__: 1
-      __HASH__: 9d6951
+      object: SensorConfig
+      version: 1
+      hash: 9d6951
 
 YAML handles ``None`` natively (as ``null``), so unlike TOML no fields
 are lost on round-trip.
@@ -34,6 +34,8 @@ from versionable._backend import Backend, registerBackend
 from versionable._base import _resolveFields
 from versionable._types import serialize
 from versionable.errors import BackendError
+
+_ENVELOPE_KEYS: frozenset[str] = frozenset({"object", "version", "hash"})
 
 
 class YamlBackend(Backend):
@@ -66,9 +68,9 @@ class YamlBackend(Backend):
             data[key] = _toYamlSafe(value)
 
         data["__versionable__"] = {
-            "__OBJECT__": meta["name"],
-            "__VERSION__": meta["version"],
-            "__HASH__": meta["hash"],
+            "object": meta["name"],
+            "version": meta["version"],
+            "hash": meta["hash"],
         }
 
         commentDefaults: bool = kwargs.get("commentDefaults", False)
@@ -94,7 +96,7 @@ class YamlBackend(Backend):
         metaTable = data.pop("__versionable__", {})
         if not isinstance(metaTable, dict):
             raise BackendError(f"Expected __versionable__ to be a mapping in {path}, got {type(metaTable).__name__}")
-        fileFormat = metaTable.get("__FORMAT__")
+        fileFormat = metaTable.get("format", metaTable.get("__FORMAT__"))
         if fileFormat is not None:
             raise BackendError(
                 f"File {path} uses versionable format {fileFormat!r}, but this version only supports "
@@ -102,9 +104,9 @@ class YamlBackend(Backend):
             )
 
         meta = {
-            "__OBJECT__": metaTable.get("__OBJECT__", ""),
-            "__VERSION__": metaTable.get("__VERSION__"),
-            "__HASH__": metaTable.get("__HASH__", ""),
+            "object": metaTable.get("object", metaTable.get("__OBJECT__", "")),
+            "version": metaTable.get("version", metaTable.get("__VERSION__")),
+            "hash": metaTable.get("hash", metaTable.get("__HASH__", "")),
         }
 
         try:
@@ -123,12 +125,12 @@ class YamlBackend(Backend):
 def _toYamlSafe(value: Any) -> Any:
     """Convert a value to a YAML-safe representation.
 
-    ndarray dicts (with ``__ndarray__``) are stored as JSON strings
+    ndarray dicts (with ``__ver_ndarray__``) are stored as JSON strings
     since they have no natural YAML representation.
     """
     if isinstance(value, dict):
-        if "__ndarray__" in value:
-            return {"__json__": json.dumps(value, default=str)}
+        if "__ver_ndarray__" in value:
+            return {"__ver_json__": json.dumps(value, default=str)}
         return {k: _toYamlSafe(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
         return [_toYamlSafe(v) for v in value]
@@ -136,8 +138,13 @@ def _toYamlSafe(value: Any) -> Any:
 
 
 def _fromYamlSafe(value: Any) -> Any:
-    """Reverse of ``_toYamlSafe`` — unwrap ``__json__`` wrappers."""
+    """Reverse of ``_toYamlSafe`` — unwrap ``__ver_json__`` wrappers.
+
+    Also accepts the legacy ``__json__`` wrapper from 0.1.x files.
+    """
     if isinstance(value, dict):
+        if "__ver_json__" in value and len(value) == 1:
+            return json.loads(value["__ver_json__"])
         if "__json__" in value and len(value) == 1:
             return json.loads(value["__json__"])
         return {k: _fromYamlSafe(v) for k, v in value.items()}
@@ -237,9 +244,9 @@ def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) 
 
             # Check if this block matches the default
             if key in defaultBlocks and key in originalBlocks and defaultBlocks[key] == originalBlocks[key]:
-                # Peek ahead: if the block contains __OBJECT__, it's a nested
-                # Versionable — keep the key line and metadata uncommented,
-                # only comment field value lines.
+                # Peek ahead: if the block contains an ``object:`` line, it's
+                # a nested Versionable — keep the key line and metadata
+                # uncommented, only comment field value lines.
                 blockLines: list[str] = []
                 j = i + 1
                 while j < len(lines):
@@ -251,14 +258,14 @@ def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) 
                     else:
                         break
 
-                hasNestedMeta = any("__OBJECT__" in bl for bl in blockLines)
+                hasNestedMeta = any("object:" in bl for bl in blockLines)
                 if hasNestedMeta:
                     # Keep key line uncommented
                     result.append(lines[i])
                     for bl in blockLines:
                         blStripped = bl.strip()
                         metaKey = blStripped.split(":")[0] if ":" in blStripped else ""
-                        if metaKey.startswith("__") and metaKey.endswith("__"):
+                        if metaKey in _ENVELOPE_KEYS:
                             result.append(bl)
                         else:
                             result.append("# " + bl)
