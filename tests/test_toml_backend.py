@@ -64,12 +64,13 @@ class TestTomlMetadata:
         # point should be a native TOML table, not a __ver_json__ wrapper
         assert isinstance(data["point"], dict)
         assert "__ver_json__" not in data["point"]
-        assert data["point"]["object"] == "Inner"
+        assert data["point"]["__versionable__"]["object"] == "Inner"
         assert data["point"]["x"] == 1.0
 
-        # Verify [point] section appears in the raw text
+        # Verify [point] and the wrapped envelope sub-table appear in the raw text
         text = p.read_text()
         assert "[point]" in text
+        assert "[point.__versionable__]" in text
 
     def test_humanReadable(self, tmp_path: Path) -> None:
         """TOML output should be readable text."""
@@ -122,7 +123,7 @@ class TestTomlCommentDefaults:
         assert loaded.retries == 3
 
     def test_nestedSectionHeadersNotCommented(self, tmp_path: Path) -> None:
-        """Nested Versionable section headers and their __meta__ stay uncommented."""
+        """Nested Versionable section headers and their __versionable__ sub-tables stay uncommented."""
         obj = WithNested(name="test", point=Inner(x=1.0, y=2.0))
         p = tmp_path / "out.toml"
         versionable.save(obj, p, commentDefaults=True)
@@ -131,7 +132,9 @@ class TestTomlCommentDefaults:
         # Section headers must never be commented
         assert "[point]" in text
         assert "# [point]" not in text
-        # __meta__ values within nested sections must never be commented
+        # The nested envelope sub-table and its keys must never be commented
+        assert "[point.__versionable__]" in text
+        assert "# [point.__versionable__]" not in text
         assert 'object = "Inner"' in text
         assert "# object" not in text
 

@@ -44,8 +44,6 @@ from versionable._base import _resolveFields
 from versionable._types import serialize
 from versionable.errors import BackendError
 
-_ENVELOPE_KEYS: frozenset[str] = frozenset({"object", "version", "hash"})
-
 
 class TomlBackend(Backend):
     """TOML file backend for configuration data."""
@@ -242,12 +240,6 @@ def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) 
 
         # __versionable__ section — always keep uncommented
         if inMetaSection:
-            result.append(line)
-            continue
-
-        # Metadata keys — always keep uncommented (even inside nested sections)
-        key = stripped.split("=", 1)[0].strip()
-        if key in _ENVELOPE_KEYS:
             result.append(line)
             continue
 

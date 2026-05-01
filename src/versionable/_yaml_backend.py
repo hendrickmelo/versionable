@@ -35,8 +35,6 @@ from versionable._base import _resolveFields
 from versionable._types import serialize
 from versionable.errors import BackendError
 
-_ENVELOPE_KEYS: frozenset[str] = frozenset({"object", "version", "hash"})
-
 
 class YamlBackend(Backend):
     """YAML file backend for human-readable config and data files."""
@@ -244,9 +242,10 @@ def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) 
 
             # Check if this block matches the default
             if key in defaultBlocks and key in originalBlocks and defaultBlocks[key] == originalBlocks[key]:
-                # Peek ahead: if the block contains an ``object:`` line, it's
-                # a nested Versionable — keep the key line and metadata
-                # uncommented, only comment field value lines.
+                # Peek ahead: if the block contains a ``__versionable__:``
+                # line, it's a nested Versionable — keep the key line and
+                # the ``__versionable__:`` sub-block uncommented, only
+                # comment data-field value lines (siblings of the wrapper).
                 blockLines: list[str] = []
                 j = i + 1
                 while j < len(lines):
@@ -258,16 +257,25 @@ def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) 
                     else:
                         break
 
-                hasNestedMeta = any("object:" in bl for bl in blockLines)
+                hasNestedMeta = any(bl.lstrip(" ").startswith("__versionable__:") for bl in blockLines)
                 if hasNestedMeta:
-                    # Keep key line uncommented
+                    # Keep key line uncommented; keep the ``__versionable__:``
+                    # sub-block uncommented; comment data fields at the
+                    # nested level (i.e. siblings of ``__versionable__:``).
                     result.append(lines[i])
+                    metaIndent: int | None = None
                     for bl in blockLines:
-                        blStripped = bl.strip()
-                        metaKey = blStripped.split(":")[0] if ":" in blStripped else ""
-                        if metaKey in _ENVELOPE_KEYS:
+                        blLstrip = bl.lstrip(" ")
+                        blIndent = len(bl) - len(blLstrip)
+                        if blLstrip.startswith("__versionable__:"):
+                            metaIndent = blIndent
+                            result.append(bl)
+                        elif metaIndent is not None and blIndent > metaIndent:
+                            # Inside the envelope sub-block
                             result.append(bl)
                         else:
+                            # Sibling of __versionable__ (a data field)
+                            metaIndent = None
                             result.append("# " + bl)
                 else:
                     # Simple field — comment the whole block

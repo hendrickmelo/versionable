@@ -50,6 +50,26 @@ class TestJsonMetadata:
         assert "hash" in meta
         assert meta["version"] == 1
 
+    def test_nestedHasWrappedEnvelope(self, tmp_path: Path) -> None:
+        """Nested Versionable values get their own ``__versionable__`` envelope."""
+        from .conftest import Inner, WithNested
+
+        obj = WithNested(name="origin", point=Inner(x=1.0, y=2.0))
+        p = tmp_path / "out.json"
+        versionable.save(obj, p)
+
+        data = json.loads(p.read_text())
+        # Root envelope
+        assert data["__versionable__"]["object"] == "WithNested"
+        # Nested envelope is wrapped under __versionable__, never flat
+        assert "__versionable__" in data["point"]
+        assert data["point"]["__versionable__"]["object"] == "Inner"
+        assert "object" not in data["point"]
+        # Round-trips correctly
+        loaded = versionable.load(WithNested, p)
+        assert loaded.point.x == 1.0
+        assert loaded.point.y == 2.0
+
     def test_prettyPrinted(self, tmp_path: Path) -> None:
         obj = SimpleConfig(name="test")
         p = tmp_path / "out.json"

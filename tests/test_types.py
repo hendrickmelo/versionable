@@ -268,7 +268,7 @@ class TestNestedVersionable:
         pt = Point(x=1.0, y=2.0)
         serialized = serialize(pt, Point)
         assert isinstance(serialized, dict)
-        assert serialized["object"] == "Point"
+        assert serialized["__versionable__"]["object"] == "Point"
         assert serialized["x"] == 1.0
 
         result = deserialize(serialized, Point)

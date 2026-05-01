@@ -3,7 +3,7 @@
 # Envelope Keys: Drop Redundant Dunders
 
 - **Created:** 2026-04-27
-- **Last updated:** 2026-04-29
+- **Last updated:** 2026-05-01
 - **Status:** Implemented
 - **Branch:** `feature/envelope-keys`
 - **Targets release:** 0.2.0
@@ -113,6 +113,29 @@ Write only new keys. No flag, no opt-out — old-key writes don't exist after th
 Read-both stays through the 0.2.x line. Drop old-key reads at 1.0, with a migration tool (or instructions to
 re-save) for any straggler 0.1.x files. Tracked in `docs/plans/envelope-keys.md` (this file) under
 [Drop schedule](#drop-schedule).
+
+## Nested Versionable layout
+
+Nested `Versionable` values get their own `__versionable__` envelope, just like the root. Before this change,
+nested objects had envelope keys flat alongside data fields:
+
+```json
+"point": {"object": "Inner", "version": 1, "hash": "...", "x": 1.0, "y": 2.0}
+```
+
+After:
+
+```json
+"point": {"__versionable__": {"object": "Inner", "version": 1, "hash": "..."}, "x": 1.0, "y": 2.0}
+```
+
+Same shape across JSON, YAML, TOML, and HDF5. HDF5 already used a `__versionable__` child group at every level
+— this change brings the text backends in line. For TOML the `toml` library emits this as a
+`[parent.__versionable__]` sub-table, which is the canonical TOML form for the equivalent payload.
+
+The deserialize path is structurally indifferent to envelope key location — `_deserializeVersionable` iterates
+dataclass fields and pulls values; envelope keys (whether flat or wrapped) are skipped because they aren't
+fields. So no read-side back-compat code is needed for the wrap.
 
 ## File-format examples (after the rename)
 

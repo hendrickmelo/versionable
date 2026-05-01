@@ -536,9 +536,11 @@ def _serializeVersionable(obj: Versionable, visited: set[int], path: str) -> dic
     meta = getMeta(type(obj))
     fields = _resolveFields(type(obj))
     result: dict[str, Any] = {
-        "object": meta.name,
-        "version": meta.version,
-        "hash": meta.hash,
+        "__versionable__": {
+            "object": meta.name,
+            "version": meta.version,
+            "hash": meta.hash,
+        },
     }
     visited.add(objId)
     try:

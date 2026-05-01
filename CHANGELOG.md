@@ -10,6 +10,11 @@
   `__VERSION__` → `version`, `__HASH__` → `hash`, `__FORMAT__` → `format`), and re-namespaced the user-data sentinels
   with a `__ver_*__` prefix (`__ndarray__` → `__ver_ndarray__`, `__json__` → `__ver_json__`). The `__versionable__`
   wrapper key itself is unchanged.
+- File format: nested `Versionable` values now carry their own `__versionable__` envelope, just like the root.
+  Previously the envelope keys were flat alongside data fields in JSON/YAML/TOML; HDF5 already wrapped at every level.
+  For TOML this is emitted as a `[parent.__versionable__]` sub-table. The deserialize path is structurally unchanged —
+  envelope keys are skipped during field iteration whether flat or wrapped, so 0.1.x files (with flat nested envelopes)
+  continue to load.
 - Backwards compatibility: `load()` continues to accept the old key names from 0.1.x files for the entire 0.2.x line
   (preferring new keys when both are present); the legacy read path will be removed in 1.0. Saved files always use the
   new keys.

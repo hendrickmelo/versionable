@@ -65,21 +65,25 @@ if __name__ == "__main__":
 # hash = ""
 #
 # [database]
-# object = "DatabaseConfig"
-# version = 1
-# hash = ""
 # # host = "localhost"
 # port = 3306
 # # maxConnections = 10
 # # timeoutSec = 30.0
 #
 # [logging]
-# object = "LoggingConfig"
-# version = 1
-# hash = ""
 # # level = "INFO"
 # # filePath = "/var/log/app.log"
 # # rotateAfterMB = 100
+#
+# [database.__versionable__]
+# object = "DatabaseConfig"
+# version = 1
+# hash = ""
+#
+# [logging.__versionable__]
+# object = "LoggingConfig"
+# version = 1
+# hash = ""
 #
 #
 # Output YAML file:
@@ -87,17 +91,19 @@ if __name__ == "__main__":
 # # name: my-server
 # # debug: false
 # database:
-#   object: DatabaseConfig
-#   version: 1
-#   hash: ''
+#   __versionable__:
+#     object: DatabaseConfig
+#     version: 1
+#     hash: ''
 #   host: localhost
 #   port: 3306
 #   maxConnections: 10
 #   timeoutSec: 30.0
 # logging:
-#   object: LoggingConfig
-#   version: 1
-#   hash: ''
+#   __versionable__:
+#     object: LoggingConfig
+#     version: 1
+#     hash: ''
 # #   level: INFO
 # #   filePath: /var/log/app.log
 # #   rotateAfterMB: 100

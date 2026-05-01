@@ -185,12 +185,16 @@ version = 1
 hash = "8bdfa7"
 
 [retry]
+retries = 3
+backoff_s = 1.0
+
+[retry.__versionable__]
 object = "RetryPolicy"
 version = 1
 hash = "f907a9"
-retries = 3
-backoff_s = 1.0
 ```
+
+Each nested `Versionable` carries its own `__versionable__` sub-table — the same shape as the root envelope.
 
 ### Comment-Out Defaults
 

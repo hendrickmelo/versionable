@@ -73,6 +73,23 @@ class TestYamlMetadata:
         text = p.read_text()
         assert "name: test" in text
 
+    def test_nestedHasWrappedEnvelope(self, tmp_path: Path) -> None:
+        """Nested Versionable values get their own ``__versionable__`` envelope."""
+        from .conftest import Inner, WithNested
+
+        obj = WithNested(name="origin", point=Inner(x=1.0, y=2.0))
+        p = tmp_path / "out.yaml"
+        versionable.save(obj, p)
+
+        data = yaml.safe_load(p.read_text())
+        assert data["__versionable__"]["object"] == "WithNested"
+        assert "__versionable__" in data["point"]
+        assert data["point"]["__versionable__"]["object"] == "Inner"
+        assert "object" not in data["point"]
+        loaded = versionable.load(WithNested, p)
+        assert loaded.point.x == 1.0
+        assert loaded.point.y == 2.0
+
 
 class TestYamlSkipDefaults:
     def test_defaultsOmitted(self, tmp_path: Path) -> None:
