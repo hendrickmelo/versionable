@@ -3,7 +3,9 @@
 Stores Versionable objects as TOML files.  Metadata is stored in a
 ``[__versionable__]`` table to avoid conflicts with field names.
 
-Nested Versionable objects use native TOML table syntax::
+Nested Versionable objects use native TOML table syntax, with each
+nested object's metadata under its own ``[<field>.__versionable__]``
+sub-table::
 
     [__versionable__]
     object = "Config"
@@ -12,10 +14,12 @@ Nested Versionable objects use native TOML table syntax::
     name = "myapp"
 
     [point]
-    object = "Point"
-    version = 1
     x = 1.0
     y = 2.0
+
+    [point.__versionable__]
+    object = "Point"
+    version = 1
 
 Supports ``commentDefaults=True`` to comment out fields that are at
 their default value, producing human-friendly config files.
