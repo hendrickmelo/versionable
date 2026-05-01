@@ -148,7 +148,13 @@ def load[T: Versionable](
 
     # Version check — apply migrations if needed
     if fileVersion < meta.version:
-        rawFields = _applyMigrations(cls, rawFields, fileVersion, meta.version)
+        try:
+            from versionable._migration import applyMigrationRange
+        except ImportError:
+            raise VersionError(
+                f"File is version {fileVersion} but class is version {meta.version}. Migration system not available."
+            ) from None
+        rawFields = applyMigrationRange(cls, rawFields, fileVersion, meta.version)
     elif fileVersion > meta.version:
         raise VersionError(
             f"File version ({fileVersion}) is newer than class version "
@@ -172,7 +178,6 @@ def load[T: Versionable](
     import dataclasses
 
     nativeTypes = be.nativeTypes
-    effectiveValidateLiterals = validateLiterals if validateLiterals is not None else meta.validateLiterals
     # Versionable subclasses are always @dataclass; mypy/pyright can't prove that statically.
     dcFields = {f.name: f for f in dataclasses.fields(cls)}  # type: ignore[arg-type]
     kwargs: dict[str, Any] = {}
@@ -185,12 +190,17 @@ def load[T: Versionable](
             else:
                 dcField = dcFields.get(fieldName)
                 dcMeta = dcField.metadata if dcField is not None else None
+                # Pass user's `validateLiterals` (None or bool) through unchanged so
+                # nested Versionables re-resolve at their own boundaries. Set
+                # `_classFallback` to root's class default so root's own Literal fields
+                # validate per the root class declaration when no override is set.
                 kwargs[fieldName] = deserialize(
                     rawValue,
                     fieldType,
                     nativeTypes=nativeTypes,
                     fieldMetadata=dcMeta,
-                    validateLiterals=effectiveValidateLiterals,
+                    validateLiterals=validateLiterals,
+                    _classFallback=meta.validateLiterals,
                 )
         # Use dataclass default
         elif fieldName in dcFields:
@@ -249,33 +259,6 @@ def loadDynamic(
         raise BackendError(f"Object type {objectName!r} is not a subclass of {baseClass.__name__}")
 
     return load(cls, path, backend=backend)
-
-
-# ---------------------------------------------------------------------------
-# Migration helpers
-# ---------------------------------------------------------------------------
-
-
-def _applyMigrations(
-    cls: type[Versionable],
-    data: dict[str, Any],
-    fromVersion: int,
-    toVersion: int,
-) -> dict[str, Any]:
-    """Apply migrations to upgrade *data* from *fromVersion* to *toVersion*.
-
-    This is a placeholder — the full migration system is implemented in
-    Phase D (_migration.py).
-    """
-    try:
-        from versionable._migration import applyMigrations, resolveMigrations
-    except ImportError:
-        raise VersionError(
-            f"File is version {fromVersion} but class is version {toVersion}. Migration system not available."
-        ) from None
-
-    migrations = resolveMigrations(cls, fromVersion, toVersion)
-    return applyMigrations(data, migrations)
 
 
 # ---------------------------------------------------------------------------
