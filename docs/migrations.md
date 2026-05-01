@@ -271,3 +271,92 @@ class WorkerConfig(Versionable, version=3, hash="beb912"):
 
 `MigrationContext` behaves like a mutable dict over the raw deserialized data. Read and write fields by key; call
 `ctx.drop(key)` to remove a field that was deleted in the new version.
+
+## Nested Migrations
+
+Migrations apply at **every** level of the object graph, not just the root. A `Versionable` value appearing as a direct
+field, a list/dict/tuple/set element, or a nested field of a nested field gets migrated using its own class's `Migrate`
+chain when its file version differs from the class's current version.
+
+```python
+@dataclass
+class Address(Versionable, version=2, hash="..."):
+    street: str  # renamed from "addr"
+    city: str
+
+    class Migrate:
+        v1 = Migration().rename("addr", "street")
+
+@dataclass
+class Person(Versionable, version=1, hash="..."):
+    name: str
+    addresses: list[Address]
+```
+
+Loading a file saved with `Address` v1 inside a `Person` reads each nested address's envelope, applies
+`Address.Migrate.v1`, then deserializes the migrated fields. The same applies through any level — a nested field of a
+nested field migrates just as smoothly.
+
+Migration recursion works for direct fields, `list[B]`, `dict[K, B]`, `tuple[B, ...]`, and `set[B]` (where `B` is
+hashable). Each element gets its own envelope read and migration step.
+
+A few corner cases:
+
+- **Newer nested version.** If the file's nested version exceeds the class's current version, `load()` raises
+  `VersionError` identifying the nested type. (The framework can't downgrade.)
+- **Missing nested envelope.** If a nested data dict has no envelope at all (e.g., a hand-crafted file or an older
+  format), `load()` logs a warning naming the nested type and assumes the class's current version.
+- **Imperative migrations** (`@migration`-decorated functions) work at every nested level, the same way declarative
+  `Migration` objects do.
+
+## Polymorphic Collections
+
+`list[Animal]` saved with subclass instances — `Dog`, `Cat` — round-trips with subclass identity preserved. The
+per-element envelope's `object` name drives class lookup at load time:
+
+```python
+@dataclass
+class Animal(Versionable, version=1, hash="..."):
+    name: str
+
+@dataclass
+class Dog(Animal, version=1, hash="..."):
+    breed: str
+
+@dataclass
+class Cat(Animal, version=1, hash="..."):
+    indoor: bool
+
+@dataclass
+class Zoo(Versionable, version=1, hash="..."):
+    animals: list[Animal]
+
+zoo = Zoo(animals=[Dog(name="Rex", breed="lab"), Cat(name="Whiskers", indoor=True)])
+versionable.save(zoo, "zoo.json")
+
+loaded = versionable.load(Zoo, "zoo.json")
+assert isinstance(loaded.animals[0], Dog)  # subclass preserved
+assert loaded.animals[0].breed == "lab"
+```
+
+The resolver looks the per-element `object` name up in the global registry (the same one used by `loadDynamic`). Two
+error cases:
+
+- **Unknown name.** The file's `object` is not in the registry → `BackendError`. Common cause: the class was deleted or
+  renamed without `old_names`.
+- **Wrong subclass.** The resolved class is registered but is not a subclass of the declared field type →
+  `BackendError`. The file is malformed or you're loading the wrong file.
+
+Both errors identify the nested type and the declared field type so the failure points at the right place.
+
+`old_names` works across polymorphism, too: rename `Dog` to `Puppy` with `old_names=["Dog"]`, and old files with
+`object="Dog"` resolve to the new class. Each subclass migrates against its own `Migrate` chain — `Dog`'s migration runs
+for `Dog` elements, `Cat`'s for `Cat` elements.
+
+### Limitations
+
+- **Polymorphic dict keys.** `dict[Animal, X]` is rejected at save time with `ConverterError`. Dict keys serialize via
+  `str(k)` and can't carry envelope information; use `Animal` as a dict value, not a key.
+- **`register=False` polymorphism.** If `Dog` opts out of the registry, the resolver can't find it by name and falls
+  back to the declared field type. Polymorphism through a base class field requires every concrete subclass to be
+  registered.
