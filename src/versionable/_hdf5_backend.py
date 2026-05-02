@@ -500,12 +500,6 @@ def _readVersionableGroup(
     metaGroup = group[_VERSIONABLE_GROUP]
     objectName = str(metaGroup.attrs.get("object", metaGroup.attrs.get("__OBJECT__", "")))
 
-    result: dict[str, Any] = {
-        "object": objectName,
-        "version": int(metaGroup.attrs.get("version", metaGroup.attrs.get("__VERSION__", 1))),
-        "hash": str(metaGroup.attrs.get("hash", metaGroup.attrs.get("__HASH__", ""))),
-    }
-
     # Use declared type if available, otherwise resolve by name
     cls: type | None = None
     if isinstance(declaredType, type) and issubclass(declaredType, Versionable):
@@ -514,7 +508,15 @@ def _readVersionableGroup(
         cls = _resolveClass(objectName)
     nestedFieldTypes = _resolveFields(cls) if cls is not None else {}
     nestedFields, lazyFields = _readFields(group, nestedFieldTypes, ctx)
-    result.update(nestedFields)
+
+    # Envelope is namespaced under ``__versionable__`` so it can't collide
+    # with user-declared field names like ``object``/``version``/``hash``.
+    result: dict[str, Any] = dict(nestedFields)
+    result["__versionable__"] = {
+        "object": objectName,
+        "version": int(metaGroup.attrs.get("version", metaGroup.attrs.get("__VERSION__", 1))),
+        "hash": str(metaGroup.attrs.get("hash", metaGroup.attrs.get("__HASH__", ""))),
+    }
     if lazyFields:
         result["__ver_lazy__"] = lazyFields
     return result
