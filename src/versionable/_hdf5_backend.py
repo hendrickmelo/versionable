@@ -498,6 +498,12 @@ def _readVersionableGroup(
     so ``_deserializeVersionable`` can apply ``makeLazyInstance``.
     """
     metaGroup = group[_VERSIONABLE_GROUP]
+    fileFormat = metaGroup.attrs.get("format", metaGroup.attrs.get("__FORMAT__"))
+    if fileFormat is not None:
+        raise BackendError(
+            f"File uses versionable format {fileFormat!r}, but this version only supports "
+            f"format-less files. Upgrade versionable to read this file."
+        )
     objectName = str(metaGroup.attrs.get("object", metaGroup.attrs.get("__OBJECT__", "")))
 
     # Use declared type if available, otherwise resolve by name

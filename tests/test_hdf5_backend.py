@@ -967,6 +967,53 @@ class TestHdf5BackCompat:
         assert loaded.point.x == 1.5
         assert loaded.point.y == 2.5
 
+    def test_nestedFutureFormatRaises(self, tmp_path: Path) -> None:
+        """A nested ``__versionable__`` group with a future ``format`` attr also raises."""
+        from .conftest import WithNested
+
+        p = tmp_path / "nested_future.h5"
+        with h5py.File(p, "w") as f:
+            outer = f.create_group("__versionable__")
+            outer.attrs["object"] = "WithNested"
+            outer.attrs["version"] = 1
+            outer.attrs["hash"] = "db925f"
+            f.attrs["name"] = "origin"
+            # Nested ``point`` group with a future-format marker
+            point = f.create_group("point")
+            inner = point.create_group("__versionable__")
+            inner.attrs["object"] = "Inner"
+            inner.attrs["version"] = 1
+            inner.attrs["hash"] = "e37514"
+            inner.attrs["format"] = 2
+            point.attrs["x"] = 1.5
+            point.attrs["y"] = 2.5
+
+        with pytest.raises(BackendError, match="Upgrade versionable"):
+            versionable.load(WithNested, p)
+
+    def test_nestedLegacyFutureFormatRaises(self, tmp_path: Path) -> None:
+        """The legacy ``__FORMAT__`` attr on a nested envelope also raises."""
+        from .conftest import WithNested
+
+        p = tmp_path / "nested_legacy_future.h5"
+        with h5py.File(p, "w") as f:
+            outer = f.create_group("__versionable__")
+            outer.attrs["__OBJECT__"] = "WithNested"
+            outer.attrs["__VERSION__"] = 1
+            outer.attrs["__HASH__"] = "db925f"
+            f.attrs["name"] = "origin"
+            point = f.create_group("point")
+            inner = point.create_group("__versionable__")
+            inner.attrs["__OBJECT__"] = "Inner"
+            inner.attrs["__VERSION__"] = 1
+            inner.attrs["__HASH__"] = "e37514"
+            inner.attrs["__FORMAT__"] = 2
+            point.attrs["x"] = 1.5
+            point.attrs["y"] = 2.5
+
+        with pytest.raises(BackendError, match="Upgrade versionable"):
+            versionable.load(WithNested, p)
+
 
 def _assertNoJsonAttrs(group: h5py.Group) -> None:
     """Recursively verify no attributes contain JSON strings."""
