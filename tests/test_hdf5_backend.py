@@ -214,6 +214,29 @@ class TestHdf5Compression:
         with pytest.raises(BackendError, match=r"pip install hdf5plugin"):
             versionable.load(SimpleConfig, p)
 
+    def test_sessionResumeErrorIncludesHdf5pluginHint(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Session resume surfaces the hdf5plugin install hint for filter-related failures."""
+        import versionable.hdf5
+        from versionable import _hdf5_plugin
+
+        monkeypatch.setattr(_hdf5_plugin, "HDF5PLUGIN_AVAILABLE", False)
+
+        # Save a file normally so resume gets past the metadata-validation step
+        p = tmp_path / "needs-plugin.h5"
+        obj = SimpleConfig(name="x", debug=False, retries=0)
+        versionable.save(obj, p)
+
+        # Make the resume-time field read raise a filter-like OSError
+        def boom(*_args: object, **_kwargs: object) -> None:
+            raise OSError("Can't read data (filter 'zstd' not available)")
+
+        monkeypatch.setattr("versionable._hdf5_session._readFields", boom)
+        with (
+            pytest.raises(BackendError, match=r"pip install hdf5plugin"),
+            versionable.hdf5.open(SimpleConfig, p, mode="resume"),
+        ):
+            pass
+
 
 class TestLazyLoading:
     def test_lazyByDefault(self, tmp_path: Path) -> None:
