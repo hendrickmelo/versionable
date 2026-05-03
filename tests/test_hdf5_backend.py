@@ -18,7 +18,8 @@ import numpy as np
 import numpy.typing as npt
 
 import versionable
-from versionable import Versionable
+import versionable.hdf5
+from versionable import Versionable, _hdf5_plugin
 from versionable.errors import ArrayNotLoadedError, BackendError
 from versionable.hdf5 import (
     UNCOMPRESSED,
@@ -183,8 +184,6 @@ class TestHdf5Compression:
 
     def test_missingFilterHintSuggestsPipInstall(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """When hdf5plugin is missing, filter-related errors should suggest installing it."""
-        from versionable import _hdf5_plugin
-
         monkeypatch.setattr(_hdf5_plugin, "HDF5PLUGIN_AVAILABLE", False)
 
         # Simulate an h5py filter error
@@ -198,8 +197,6 @@ class TestHdf5Compression:
 
     def test_loadErrorIncludesHdf5pluginHint(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """load() surfaces the hdf5plugin install hint for filter-related failures."""
-        from versionable import _hdf5_plugin
-
         monkeypatch.setattr(_hdf5_plugin, "HDF5PLUGIN_AVAILABLE", False)
 
         # Craft a file that triggers a filter-like OSError by poisoning h5py.File
@@ -216,9 +213,6 @@ class TestHdf5Compression:
 
     def test_sessionResumeErrorIncludesHdf5pluginHint(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Session resume surfaces the hdf5plugin install hint for filter-related failures."""
-        import versionable.hdf5
-        from versionable import _hdf5_plugin
-
         monkeypatch.setattr(_hdf5_plugin, "HDF5PLUGIN_AVAILABLE", False)
 
         # Save a file normally so resume gets past the metadata-validation step
