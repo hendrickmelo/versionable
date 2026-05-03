@@ -104,7 +104,7 @@ def load[T: Versionable](
         preload: Array field names to eagerly load, or ``'*'`` for all.
         metadataOnly: If True, array fields raise ``ArrayNotLoadedError``.
         upgradeInPlace: If True, allow file modification during migration.
-        assumeVersion: Version to assume when the file has no ``__VERSION__``
+        assumeVersion: Version to assume when the file has no ``version``
             metadata.  Defaults to the class's current version.
         validateLiterals: Whether to validate ``Literal`` type values.
             Overrides the class-level ``validate_literals`` setting.
@@ -131,14 +131,14 @@ def load[T: Versionable](
         rawFields, fileMeta = be.load(path)
 
     meta = metadata(cls)
-    fileVersion = fileMeta.get("__VERSION__")
+    fileVersion = fileMeta.get("version")
     if fileVersion is None:
         if assumeVersion is not None:
             fileVersion = assumeVersion
         else:
             fileVersion = meta.version
             logger.warning(
-                "No __VERSION__ found in '%s'. Treating as current version (%d) for %s. "
+                "No version found in '%s'. Treating as current version (%d) for %s. "
                 "If this file was written by an older version of the code, "
                 "pass assumeVersion= to load() to apply the correct migrations.",
                 path,
@@ -238,7 +238,7 @@ def loadDynamic(
     be = getBackend(path, explicit=backend)
     _rawFields, fileMeta = be.load(path)
 
-    objectName = fileMeta.get("__OBJECT__", "")
+    objectName = fileMeta.get("object", "")
     registry = registeredClasses()
 
     if objectName not in registry:

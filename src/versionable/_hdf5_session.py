@@ -145,9 +145,9 @@ class Hdf5Session[T: Versionable]:
                 # Write __versionable__ metadata for new files
                 meta = metadata(self._cls)
                 metaGroup = self._root.create_group(_VERSIONABLE_GROUP)
-                metaGroup.attrs["__OBJECT__"] = meta.name
-                metaGroup.attrs["__VERSION__"] = meta.version
-                metaGroup.attrs["__HASH__"] = meta.hash
+                metaGroup.attrs["object"] = meta.name
+                metaGroup.attrs["version"] = meta.version
+                metaGroup.attrs["hash"] = meta.hash
 
                 # If an instance was provided, persist all its fields
                 if self._instance is not None:
@@ -176,19 +176,16 @@ class Hdf5Session[T: Versionable]:
         # Validate metadata — no migration support
         fileMeta = _readMeta(self._root)
         meta = metadata(self._cls)
-        if fileMeta["__OBJECT__"] != meta.name:
+        if fileMeta["object"] != meta.name:
             raise BackendError(
-                f"Cannot resume: file contains type {fileMeta['__OBJECT__']!r}, "
-                f"but session was opened with {meta.name!r}."
+                f"Cannot resume: file contains type {fileMeta['object']!r}, but session was opened with {meta.name!r}."
             )
-        if fileMeta["__VERSION__"] != meta.version:
+        if fileMeta["version"] != meta.version:
             raise BackendError(
-                f"Cannot resume: file has version {fileMeta['__VERSION__']}, but class has version {meta.version}."
+                f"Cannot resume: file has version {fileMeta['version']}, but class has version {meta.version}."
             )
-        if fileMeta["__HASH__"] != meta.hash:
-            raise BackendError(
-                f"Cannot resume: file has hash {fileMeta['__HASH__']!r}, but class has hash {meta.hash!r}."
-            )
+        if fileMeta["hash"] != meta.hash:
+            raise BackendError(f"Cannot resume: file has hash {fileMeta['hash']!r}, but class has hash {meta.hash!r}.")
 
         # Load existing fields
         fields, _ = _readFields(self._root, self._fieldTypes)

@@ -7,9 +7,19 @@ import pytest
 
 pytest.importorskip("toml")
 
+from dataclasses import dataclass
 from pathlib import Path
 
+try:
+    import numpy as np
+    import numpy.typing as npt
+
+    _HAS_NUMPY = True
+except ImportError:
+    _HAS_NUMPY = False
+
 import versionable
+from versionable._base import Versionable
 from versionable.errors import BackendError, ConverterError
 
 from .conftest import (
@@ -18,6 +28,15 @@ from .conftest import (
     WithLiteral,
     WithNested,
 )
+
+if _HAS_NUMPY:
+
+    @dataclass
+    class _TomlArrLegacy(Versionable, version=1, name="TomlArrLegacy", register=True):
+        """Test class for back-compat ndarray reads in TOML files."""
+
+        label: str
+        data: npt.NDArray[np.float64]
 
 
 class TestTomlMetadata:
@@ -30,8 +49,8 @@ class TestTomlMetadata:
 
         data = toml.loads(p.read_text())
         assert "__versionable__" in data
-        assert data["__versionable__"]["__OBJECT__"] == "SimpleConfig"
-        assert data["__versionable__"]["__VERSION__"] == 1
+        assert data["__versionable__"]["object"] == "SimpleConfig"
+        assert data["__versionable__"]["version"] == 1
 
     def test_nestedUsesNativeTable(self, tmp_path: Path) -> None:
         """Nested Versionable should use TOML table syntax, not JSON wrapper."""
@@ -42,15 +61,16 @@ class TestTomlMetadata:
         versionable.save(obj, p)
 
         data = toml.loads(p.read_text())
-        # point should be a native TOML table, not a __json__ wrapper
+        # point should be a native TOML table, not a __ver_json__ wrapper
         assert isinstance(data["point"], dict)
-        assert "__json__" not in data["point"]
-        assert data["point"]["__OBJECT__"] == "Inner"
+        assert "__ver_json__" not in data["point"]
+        assert data["point"]["__versionable__"]["object"] == "Inner"
         assert data["point"]["x"] == 1.0
 
-        # Verify [point] section appears in the raw text
+        # Verify [point] and the wrapped envelope sub-table appear in the raw text
         text = p.read_text()
         assert "[point]" in text
+        assert "[point.__versionable__]" in text
 
     def test_humanReadable(self, tmp_path: Path) -> None:
         """TOML output should be readable text."""
@@ -103,7 +123,7 @@ class TestTomlCommentDefaults:
         assert loaded.retries == 3
 
     def test_nestedSectionHeadersNotCommented(self, tmp_path: Path) -> None:
-        """Nested Versionable section headers and their __meta__ stay uncommented."""
+        """Nested Versionable section headers and their __versionable__ sub-tables stay uncommented."""
         obj = WithNested(name="test", point=Inner(x=1.0, y=2.0))
         p = tmp_path / "out.toml"
         versionable.save(obj, p, commentDefaults=True)
@@ -112,9 +132,11 @@ class TestTomlCommentDefaults:
         # Section headers must never be commented
         assert "[point]" in text
         assert "# [point]" not in text
-        # __meta__ values within nested sections must never be commented
-        assert '__OBJECT__ = "Inner"' in text
-        assert "# __OBJECT__" not in text
+        # The nested envelope sub-table and its keys must never be commented
+        assert "[point.__versionable__]" in text
+        assert "# [point.__versionable__]" not in text
+        assert 'object = "Inner"' in text
+        assert "# object" not in text
 
 
 class TestTomlLiteral:
@@ -132,7 +154,7 @@ class TestTomlLiteral:
         p.write_text(
             toml.dumps(
                 {
-                    "__versionable__": {"__OBJECT__": "WithLiteral", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"object": "WithLiteral", "version": 1, "hash": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -148,7 +170,7 @@ class TestTomlLiteral:
         p.write_text(
             toml.dumps(
                 {
-                    "__versionable__": {"__OBJECT__": "WithLiteral", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"object": "WithLiteral", "version": 1, "hash": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -174,7 +196,7 @@ class TestTomlMissingVersion:
         p.write_text('name = "test"\ndebug = false\nretries = 3\n')
         with caplog.at_level("WARNING"):
             versionable.load(SimpleConfig, p)
-        assert "No __VERSION__" in caplog.text
+        assert "No version" in caplog.text
         assert "SimpleConfig" in caplog.text
 
     def test_assumeVersionOverride(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -184,7 +206,7 @@ class TestTomlMissingVersion:
         with caplog.at_level("WARNING"):
             loaded = versionable.load(SimpleConfig, p, assumeVersion=1)
         assert loaded.name == "test"
-        assert "No __VERSION__" not in caplog.text
+        assert "No version" not in caplog.text
 
 
 class TestTomlErrors:
@@ -195,9 +217,54 @@ class TestTomlErrors:
     def test_futureFormatRaises(self, tmp_path: Path) -> None:
         p = tmp_path / "out.toml"
         p.write_text(
+            '[__versionable__]\nobject = "SimpleConfig"\nversion = 1\nhash = ""\nformat = 2\n\nname = "test"\n'
+        )
+        with pytest.raises(BackendError, match="Upgrade versionable"):
+            versionable.load(SimpleConfig, p)
+
+
+class TestTomlBackCompat:
+    """Read-side compatibility for files written by versionable 0.1.x."""
+
+    def test_loadOldFormatEnvelope(self, tmp_path: Path) -> None:
+        """A file with the legacy __OBJECT__/__VERSION__/__HASH__ keys still loads."""
+        p = tmp_path / "old.toml"
+        p.write_text(
+            'name = "legacy"\ndebug = true\nretries = 7\n\n'
+            '[__versionable__]\n__OBJECT__ = "SimpleConfig"\n__VERSION__ = 1\n__HASH__ = "ed3a90"\n'
+        )
+        loaded = versionable.load(SimpleConfig, p)
+        assert loaded.name == "legacy"
+        assert loaded.debug is True
+        assert loaded.retries == 7
+
+    def test_oldFormatFutureFormatRaises(self, tmp_path: Path) -> None:
+        """The legacy __FORMAT__ key still triggers the upgrade-required error."""
+        p = tmp_path / "old_future.toml"
+        p.write_text(
             '[__versionable__]\n__OBJECT__ = "SimpleConfig"\n'
             '__VERSION__ = 1\n__HASH__ = ""\n__FORMAT__ = 2\n\n'
             'name = "test"\n'
         )
         with pytest.raises(BackendError, match="Upgrade versionable"):
             versionable.load(SimpleConfig, p)
+
+    @pytest.mark.skipif(not _HAS_NUMPY, reason="numpy not installed")
+    def test_loadOldFormatNdarray(self, tmp_path: Path) -> None:
+        """A file with the legacy __json__ wrapper and __ndarray__ sentinel loads."""
+        obj = _TomlArrLegacy(label="legacy-array", data=np.array([7.0, 8.0, 9.0], dtype=np.float64))
+        p = tmp_path / "old_arr.toml"
+        versionable.save(obj, p)
+        text = p.read_text()
+        legacy = (
+            text.replace("object =", "__OBJECT__ =")
+            .replace("version =", "__VERSION__ =")
+            .replace("hash =", "__HASH__ =")
+            .replace("__ver_json__ =", "__json__ =")
+            .replace("__ver_ndarray__", "__ndarray__")
+        )
+        p.write_text(legacy)
+
+        loaded = versionable.load(_TomlArrLegacy, p)
+        assert loaded.label == "legacy-array"
+        np.testing.assert_array_equal(loaded.data, np.array([7.0, 8.0, 9.0]))

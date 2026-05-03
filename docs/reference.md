@@ -123,18 +123,31 @@ class MyConfig(Versionable, version=1, hash="4b7866"):
 
 ## Reserved Keys
 
-The following dunder keys are used internally by **`versionable`** and must not be used as field names or as keys in
-user-provided dict values:
+The following keys are used internally by **`versionable`** and must not be used as field names or as keys in
+user-provided dict values.
 
-| Key               | Purpose                                                   |
-| ----------------- | --------------------------------------------------------- |
-| `__ndarray__`     | Marks a dict as a serialized numpy array (JSON/YAML/TOML) |
-| `__json__`        | YAML-only wrapper for values with no native YAML encoding |
-| `__versionable__` | Versionable metadata envelope                             |
-| `__OBJECT__`      | Serialization class name (stored in metadata)             |
-| `__VERSION__`     | Schema version (stored in metadata)                       |
-| `__HASH__`        | Schema hash (stored in metadata)                          |
-| `__FORMAT__`      | Reserved for future versionable versioning                |
-| `__FORMAT_BE__`   | Reserved for future backend versioning                    |
+The `__versionable__` envelope at the root of every saved file holds the schema metadata (no dunders inside — the
+wrapper key is the namespace marker):
+
+| Key       | Purpose                                                |
+| --------- | ------------------------------------------------------ |
+| `object`  | Serialization class name (stored in `__versionable__`) |
+| `version` | Schema version (stored in `__versionable__`)           |
+| `hash`    | Schema hash (stored in `__versionable__`)              |
+| `format`  | Reserved for future versionable file format versioning |
+
+User-data sentinels (live alongside user values; the `__ver_*__` prefix marks them as package-owned):
+
+| Key               | Purpose                                                        |
+| ----------------- | -------------------------------------------------------------- |
+| `__versionable__` | Versionable metadata envelope (wrapper key — namespace marker) |
+| `__ver_ndarray__` | Marks a dict as a serialized numpy array (JSON/YAML/TOML)      |
+| `__ver_json__`    | YAML/TOML wrapper for values with no native encoding           |
 
 > ⚠️ **Warning:** Using any of these as a field name or dict key may cause incorrect serialization or deserialization.
+
+### Compatibility with 0.1.x files
+
+Files written by versionable 0.1.x used dunder forms inside the envelope (`__OBJECT__`, `__VERSION__`, `__HASH__`,
+`__FORMAT__`) and bare sentinels (`__ndarray__`, `__json__`). Throughout the 0.2.x line, `load()` accepts both the old
+and new keys, preferring the new ones. Saved files always use the new keys. The legacy read path will be removed in 1.0.

@@ -39,8 +39,8 @@ class Backend(ABC):
 
         Returns:
             Tuple of (fields_dict, metadata_dict).
-            metadata_dict should contain ``__VERSION__``, ``__HASH__``,
-            ``__OBJECT__`` keys.
+            metadata_dict should contain ``version``, ``hash``,
+            ``object`` keys.
         """
 
 

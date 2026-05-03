@@ -193,9 +193,9 @@ class TestEndToEndMigration:
             json.dumps(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "MigConfig",
-                        "__VERSION__": 1,
-                        "__HASH__": "",
+                        "object": "MigConfig",
+                        "version": 1,
+                        "hash": "",
                     },
                     "name": "old-config",
                 }
@@ -219,9 +219,9 @@ class TestEndToEndMigration:
             json.dumps(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "MigDoc",
-                        "__VERSION__": 1,
-                        "__HASH__": "",
+                        "object": "MigDoc",
+                        "version": 1,
+                        "hash": "",
                     },
                     "title": "My Document",
                 }
@@ -246,9 +246,9 @@ class TestEndToEndMigration:
             json.dumps(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "MigApp",
-                        "__VERSION__": 1,
-                        "__HASH__": "",
+                        "object": "MigApp",
+                        "version": 1,
+                        "hash": "",
                     },
                     "title": "Old App",
                 }
@@ -300,7 +300,7 @@ class TestAddDefaultBehavior:
         self._write_toml(
             p,
             'title = "batch-processor"\ndebug = false\nretries = 5\n\n'
-            '[__versionable__]\n__OBJECT__ = "WCAddDefault"\n__VERSION__ = 1\n__HASH__ = "5556c8"\n',
+            '[__versionable__]\nobject = "WCAddDefault"\nversion = 1\nhash = "5556c8"\n',
         )
         result = versionable.load(worker_config_v4, p)
         assert result.timeout_s == 0.0
@@ -311,7 +311,7 @@ class TestAddDefaultBehavior:
         self._write_toml(
             p,
             'name = "batch-processor"\ndebug = false\nretries = 5\n\n'
-            '[__versionable__]\n__OBJECT__ = "WCAddDefault"\n__VERSION__ = 2\n__HASH__ = "ed3a90"\n',
+            '[__versionable__]\nobject = "WCAddDefault"\nversion = 2\nhash = "ed3a90"\n',
         )
         result = versionable.load(worker_config_v4, p)
         assert result.timeout_s == 0.0
@@ -322,7 +322,7 @@ class TestAddDefaultBehavior:
         self._write_toml(
             p,
             'name = "batch-processor"\nretries = 5\ntimeout_s = 7.5\n\n'
-            '[__versionable__]\n__OBJECT__ = "WCAddDefault"\n__VERSION__ = 3\n__HASH__ = "ea7fc2"\n',
+            '[__versionable__]\nobject = "WCAddDefault"\nversion = 3\nhash = "ea7fc2"\n',
         )
         result = versionable.load(worker_config_v4, p)
         assert result.timeout_s == 7.5

@@ -10,8 +10,8 @@ break all existing files on every schema change.
 2. Recompute `hash` (via `MyClass.hash()`)
 3. Add a `Migrate` inner class that tells **`versionable`** how to transform old data into the new shape
 
-When `load()` reads a file, it checks `__VERSION__` in the metadata. If it's behind the current version, migrations are
-applied in order — v1 → v2 → v3 — before the object is constructed.
+When `load()` reads a file, it checks `version` in the `__versionable__` metadata envelope. If it's behind the current
+version, migrations are applied in order — v1 → v2 → v3 — before the object is constructed.
 
 ## Declarative Operations
 
@@ -38,9 +38,9 @@ title: batch-processor
 debug: false
 retries: 5
 __versionable__:
-  __OBJECT__: WorkerConfig
-  __VERSION__: 1
-  __HASH__: 5556c8
+  object: WorkerConfig
+  version: 1
+  hash: 5556c8
 ```
 
 ### Rename a Field
@@ -222,8 +222,8 @@ v1 = Migration().derive("timestamps", from_="raw_data", via=lambda d: d[:, 0]).d
 
 ## Renaming a Class
 
-When you rename a `Versionable` class, existing files on disk still contain the old name in their `__OBJECT__` metadata.
-Use `old_names` to register the old name(s) so those files can still be loaded:
+When you rename a `Versionable` class, existing files on disk still contain the old name as the `object` attribute in
+their `__versionable__` metadata. Use `old_names` to register the old name(s) so those files can still be loaded:
 
 ```python
 # Was previously called "SensorReading"
@@ -237,8 +237,8 @@ class Measurement(
 
 With this declaration:
 
-- New files are saved with `__OBJECT__: "Measurement"`
-- Files saved with `__OBJECT__: "SensorReading"` can still be loaded via `loadDynamic()`
+- New files are saved with `object: "Measurement"`
+- Files saved with `object: "SensorReading"` can still be loaded via `loadDynamic()`
 - Multiple old names are supported: `old_names=["SensorReading", "DataPoint"]`
 
 If another class already owns one of the old names, class definition raises `VersionableError` instead of silently

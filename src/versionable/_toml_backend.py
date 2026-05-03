@@ -3,19 +3,23 @@
 Stores Versionable objects as TOML files.  Metadata is stored in a
 ``[__versionable__]`` table to avoid conflicts with field names.
 
-Nested Versionable objects use native TOML table syntax::
+Nested Versionable objects use native TOML table syntax, with each
+nested object's metadata under its own ``[<field>.__versionable__]``
+sub-table::
 
     [__versionable__]
-    __OBJECT__ = "Config"
-    __VERSION__ = 1
+    object = "Config"
+    version = 1
 
     name = "myapp"
 
     [point]
-    __OBJECT__ = "Point"
-    __VERSION__ = 1
     x = 1.0
     y = 2.0
+
+    [point.__versionable__]
+    object = "Point"
+    version = 1
 
 Supports ``commentDefaults=True`` to comment out fields that are at
 their default value, producing human-friendly config files.
@@ -74,9 +78,9 @@ class TomlBackend(Backend):
 
         data: dict[str, Any] = {
             "__versionable__": {
-                "__OBJECT__": meta["name"],
-                "__VERSION__": meta["version"],
-                "__HASH__": meta["hash"],
+                "object": meta["name"],
+                "version": meta["version"],
+                "hash": meta["hash"],
             },
         }
         # TOML cannot represent None — omit those fields
@@ -106,7 +110,7 @@ class TomlBackend(Backend):
         metaTable = data.pop("__versionable__", {})
         if not isinstance(metaTable, dict):
             raise BackendError(f"Expected __versionable__ to be a table in {path}, got {type(metaTable).__name__}")
-        fileFormat = metaTable.get("__FORMAT__")
+        fileFormat = metaTable.get("format", metaTable.get("__FORMAT__"))
         if fileFormat is not None:
             raise BackendError(
                 f"File {path} uses versionable format {fileFormat!r}, but this version only supports "
@@ -114,12 +118,12 @@ class TomlBackend(Backend):
             )
 
         meta = {
-            "__OBJECT__": metaTable.get("__OBJECT__", ""),
-            "__VERSION__": metaTable.get("__VERSION__"),
-            "__HASH__": metaTable.get("__HASH__", ""),
+            "object": metaTable.get("object", metaTable.get("__OBJECT__", "")),
+            "version": metaTable.get("version", metaTable.get("__VERSION__")),
+            "hash": metaTable.get("hash", metaTable.get("__HASH__", "")),
         }
 
-        # Unwrap __json__ wrappers (ndarray blobs)
+        # Unwrap __ver_json__ wrappers (ndarray blobs)
         data = _fromTomlSafe(data)
 
         return data, meta
@@ -133,16 +137,16 @@ class TomlBackend(Backend):
 def _toTomlSafe(value: Any) -> Any:
     """Convert a value to a TOML-safe representation.
 
-    - Nested Versionable dicts (with ``__OBJECT__``) are kept as native
+    - Nested Versionable dicts (with ``object``) are kept as native
       TOML tables — they naturally become ``[field_name]`` sections.
-    - ndarray dicts (with ``__ndarray__``) are stored as JSON strings
+    - ndarray dicts (with ``__ver_ndarray__``) are stored as JSON strings
       since they have no natural TOML representation.
     - ``None`` values are stripped (TOML cannot represent them).
     """
     if isinstance(value, dict):
         # ndarray blob — must use JSON wrapper
-        if "__ndarray__" in value:
-            return {"__json__": json.dumps(value, default=str)}
+        if "__ver_ndarray__" in value:
+            return {"__ver_json__": json.dumps(value, default=str)}
         # Nested Versionable or plain dict — keep as TOML table
         return {k: _toTomlSafe(v) for k, v in value.items() if v is not None}
     if isinstance(value, (list, tuple)):
@@ -151,8 +155,13 @@ def _toTomlSafe(value: Any) -> Any:
 
 
 def _fromTomlSafe(value: Any) -> Any:
-    """Reverse of ``_toTomlSafe`` — unwrap ``__json__`` wrappers."""
+    """Reverse of ``_toTomlSafe`` — unwrap ``__ver_json__`` wrappers.
+
+    Also accepts the legacy ``__json__`` wrapper from 0.1.x files.
+    """
     if isinstance(value, dict):
+        if "__ver_json__" in value and len(value) == 1:
+            return json.loads(value["__ver_json__"])
         if "__json__" in value and len(value) == 1:
             return json.loads(value["__json__"])
         return {k: _fromTomlSafe(v) for k, v in value.items()}
@@ -235,12 +244,6 @@ def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) 
 
         # __versionable__ section — always keep uncommented
         if inMetaSection:
-            result.append(line)
-            continue
-
-        # Metadata keys — always keep uncommented (even inside nested sections)
-        key = stripped.split("=", 1)[0].strip()
-        if key.startswith("__") and key.endswith("__"):
             result.append(line)
             continue
 

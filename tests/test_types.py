@@ -231,7 +231,7 @@ class TestNdarray:
         arr = np.array([1.0, 2.0, 3.0], dtype=np.float64)
         serialized = serialize(arr, np.ndarray)
         assert isinstance(serialized, dict)
-        assert serialized["__ndarray__"] is True
+        assert serialized["__ver_ndarray__"] is True
         result = deserialize(serialized, np.ndarray)
         np.testing.assert_array_equal(result, arr)
 
@@ -268,7 +268,7 @@ class TestNestedVersionable:
         pt = Point(x=1.0, y=2.0)
         serialized = serialize(pt, Point)
         assert isinstance(serialized, dict)
-        assert serialized["__OBJECT__"] == "Point"
+        assert serialized["__versionable__"]["object"] == "Point"
         assert serialized["x"] == 1.0
 
         result = deserialize(serialized, Point)

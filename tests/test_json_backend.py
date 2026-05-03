@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
+try:
+    import numpy as np
+    import numpy.typing as npt
+
+    _HAS_NUMPY = True
+except ImportError:
+    _HAS_NUMPY = False
+
 import versionable
+from versionable._base import Versionable
 from versionable.errors import BackendError, ConverterError, VersionError
 
 from .conftest import (
@@ -15,6 +25,15 @@ from .conftest import (
     WithLiteral,
     WithSkipDefaults,
 )
+
+if _HAS_NUMPY:
+
+    @dataclass
+    class _JsonArrLegacy(Versionable, version=1, name="JsonArrLegacy", register=True):
+        """Test class for back-compat ndarray reads in JSON files."""
+
+        label: str
+        data: npt.NDArray[np.float64]
 
 
 class TestJsonMetadata:
@@ -26,10 +45,30 @@ class TestJsonMetadata:
         data = json.loads(p.read_text())
         assert "__versionable__" in data
         meta = data["__versionable__"]
-        assert "__OBJECT__" in meta
-        assert "__VERSION__" in meta
-        assert "__HASH__" in meta
-        assert meta["__VERSION__"] == 1
+        assert "object" in meta
+        assert "version" in meta
+        assert "hash" in meta
+        assert meta["version"] == 1
+
+    def test_nestedHasWrappedEnvelope(self, tmp_path: Path) -> None:
+        """Nested Versionable values get their own ``__versionable__`` envelope."""
+        from .conftest import Inner, WithNested
+
+        obj = WithNested(name="origin", point=Inner(x=1.0, y=2.0))
+        p = tmp_path / "out.json"
+        versionable.save(obj, p)
+
+        data = json.loads(p.read_text())
+        # Root envelope
+        assert data["__versionable__"]["object"] == "WithNested"
+        # Nested envelope is wrapped under __versionable__, never flat
+        assert "__versionable__" in data["point"]
+        assert data["point"]["__versionable__"]["object"] == "Inner"
+        assert "object" not in data["point"]
+        # Round-trips correctly
+        loaded = versionable.load(WithNested, p)
+        assert loaded.point.x == 1.0
+        assert loaded.point.y == 2.0
 
     def test_prettyPrinted(self, tmp_path: Path) -> None:
         obj = SimpleConfig(name="test")
@@ -78,9 +117,9 @@ class TestUnknownFields:
             json.dumps(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "SimpleConfig",
-                        "__VERSION__": 1,
-                        "__HASH__": "",
+                        "object": "SimpleConfig",
+                        "version": 1,
+                        "hash": "",
                     },
                     "name": "test",
                     "debug": False,
@@ -107,9 +146,9 @@ class TestJsonLiteral:
             json.dumps(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "WithLiteral",
-                        "__VERSION__": 1,
-                        "__HASH__": "",
+                        "object": "WithLiteral",
+                        "version": 1,
+                        "hash": "",
                     },
                     "name": "test",
                     "mode": "banana",
@@ -125,9 +164,9 @@ class TestJsonLiteral:
             json.dumps(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "WithLiteral",
-                        "__VERSION__": 1,
-                        "__HASH__": "",
+                        "object": "WithLiteral",
+                        "version": 1,
+                        "hash": "",
                     },
                     "name": "test",
                     "mode": "banana",
@@ -154,7 +193,7 @@ class TestJsonMissingVersion:
         p.write_text(json.dumps({"name": "test", "debug": False, "retries": 3}))
         with caplog.at_level("WARNING"):
             versionable.load(SimpleConfig, p)
-        assert "No __VERSION__" in caplog.text
+        assert "No version" in caplog.text
         assert "SimpleConfig" in caplog.text
 
     def test_assumeVersionOverride(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -164,7 +203,7 @@ class TestJsonMissingVersion:
         with caplog.at_level("WARNING"):
             loaded = versionable.load(SimpleConfig, p, assumeVersion=1)
         assert loaded.name == "test"
-        assert "No __VERSION__" not in caplog.text
+        assert "No version" not in caplog.text
 
 
 class TestErrors:
@@ -182,9 +221,9 @@ class TestErrors:
             json.dumps(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "SimpleConfig",
-                        "__VERSION__": 999,
-                        "__HASH__": "",
+                        "object": "SimpleConfig",
+                        "version": 999,
+                        "hash": "",
                     },
                     "name": "test",
                 }
@@ -195,6 +234,51 @@ class TestErrors:
 
     def test_futureFormatRaises(self, tmp_path: Path) -> None:
         p = tmp_path / "out.json"
+        p.write_text(
+            json.dumps(
+                {
+                    "__versionable__": {
+                        "object": "SimpleConfig",
+                        "version": 1,
+                        "hash": "",
+                        "format": 2,
+                    },
+                    "name": "test",
+                }
+            )
+        )
+        with pytest.raises(BackendError, match="Upgrade versionable"):
+            versionable.load(SimpleConfig, p)
+
+
+class TestJsonBackCompat:
+    """Read-side compatibility for files written by versionable 0.1.x."""
+
+    def test_loadOldFormatEnvelope(self, tmp_path: Path) -> None:
+        """A file with the legacy __OBJECT__/__VERSION__/__HASH__ keys still loads."""
+        p = tmp_path / "old.json"
+        p.write_text(
+            json.dumps(
+                {
+                    "__versionable__": {
+                        "__OBJECT__": "SimpleConfig",
+                        "__VERSION__": 1,
+                        "__HASH__": "ed3a90",
+                    },
+                    "name": "legacy",
+                    "debug": True,
+                    "retries": 7,
+                }
+            )
+        )
+        loaded = versionable.load(SimpleConfig, p)
+        assert loaded.name == "legacy"
+        assert loaded.debug is True
+        assert loaded.retries == 7
+
+    def test_oldFormatFutureFormatRaises(self, tmp_path: Path) -> None:
+        """The legacy __FORMAT__ key still triggers the upgrade-required error."""
+        p = tmp_path / "old_future.json"
         p.write_text(
             json.dumps(
                 {
@@ -210,3 +294,46 @@ class TestErrors:
         )
         with pytest.raises(BackendError, match="Upgrade versionable"):
             versionable.load(SimpleConfig, p)
+
+    @pytest.mark.skipif(not _HAS_NUMPY, reason="numpy not installed")
+    def test_loadOldFormatNdarray(self, tmp_path: Path) -> None:
+        """A file with the legacy __ndarray__ sentinel still loads as a numpy array."""
+        # Save a fresh file then rewrite the envelope + sentinel keys to legacy form.
+        obj = _JsonArrLegacy(label="legacy-array", data=np.array([1.5, 2.5, 3.5], dtype=np.float64))
+        p = tmp_path / "old_arr.json"
+        versionable.save(obj, p)
+        text = p.read_text()
+        legacy = (
+            text.replace('"object":', '"__OBJECT__":')
+            .replace('"version":', '"__VERSION__":')
+            .replace('"hash":', '"__HASH__":')
+            .replace('"__ver_ndarray__":', '"__ndarray__":')
+        )
+        p.write_text(legacy)
+
+        loaded = versionable.load(_JsonArrLegacy, p)
+        assert loaded.label == "legacy-array"
+        np.testing.assert_array_equal(loaded.data, np.array([1.5, 2.5, 3.5]))
+
+    def test_newKeysPreferredWhenBothPresent(self, tmp_path: Path) -> None:
+        """Mixed old + new envelope keys: new wins, no errors."""
+        p = tmp_path / "mixed.json"
+        p.write_text(
+            json.dumps(
+                {
+                    "__versionable__": {
+                        # Old keys point at a different class — must be ignored
+                        "__OBJECT__": "WrongClass",
+                        "__VERSION__": 99,
+                        "__HASH__": "deadbe",
+                        # New keys are correct — must win
+                        "object": "SimpleConfig",
+                        "version": 1,
+                        "hash": "ed3a90",
+                    },
+                    "name": "winner",
+                }
+            )
+        )
+        loaded = versionable.load(SimpleConfig, p)
+        assert loaded.name == "winner"

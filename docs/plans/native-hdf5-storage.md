@@ -1,5 +1,10 @@
 # Native HDF5 Storage (Eliminate JSON)
 
+> **Historical plan — implemented.** Envelope key names in this document
+> (`__OBJECT__`, `__VERSION__`, `__HASH__`, `__ndarray__`) were renamed in
+> 0.2.0; see `docs/plans/envelope-keys.md`. Current names are `object`,
+> `version`, `hash`, `__ver_ndarray__`.
+
 ## Problem
 
 The HDF5 backend previously bundled all non-array fields into a single `__scalars__` JSON attribute:

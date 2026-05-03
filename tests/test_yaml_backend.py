@@ -8,9 +8,19 @@ import pytest
 
 yaml = pytest.importorskip("yaml")
 
+from dataclasses import dataclass
 from pathlib import Path
 
+try:
+    import numpy as np
+    import numpy.typing as npt
+
+    _HAS_NUMPY = True
+except ImportError:
+    _HAS_NUMPY = False
+
 import versionable
+from versionable._base import Versionable
 from versionable.errors import BackendError, ConverterError, VersionError
 
 from .conftest import (
@@ -21,6 +31,15 @@ from .conftest import (
     WithLiteralNoValidation,
     WithSkipDefaults,
 )
+
+if _HAS_NUMPY:
+
+    @dataclass
+    class _YamlArrLegacy(Versionable, version=1, name="YamlArrLegacy", register=True):
+        """Test class for back-compat ndarray reads in YAML files."""
+
+        label: str
+        data: npt.NDArray[np.float64]
 
 
 class TestYamlRoundTrip:
@@ -42,9 +61,9 @@ class TestYamlMetadata:
         data = yaml.safe_load(p.read_text())
         assert "__versionable__" in data
         meta = data["__versionable__"]
-        assert meta["__OBJECT__"] == "SimpleConfig"
-        assert meta["__VERSION__"] == 1
-        assert "__HASH__" in meta
+        assert meta["object"] == "SimpleConfig"
+        assert meta["version"] == 1
+        assert "hash" in meta
 
     def test_humanReadable(self, tmp_path: Path) -> None:
         obj = SimpleConfig(name="test")
@@ -53,6 +72,23 @@ class TestYamlMetadata:
 
         text = p.read_text()
         assert "name: test" in text
+
+    def test_nestedHasWrappedEnvelope(self, tmp_path: Path) -> None:
+        """Nested Versionable values get their own ``__versionable__`` envelope."""
+        from .conftest import Inner, WithNested
+
+        obj = WithNested(name="origin", point=Inner(x=1.0, y=2.0))
+        p = tmp_path / "out.yaml"
+        versionable.save(obj, p)
+
+        data = yaml.safe_load(p.read_text())
+        assert data["__versionable__"]["object"] == "WithNested"
+        assert "__versionable__" in data["point"]
+        assert data["point"]["__versionable__"]["object"] == "Inner"
+        assert "object" not in data["point"]
+        loaded = versionable.load(WithNested, p)
+        assert loaded.point.x == 1.0
+        assert loaded.point.y == 2.0
 
 
 class TestYamlSkipDefaults:
@@ -144,7 +180,7 @@ class TestYamlMissingVersion:
         p.write_text("name: test\ndebug: false\nretries: 3\n")
         with caplog.at_level("WARNING"):
             versionable.load(SimpleConfig, p)
-        assert "No __VERSION__" in caplog.text
+        assert "No version" in caplog.text
         assert "SimpleConfig" in caplog.text
 
     def test_assumeVersionOverride(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -154,7 +190,7 @@ class TestYamlMissingVersion:
         with caplog.at_level("WARNING"):
             loaded = versionable.load(SimpleConfig, p, assumeVersion=1)
         assert loaded.name == "test"
-        assert "No __VERSION__" not in caplog.text
+        assert "No version" not in caplog.text
 
 
 class TestYamlLiteral:
@@ -170,7 +206,7 @@ class TestYamlLiteral:
         p.write_text(
             yaml.dump(
                 {
-                    "__versionable__": {"__OBJECT__": "WithLiteral", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"object": "WithLiteral", "version": 1, "hash": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -184,7 +220,7 @@ class TestYamlLiteral:
         p.write_text(
             yaml.dump(
                 {
-                    "__versionable__": {"__OBJECT__": "WithLiteral", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"object": "WithLiteral", "version": 1, "hash": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -198,7 +234,7 @@ class TestYamlLiteral:
         p.write_text(
             yaml.dump(
                 {
-                    "__versionable__": {"__OBJECT__": "WithLiteralNoValidation", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"object": "WithLiteralNoValidation", "version": 1, "hash": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -213,7 +249,7 @@ class TestYamlLiteral:
         p.write_text(
             yaml.dump(
                 {
-                    "__versionable__": {"__OBJECT__": "WithLiteralFallback", "__VERSION__": 1, "__HASH__": ""},
+                    "__versionable__": {"object": "WithLiteralFallback", "version": 1, "hash": ""},
                     "name": "test",
                     "mode": "banana",
                 }
@@ -245,9 +281,9 @@ class TestYamlErrors:
             yaml.dump(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "SimpleConfig",
-                        "__VERSION__": 1,
-                        "__HASH__": "",
+                        "object": "SimpleConfig",
+                        "version": 1,
+                        "hash": "",
                     },
                     "debug": True,
                     "retries": 5,
@@ -267,9 +303,9 @@ class TestYamlErrors:
             yaml.dump(
                 {
                     "__versionable__": {
-                        "__OBJECT__": "SimpleConfig",
-                        "__VERSION__": 999,
-                        "__HASH__": "",
+                        "object": "SimpleConfig",
+                        "version": 999,
+                        "hash": "",
                     },
                     "name": "test",
                 }
@@ -280,6 +316,51 @@ class TestYamlErrors:
 
     def test_futureFormatRaises(self, tmp_path: Path) -> None:
         p = tmp_path / "out.yaml"
+        p.write_text(
+            yaml.dump(
+                {
+                    "__versionable__": {
+                        "object": "SimpleConfig",
+                        "version": 1,
+                        "hash": "",
+                        "format": 2,
+                    },
+                    "name": "test",
+                }
+            )
+        )
+        with pytest.raises(BackendError, match="Upgrade versionable"):
+            versionable.load(SimpleConfig, p)
+
+
+class TestYamlBackCompat:
+    """Read-side compatibility for files written by versionable 0.1.x."""
+
+    def test_loadOldFormatEnvelope(self, tmp_path: Path) -> None:
+        """A file with the legacy __OBJECT__/__VERSION__/__HASH__ keys still loads."""
+        p = tmp_path / "old.yaml"
+        p.write_text(
+            yaml.dump(
+                {
+                    "__versionable__": {
+                        "__OBJECT__": "SimpleConfig",
+                        "__VERSION__": 1,
+                        "__HASH__": "ed3a90",
+                    },
+                    "name": "legacy",
+                    "debug": True,
+                    "retries": 7,
+                }
+            )
+        )
+        loaded = versionable.load(SimpleConfig, p)
+        assert loaded.name == "legacy"
+        assert loaded.debug is True
+        assert loaded.retries == 7
+
+    def test_oldFormatFutureFormatRaises(self, tmp_path: Path) -> None:
+        """The legacy __FORMAT__ key still triggers the upgrade-required error."""
+        p = tmp_path / "old_future.yaml"
         p.write_text(
             yaml.dump(
                 {
@@ -295,3 +376,24 @@ class TestYamlErrors:
         )
         with pytest.raises(BackendError, match="Upgrade versionable"):
             versionable.load(SimpleConfig, p)
+
+    @pytest.mark.skipif(not _HAS_NUMPY, reason="numpy not installed")
+    def test_loadOldFormatNdarray(self, tmp_path: Path) -> None:
+        """A file with the legacy __json__ wrapper and __ndarray__ sentinel loads."""
+        obj = _YamlArrLegacy(label="legacy-array", data=np.array([4.0, 5.0, 6.0], dtype=np.float64))
+        p = tmp_path / "old_arr.yaml"
+        versionable.save(obj, p)
+        # Rewrite both the envelope keys and the YAML/ndarray sentinels to legacy form.
+        text = p.read_text()
+        legacy = (
+            text.replace("object:", "__OBJECT__:")
+            .replace("version:", "__VERSION__:")
+            .replace("hash:", "__HASH__:")
+            .replace("__ver_json__:", "__json__:")
+            .replace("__ver_ndarray__", "__ndarray__")
+        )
+        p.write_text(legacy)
+
+        loaded = versionable.load(_YamlArrLegacy, p)
+        assert loaded.label == "legacy-array"
+        np.testing.assert_array_equal(loaded.data, np.array([4.0, 5.0, 6.0]))
