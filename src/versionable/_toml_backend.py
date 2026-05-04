@@ -191,25 +191,19 @@ def _addContainerWithDefaults(
     data: dict[str, Any],
     cls: type | None,
 ) -> None:
-    """Populate `container` with `data`; commented defaults driven by `cls`."""
+    """Populate `container` with `data`; commented defaults driven by `cls`.
+
+    Emits in three passes to satisfy the TOML structural rule that scalars
+    must precede any `[table]` header at a given level — without this, an
+    uncommented default would land inside the wrong table.
+    """
     defaults = _classDefaultsToml(cls) if cls is not None else {}
     fieldTypes = _resolveFields(cls) if cls is not None else {}
 
+    # Pass 1: scalar / list fields (with comment-out for at-default values)
     for key, value in data.items():
-        if key == "__versionable__":
-            sub = tomlkit.table()
-            for metaKey, metaVal in value.items():
-                sub[metaKey] = metaVal
-            container[key] = sub
+        if key == "__versionable__" or isinstance(value, dict):
             continue
-
-        if isinstance(value, dict):
-            sub = tomlkit.table()
-            nestedCls = _findVersionableType(fieldTypes.get(key))
-            _addContainerWithDefaults(sub, value, nestedCls)
-            container[key] = sub
-            continue
-
         if key in defaults and value == defaults[key]:
             scratch = tomlkit.document()
             scratch[key] = value
@@ -217,6 +211,23 @@ def _addContainerWithDefaults(
             container.add(tomlkit.comment(line))
         else:
             container[key] = value
+
+    # Pass 2: __versionable__ envelope (always uncommented)
+    envelope = data.get("__versionable__")
+    if isinstance(envelope, dict):
+        sub = tomlkit.table()
+        for metaKey, metaVal in envelope.items():
+            sub[metaKey] = metaVal
+        container["__versionable__"] = sub
+
+    # Pass 3: nested Versionable / table fields (recurse)
+    for key, value in data.items():
+        if key == "__versionable__" or not isinstance(value, dict):
+            continue
+        sub = tomlkit.table()
+        nestedCls = _findVersionableType(fieldTypes.get(key))
+        _addContainerWithDefaults(sub, value, nestedCls)
+        container[key] = sub
 
 
 def _classDefaultsToml(cls: type) -> dict[str, Any]:

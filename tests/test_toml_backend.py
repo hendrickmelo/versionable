@@ -7,7 +7,7 @@ import pytest
 
 pytest.importorskip("tomlkit")
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
@@ -37,6 +37,24 @@ if _HAS_NUMPY:
 
         label: str
         data: npt.NDArray[np.float64]
+
+
+# Module-level helpers for nested commentDefaults tests.  Defining these
+# at module scope (not inside a test method) lets `typing.get_type_hints`
+# resolve the forward reference under `from __future__ import annotations`,
+# so the nested class is recognized and its default-fields get commented.
+# Hashes are pinned literals per project convention; if you change a field
+# type below, expect a HashMismatchError telling you the new hash.
+@dataclass
+class _NestedHost(Versionable, version=1, hash="1c4d34", register=False):
+    host: str = "localhost"
+    port: int = 5432
+
+
+@dataclass
+class _NestedRoot(Versionable, version=1, hash="f4760d", register=False):
+    label: str
+    db: _NestedHost = field(default_factory=_NestedHost)
 
 
 class TestTomlMetadata:
@@ -153,6 +171,39 @@ class TestTomlCommentDefaults:
         # Commented defaults are not present as keys
         assert "debug" not in parsed
         assert "retries" not in parsed
+
+    def test_uncommentingDefaultRoundTrips(self, tmp_path: Path) -> None:
+        """A user uncommenting a default line must produce a valid override at the right path."""
+        obj = SimpleConfig(name="test")
+        p = tmp_path / "out.toml"
+        versionable.save(obj, p, commentDefaults=True)
+
+        # Simulate a user uncommenting "# debug = false" and changing the value
+        text = p.read_text()
+        assert "# debug = false" in text  # baseline
+        modified = text.replace("# debug = false", "debug = true")
+        p.write_text(modified)
+
+        loaded = versionable.load(SimpleConfig, p)
+        assert loaded.debug is True, (
+            f"uncommented `debug = true` did not override default; file content was:\n{p.read_text()}"
+        )
+
+    def test_uncommentingNestedDefaultRoundTrips(self, tmp_path: Path) -> None:
+        """Same as above but for a field inside a nested Versionable."""
+        obj = _NestedRoot(label="x")
+        p = tmp_path / "out.toml"
+        versionable.save(obj, p, commentDefaults=True)
+
+        text = p.read_text()
+        assert "# host = " in text
+        modified = text.replace('# host = "localhost"', 'host = "elsewhere"')
+        p.write_text(modified)
+
+        loaded = versionable.load(_NestedRoot, p)
+        assert loaded.db.host == "elsewhere", (
+            f"uncommented nested host did not override default; file content was:\n{p.read_text()}"
+        )
 
 
 class TestTomlLiteral:
