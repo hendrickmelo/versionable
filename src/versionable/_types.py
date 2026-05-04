@@ -19,10 +19,16 @@ from enum import Enum
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Protocol, runtime_checkable
 
-from versionable._base import Versionable, _resolveFields
+from versionable._base import _REGISTRY, Versionable, _resolveFields
 from versionable._numpy_compat import _np as np
 from versionable._numpy_compat import requireNumpy
-from versionable.errors import CircularReferenceError, ConverterError
+from versionable.errors import (
+    BackendError,
+    CircularReferenceError,
+    ConverterError,
+    UnknownFieldError,
+    VersionError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -306,6 +312,14 @@ def _serializeCollection(
     args = typing.get_args(fieldType)
 
     if isinstance(value, dict):
+        # Reject Versionable dict keys: dict keys serialize via str(k), which would
+        # silently produce a Python repr for Versionable instances and corrupt on
+        # round-trip. Use Versionable as dict values, not keys.
+        if args and isinstance(args[0], type) and issubclass(args[0], Versionable):
+            raise ConverterError(
+                f"Dict keys cannot be Versionable types ({args[0].__name__}) at field "
+                f"{path or '<root>'}. Use Versionable as dict values, not keys."
+            )
         valType = args[1] if len(args) > 1 else Any
         return {
             str(k): serialize(
@@ -354,7 +368,8 @@ def deserialize(
     *,
     nativeTypes: set[type] | None = None,
     fieldMetadata: Any | None = None,
-    validateLiterals: bool = True,
+    validateLiterals: bool | None = None,
+    _classFallback: bool = True,
 ) -> Any:
     """Deserialize *data* back to the declared *fieldType*.
 
@@ -363,7 +378,12 @@ def deserialize(
         fieldType: The declared type annotation for the field.
         nativeTypes: Types the backend handles natively (skip conversion).
         fieldMetadata: Optional dataclass field metadata (for literal fallbacks).
-        validateLiterals: Whether to validate Literal type values.
+        validateLiterals: Whether to validate Literal type values. ``None`` means
+            "no explicit override" — Literal validation falls back to the enclosing
+            ``Versionable``'s class default (passed via ``_classFallback``).
+        _classFallback: Internal. The enclosing ``Versionable``'s
+            ``meta.validateLiterals``, used when ``validateLiterals`` is ``None``.
+            Defaults to ``True`` for direct callers without a class context.
     """
     if data is None:
         return None
@@ -380,7 +400,8 @@ def deserialize(
 
     # Literal — validate value against allowed options
     if origin is typing.Literal:
-        if validateLiterals and data not in args:
+        effective = validateLiterals if validateLiterals is not None else _classFallback
+        if effective and data not in args:
             fallback = (fieldMetadata or {}).get(_LITERAL_FALLBACK_KEY)
             if fallback is not None:
                 logger.warning(
@@ -395,12 +416,24 @@ def deserialize(
 
     if origin is typing.Union or _isUnionType(origin):
         return _deserializeUnion(
-            data, args, nativeTypes, fieldMetadata=fieldMetadata, validateLiterals=validateLiterals
+            data,
+            args,
+            nativeTypes,
+            fieldMetadata=fieldMetadata,
+            validateLiterals=validateLiterals,
+            _classFallback=_classFallback,
         )
 
     # Resolve the concrete type and dispatch
     concreteType = origin or fieldType
-    return _deserializeConcrete(data, concreteType, args, nativeTypes)
+    return _deserializeConcrete(
+        data,
+        concreteType,
+        args,
+        nativeTypes,
+        validateLiterals=validateLiterals,
+        _classFallback=_classFallback,
+    )
 
 
 def _deserializeUnion(
@@ -408,7 +441,8 @@ def _deserializeUnion(
     args: tuple[Any, ...],
     nativeTypes: set[type],
     fieldMetadata: Any | None = None,
-    validateLiterals: bool = True,
+    validateLiterals: bool | None = None,
+    _classFallback: bool = True,
 ) -> Any:
     """Deserialize a Union type by trying each member."""
     nonNoneArgs = [a for a in args if a is not type(None)]
@@ -419,11 +453,17 @@ def _deserializeUnion(
             nativeTypes=nativeTypes,
             fieldMetadata=fieldMetadata,
             validateLiterals=validateLiterals,
+            _classFallback=_classFallback,
         )
     for arg in nonNoneArgs:
         try:
             return deserialize(
-                data, arg, nativeTypes=nativeTypes, fieldMetadata=fieldMetadata, validateLiterals=validateLiterals
+                data,
+                arg,
+                nativeTypes=nativeTypes,
+                fieldMetadata=fieldMetadata,
+                validateLiterals=validateLiterals,
+                _classFallback=_classFallback,
             )
         except (TypeError, ValueError, ConverterError):
             continue
@@ -435,6 +475,9 @@ def _deserializeConcrete(
     concreteType: Any,
     args: tuple[Any, ...],
     nativeTypes: set[type],
+    *,
+    validateLiterals: bool | None = None,
+    _classFallback: bool = True,
 ) -> Any:
     """Deserialize to a concrete (non-union) type."""
     # Backend native types — pass through
@@ -460,9 +503,10 @@ def _deserializeConcrete(
     if isinstance(concreteType, type) and issubclass(concreteType, Enum):
         return _deserializeEnum(data, concreteType)
 
-    # Nested Versionable
+    # Nested Versionable — pass the override through; the nested class will reset
+    # _classFallback to its own meta.validateLiterals for its own field deserialization.
     if isinstance(concreteType, type) and issubclass(concreteType, Versionable):
-        return _deserializeVersionable(data, concreteType)
+        return _deserializeVersionable(data, concreteType, validateLiterals=validateLiterals)
 
     # numpy ndarray (both explicit ndarray and npt.NDArray alias)
     if np is not None and (
@@ -472,10 +516,14 @@ def _deserializeConcrete(
 
     # Collections
     if concreteType in (list, tuple, set, frozenset):
-        return _deserializeSequence(data, concreteType, args, nativeTypes)
+        return _deserializeSequence(
+            data, concreteType, args, nativeTypes, validateLiterals=validateLiterals, _classFallback=_classFallback
+        )
 
     if concreteType is dict:
-        return _deserializeDict(data, args, nativeTypes)
+        return _deserializeDict(
+            data, args, nativeTypes, validateLiterals=validateLiterals, _classFallback=_classFallback
+        )
 
     # Fallback
     return data
@@ -486,10 +534,18 @@ def _deserializeSequence(
     concreteType: type,
     args: tuple[Any, ...],
     nativeTypes: set[type],
+    *,
+    validateLiterals: bool | None = None,
+    _classFallback: bool = True,
 ) -> Any:
     """Deserialize list, tuple, set, or frozenset."""
     elemType = args[0] if args else Any
-    items = [deserialize(v, elemType, nativeTypes=nativeTypes) for v in data]
+    items = [
+        deserialize(
+            v, elemType, nativeTypes=nativeTypes, validateLiterals=validateLiterals, _classFallback=_classFallback
+        )
+        for v in data
+    ]
     if concreteType is tuple:
         return tuple(items)
     if concreteType is set:
@@ -503,12 +559,19 @@ def _deserializeDict(
     data: Any,
     args: tuple[Any, ...],
     nativeTypes: set[type],
+    *,
+    validateLiterals: bool | None = None,
+    _classFallback: bool = True,
 ) -> dict[str, Any]:
     """Deserialize a dict."""
     keyType = args[0] if args else str
     valType = args[1] if len(args) > 1 else Any
     return {
-        deserialize(k, keyType, nativeTypes=nativeTypes): deserialize(v, valType, nativeTypes=nativeTypes)
+        deserialize(
+            k, keyType, nativeTypes=nativeTypes, validateLiterals=validateLiterals, _classFallback=_classFallback
+        ): deserialize(
+            v, valType, nativeTypes=nativeTypes, validateLiterals=validateLiterals, _classFallback=_classFallback
+        )
         for k, v in data.items()
     }
 
@@ -557,32 +620,211 @@ def _serializeVersionable(obj: Versionable, visited: set[int], path: str) -> dic
     return result
 
 
-def _deserializeVersionable(data: dict[str, Any], cls: type[Versionable]) -> Versionable:
+# ---------------------------------------------------------------------------
+# Nested envelope reading and polymorphism resolution
+# ---------------------------------------------------------------------------
+#
+# Nested ``Versionable`` data dicts can carry envelope keys in three layouts:
+#
+# 1. Wrapped (current 0.2.0+ JSON/YAML/TOML files):
+#    ``data["__versionable__"] = {"object": ..., "version": N, "hash": ...}``
+# 2. Flat new keys (current HDF5 read output, transient on the wire):
+#    ``data`` has top-level ``"object"``, ``"version"``, ``"hash"``.
+# 3. Flat dunder keys (0.1.x files):
+#    ``data`` has top-level ``"__OBJECT__"``, ``"__VERSION__"``, ``"__HASH__"``.
+#
+# ``_readNestedEnvelope`` reads any of these layouts; ``_stripEnvelope`` removes
+# all envelope keys before migrations operate on field-name keys.
+
+_ENVELOPE_KEYS = frozenset(
+    {
+        "__versionable__",
+        # Flat new (0.2.0+, current HDF5 read output)
+        "object",
+        "version",
+        "hash",
+        "format",
+        "format_be",
+        "shared_refs",
+        # Flat dunder (0.1.x file format)
+        "__OBJECT__",
+        "__VERSION__",
+        "__HASH__",
+        "__FORMAT__",
+        "__FORMAT_BE__",
+        "__SHARED_REFS__",
+    }
+)
+
+
+def _readNestedEnvelope(data: dict[str, Any]) -> dict[str, Any]:
+    """Extract envelope fields (object, version, hash) from a nested Versionable's data dict.
+
+    Handles wrapped (``data["__versionable__"]``), flat-new (``object``/``version``/``hash``
+    at top level), and flat-dunder (``__OBJECT__``/``__VERSION__``/``__HASH__``) layouts.
+
+    Returns a dict with keys ``object``, ``version``, ``hash``. Values are ``None`` when
+    the corresponding envelope field is not present.
+    """
+    envelope = data["__versionable__"] if isinstance(data.get("__versionable__"), dict) else data
+    return {
+        "object": envelope.get("object", envelope.get("__OBJECT__")),
+        "version": envelope.get("version", envelope.get("__VERSION__")),
+        "hash": envelope.get("hash", envelope.get("__HASH__")),
+    }
+
+
+def _stripEnvelope(data: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of *data* with envelope keys removed.
+
+    Migration ops operate on field-name keys; envelope keys (``__versionable__``,
+    ``object``/``version``/``hash``, and the legacy dunder forms) must be removed before
+    migrations run so they don't get treated as user fields.
+    """
+    return {k: v for k, v in data.items() if k not in _ENVELOPE_KEYS}
+
+
+def _resolveNestedClass(envelope: dict[str, Any], cls: type[Versionable]) -> type[Versionable]:
+    """Resolve the concrete class for a nested deserialize using the envelope's object name.
+
+    Supports polymorphic collections: ``list[Animal]`` saved with ``Dog`` and ``Cat``
+    elements is reconstructed with the original subclass identities. Falls back to
+    *cls* (the declared field type) when the envelope is missing or matches the
+    declared name, supporting back-compat and ``register=False`` classes.
+
+    Args:
+        envelope: Output of :func:`_readNestedEnvelope`.
+        cls: The declared field type (e.g., ``Animal`` for ``field: list[Animal]``).
+
+    Raises:
+        BackendError: If the envelope's ``object`` is not in the registry, or resolves
+            to a class that is not a subclass of *cls*.
+    """
+    objectName = envelope.get("object")
+    if not objectName:
+        # Missing envelope or no object key — back-compat with envelope-less data.
+        return cls
+
+    declaredName = cls._serializer_meta_.name if hasattr(cls, "_serializer_meta_") else cls.__name__
+    if objectName == declaredName:
+        # Same identity — use the declared type (also handles register=False classes
+        # whose declared type isn't in the registry).
+        return cls
+
+    fromRegistry = _REGISTRY.get(objectName)
+    if fromRegistry is None:
+        raise BackendError(
+            f"Unknown nested object type {objectName!r} (declared field type: {cls.__qualname__}). "
+            f"Class is not registered or has been removed."
+        )
+    if not issubclass(fromRegistry, cls):
+        raise BackendError(
+            f"Nested object type {objectName!r} resolves to {fromRegistry.__qualname__}, "
+            f"which is not a subclass of declared field type {cls.__qualname__}."
+        )
+    return fromRegistry
+
+
+def _deserializeVersionable(
+    data: dict[str, Any],
+    cls: type[Versionable],
+    *,
+    validateLiterals: bool | None = None,
+) -> Versionable:
     """Deserialize a dict to a Versionable instance.
 
-    If the dict contains a ``__ver_lazy__`` key (set by the HDF5 backend's
-    recursive lazy reader), lazy sentinels are passed through without
-    deserialization and the instance is wrapped with ``makeLazyInstance``.
+    Reads the per-element envelope to:
+    - Resolve the concrete class for polymorphic collections (e.g., ``list[Animal]``
+      with ``Dog`` and ``Cat`` elements preserves subclass identity).
+    - Apply migrations from the file's recorded version to the resolved class's version.
+    - Honor the resolved class's ``unknown="error"``/``"ignore"``/``"preserve"`` policy
+      against extra fields after migration.
+
+    If the dict contains a ``__ver_lazy__`` key (set by the HDF5 backend's recursive
+    lazy reader), lazy sentinels are passed through without deserialization and the
+    instance is wrapped with ``makeLazyInstance``.
+
+    Args:
+        data: The serialized field dict for the Versionable instance, including
+            envelope keys (any of the three supported layouts).
+        cls: The declared field type. Used as a fallback when no envelope is present
+            and as the polymorphism upper bound (``object`` must resolve to a subclass).
+        validateLiterals: Explicit Literal-validation override. ``None`` falls back
+            to each Versionable's class default; an explicit ``True``/``False``
+            propagates everywhere.
+
+    Raises:
+        VersionError: File version is newer than the resolved class's version.
+        BackendError: Polymorphism resolution failed (unknown name or wrong subclass).
+        UnknownFieldError: Resolved class has ``unknown="error"`` and the data
+            contains fields not declared on the class.
     """
     import dataclasses
 
     lazyFields: set[str] = data.pop("__ver_lazy__", set())
 
-    meta = cls._serializer_meta_
-    fields = _resolveFields(cls)
-    dcFields = {f.name: f for f in dataclasses.fields(cls)}  # type: ignore[arg-type]
+    # Polymorphism: resolve the concrete class from the envelope's object name.
+    envelope = _readNestedEnvelope(data)
+    actualCls = _resolveNestedClass(envelope, cls)
+    meta = actualCls._serializer_meta_
+
+    # Migration: strip envelope, then apply if file version differs.
+    fileVersion = envelope.get("version")
+    if fileVersion is None:
+        # Missing envelope (0.1.x without envelope, hand-crafted file) — assume current.
+        logger.warning(
+            "Nested %s: no version found in data envelope; assuming current version (%d). "
+            "If this data was written by an older version of the code, the load may fail.",
+            meta.name,
+            meta.version,
+        )
+        fieldsData = _stripEnvelope(data)
+    elif fileVersion < meta.version:
+        from versionable._migration import applyMigrationRange
+
+        fieldsData = _stripEnvelope(data)
+        fieldsData = applyMigrationRange(actualCls, fieldsData, fileVersion, meta.version)
+    elif fileVersion > meta.version:
+        raise VersionError(
+            f"Nested {meta.name}: file version ({fileVersion}) is newer than class version "
+            f"({meta.version}). Cannot downgrade."
+        )
+    else:
+        fieldsData = _stripEnvelope(data)
+
+    # Unknown-field handling per the resolved class's policy.
+    fields = _resolveFields(actualCls)
+    knownFieldNames = set(fields.keys())
+    unknownFields = set(fieldsData.keys()) - knownFieldNames
+    if unknownFields:
+        if meta.unknown == "error":
+            raise UnknownFieldError(f"Unknown fields in nested {meta.name}: {sorted(unknownFields)}")
+        if meta.unknown == "ignore":
+            for name in unknownFields:
+                del fieldsData[name]
+        # "preserve" mode: leave them; field iteration won't include them in kwargs.
+
+    dcFields = {f.name: f for f in dataclasses.fields(actualCls)}  # type: ignore[arg-type]
     kwargs: dict[str, Any] = {}
     for fieldName, fieldType in fields.items():
-        if fieldName in data:
-            rawValue = data[fieldName]
+        if fieldName in fieldsData:
+            rawValue = fieldsData[fieldName]
             if fieldName in lazyFields or getattr(rawValue, "_isLazySentinel", False):
                 # Lazy sentinel — pass through without deserialization
                 kwargs[fieldName] = rawValue
             else:
                 dcField = dcFields.get(fieldName)
                 dcMeta = dcField.metadata if dcField is not None else None
+                # Pass `validateLiterals` (the override) through unchanged so nested
+                # Versionables can re-resolve at their own boundaries. Set
+                # `_classFallback` to this class's setting so this class's own Literal
+                # fields validate per its own declaration when no override is set.
                 kwargs[fieldName] = deserialize(
-                    rawValue, fieldType, fieldMetadata=dcMeta, validateLiterals=meta.validateLiterals
+                    rawValue,
+                    fieldType,
+                    fieldMetadata=dcMeta,
+                    validateLiterals=validateLiterals,
+                    _classFallback=meta.validateLiterals,
                 )
         elif fieldName in dcFields:
             dcField = dcFields[fieldName]
@@ -591,7 +833,7 @@ def _deserializeVersionable(data: dict[str, Any], cls: type[Versionable]) -> Ver
             elif dcField.default_factory is not dataclasses.MISSING:
                 kwargs[fieldName] = dcField.default_factory()
 
-    instance = cls(**kwargs)
+    instance = actualCls(**kwargs)
     if lazyFields:
         from versionable._lazy import makeLazyInstance
 

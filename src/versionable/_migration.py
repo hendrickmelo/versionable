@@ -318,6 +318,23 @@ def applyMigrations(
     return result
 
 
+def applyMigrationRange(
+    cls: type,
+    data: dict[str, Any],
+    fromVersion: int,
+    toVersion: int,
+    *,
+    upgradeInPlace: bool = False,
+) -> dict[str, Any]:
+    """Resolve and apply migrations on *cls* for the version range [fromVersion, toVersion).
+
+    Convenience wrapper around :func:`resolveMigrations` + :func:`applyMigrations` for
+    callers that have a class plus a version gap rather than a pre-resolved migration list.
+    """
+    migrations = resolveMigrations(cls, fromVersion, toVersion)
+    return applyMigrations(data, migrations, upgradeInPlace=upgradeInPlace)
+
+
 def _applyDeclarativeMigration(
     data: dict[str, Any],
     mig: Migration,
