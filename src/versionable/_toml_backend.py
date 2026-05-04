@@ -7,11 +7,11 @@ Nested Versionable objects use native TOML table syntax, with each
 nested object's metadata under its own ``[<field>.__versionable__]``
 sub-table::
 
+    name = "myapp"
+
     [__versionable__]
     object = "Config"
     version = 1
-
-    name = "myapp"
 
     [point]
     x = 1.0

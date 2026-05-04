@@ -208,13 +208,19 @@ versionable.save(config, "config.toml", commentDefaults=True)
 ```toml
 name = "probe-A"
 sampleRate_Hz = 120000
-# channels = []
+channels = [0, 1, 2]
 
 [__versionable__]
 object = "SensorConfig"
 version = 1
 hash = "9d6951"
 ```
+
+`channels` is uncommented because `[0, 1, 2]` differs from the dataclass default (`[]`); a field whose value matches its
+default would render as `# channels = []`.
+
+Note: hand-added comments in a TOML file are wiped on the next `save()` — the file is regenerated from the parsed Python
+dict, which doesn't carry comments. Round-trip preservation of user-added comments is planned for a follow-up release.
 
 ## HDF5
 
