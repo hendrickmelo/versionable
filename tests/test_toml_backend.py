@@ -138,6 +138,22 @@ class TestTomlCommentDefaults:
         assert 'object = "Inner"' in text
         assert "# object" not in text
 
+    def test_commentDefaultsEmitsValidToml(self, tmp_path: Path) -> None:
+        """commentDefaults output is parseable as valid TOML and round-trips."""
+        import tomlkit
+
+        obj = SimpleConfig(name="test")
+        p = tmp_path / "out.toml"
+        versionable.save(obj, p, commentDefaults=True)
+
+        # Parsing should not raise — the file with commented defaults is valid TOML
+        parsed = tomlkit.parse(p.read_text()).unwrap()
+        assert parsed["__versionable__"]["object"] == "SimpleConfig"
+        assert parsed["name"] == "test"
+        # Commented defaults are not present as keys
+        assert "debug" not in parsed
+        assert "retries" not in parsed
+
 
 class TestTomlLiteral:
     def test_literalRoundTrip(self, tmp_path: Path) -> None:
@@ -268,3 +284,11 @@ class TestTomlBackCompat:
         loaded = versionable.load(_TomlArrLegacy, p)
         assert loaded.label == "legacy-array"
         np.testing.assert_array_equal(loaded.data, np.array([7.0, 8.0, 9.0]))
+
+
+def test_dependencyImport() -> None:
+    """tomlkit imports cleanly — guardrail against accidental dep removal."""
+    import tomlkit
+
+    assert hasattr(tomlkit, "parse")
+    assert hasattr(tomlkit, "dumps")
