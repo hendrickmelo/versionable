@@ -33,15 +33,15 @@ TOML limitations compared to JSON:
 
 from __future__ import annotations
 
-import io
 import json
 from pathlib import Path
 from typing import Any, ClassVar
 
 try:
-    import toml
+    import tomlkit
+    from tomlkit.exceptions import TOMLKitError
 except ImportError as e:
-    raise ImportError("TOML backend requires toml — install it with: `pip install toml`") from e
+    raise ImportError("TOML backend requires tomlkit — install it with: `pip install tomlkit`") from e
 
 from versionable._backend import Backend, registerBackend
 from versionable._base import _resolveFields
@@ -90,7 +90,7 @@ class TomlBackend(Backend):
             data[key] = _toTomlSafe(value)
 
         try:
-            content = toml.dumps(data)
+            content = tomlkit.dumps(data)
             if commentDefaults:
                 content = _commentDefaultLines(content, fields, meta["name"])
             path.write_text(content, encoding="utf-8")
@@ -100,8 +100,8 @@ class TomlBackend(Backend):
     def load(self, path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         try:
             text = path.read_text(encoding="utf-8")
-            data = toml.loads(text)
-        except (OSError, toml.TomlDecodeError) as e:
+            data: dict[str, Any] = tomlkit.parse(text).unwrap()
+        except (OSError, TOMLKitError) as e:
             raise BackendError(f"Failed to read TOML from {path}: {e}") from e
 
         if not isinstance(data, dict):
@@ -219,9 +219,7 @@ def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) 
             if val is not None:
                 defaultSerialized[name] = _toTomlSafe(val)
 
-    buf = io.StringIO()
-    toml.dump(defaultSerialized, buf)
-    defaultLineSet = set(buf.getvalue().splitlines())
+    defaultLineSet = set(tomlkit.dumps(defaultSerialized).splitlines())
 
     # Walk input lines
     lines = content.splitlines(keepends=True)

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("toml")
+pytest.importorskip("tomlkit")
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,26 +41,26 @@ if _HAS_NUMPY:
 
 class TestTomlMetadata:
     def test_metaTableInFile(self, tmp_path: Path) -> None:
-        import toml
+        import tomlkit
 
         obj = SimpleConfig(name="test")
         p = tmp_path / "out.toml"
         versionable.save(obj, p)
 
-        data = toml.loads(p.read_text())
+        data = tomlkit.parse(p.read_text()).unwrap()
         assert "__versionable__" in data
         assert data["__versionable__"]["object"] == "SimpleConfig"
         assert data["__versionable__"]["version"] == 1
 
     def test_nestedUsesNativeTable(self, tmp_path: Path) -> None:
         """Nested Versionable should use TOML table syntax, not JSON wrapper."""
-        import toml
+        import tomlkit
 
         obj = WithNested(name="origin", point=Inner(x=1.0, y=2.0))
         p = tmp_path / "out.toml"
         versionable.save(obj, p)
 
-        data = toml.loads(p.read_text())
+        data = tomlkit.parse(p.read_text()).unwrap()
         # point should be a native TOML table, not a __ver_json__ wrapper
         assert isinstance(data["point"], dict)
         assert "__ver_json__" not in data["point"]
@@ -148,11 +148,11 @@ class TestTomlLiteral:
         assert loaded.mode == "slow"
 
     def test_invalidLiteralRaises(self, tmp_path: Path) -> None:
-        import toml
+        import tomlkit
 
         p = tmp_path / "out.toml"
         p.write_text(
-            toml.dumps(
+            tomlkit.dumps(
                 {
                     "__versionable__": {"object": "WithLiteral", "version": 1, "hash": ""},
                     "name": "test",
@@ -164,11 +164,11 @@ class TestTomlLiteral:
             versionable.load(WithLiteral, p)
 
     def test_validateLiteralsOptOutViaLoad(self, tmp_path: Path) -> None:
-        import toml
+        import tomlkit
 
         p = tmp_path / "out.toml"
         p.write_text(
-            toml.dumps(
+            tomlkit.dumps(
                 {
                     "__versionable__": {"object": "WithLiteral", "version": 1, "hash": ""},
                     "name": "test",

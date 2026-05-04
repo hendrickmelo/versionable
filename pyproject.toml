@@ -25,10 +25,10 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-toml = ["toml>=0.10"]
+toml = ["tomlkit>=0.13"]
 yaml = ["pyyaml>=6.0"]
 hdf5 = ["numpy>=1.26", "h5py>=3.10", "hdf5plugin>=4.0"]
-all = ["numpy>=1.26", "h5py>=3.10", "hdf5plugin>=4.0", "toml>=0.10", "pyyaml>=6.0"]
+all = ["numpy>=1.26", "h5py>=3.10", "hdf5plugin>=4.0", "tomlkit>=0.13", "pyyaml>=6.0"]
 docs = ["sphinx>=7", "myst-parser>=2", "furo"]
 dev = [
     "pytest>=8.0",
@@ -83,7 +83,7 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 
 [[tool.mypy.overrides]]
-module = ["numpy.*", "h5py.*", "hdf5plugin.*", "toml.*", "yaml.*"]
+module = ["numpy.*", "h5py.*", "hdf5plugin.*", "tomlkit.*", "yaml.*"]
 ignore_missing_imports = true
 
 

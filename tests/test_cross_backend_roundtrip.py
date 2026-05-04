@@ -114,7 +114,7 @@ class _EmptyCollections(Versionable, version=1, hash="6c8e40", register=False):
 _DICT_BACKENDS: list[str] = [".json"]
 
 try:
-    import toml as _toml  # noqa: F401
+    import tomlkit as _tomlkit  # noqa: F401
 
     _DICT_BACKENDS.append(".toml")
 except ImportError:

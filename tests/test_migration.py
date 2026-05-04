@@ -20,7 +20,7 @@ from versionable.errors import MigrationError, UpgradeRequiredError
 
 def _hasToml() -> bool:
     try:
-        import toml  # noqa: F401
+        import tomlkit  # noqa: F401
 
         return True
     except ImportError:

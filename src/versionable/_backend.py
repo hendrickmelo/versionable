@@ -69,7 +69,7 @@ def getBackend(path: Path | str, explicit: type[Backend] | None = None) -> Backe
     if ext not in _BACKEND_REGISTRY:
         hint = ""
         if ext == ".toml":
-            hint = " Install toml: `pip install toml`"
+            hint = " Install tomlkit: `pip install tomlkit`"
         elif ext in (".yaml", ".yml"):
             hint = " Install pyyaml: `pip install pyyaml`"
         elif ext in (".h5", ".hdf5"):

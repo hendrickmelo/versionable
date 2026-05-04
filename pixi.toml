@@ -28,7 +28,7 @@ ci-all = { cmd = "pixi run -e default ci && pixi run -e minimal ci", description
 python = ">=3.12,<3.14"
 
 [feature.toml.dependencies]
-toml = ">=0.10"
+tomlkit = ">=0.13"
 
 [feature.yaml.dependencies]
 pyyaml = ">=6.0"
