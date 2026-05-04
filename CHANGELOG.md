@@ -20,6 +20,9 @@
   new keys.
 - The warning emitted by `load()` for files missing version metadata now reads `No version found …` (was
   `No __VERSION__ found …`).
+- HDF5 backend now auto-registers `hdf5plugin` filters on import, so files written with zstd/blosc compression can be
+  read without the consumer having to import `hdf5plugin` themselves. When `hdf5plugin` is missing and a load fails on a
+  filter-related error, the raised `BackendError` now suggests `pip install hdf5plugin` (#20).
 
 ## 0.1.0
 
