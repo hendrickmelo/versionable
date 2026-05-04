@@ -208,7 +208,7 @@ versionable.save(config, "config.toml", commentDefaults=True)
 ```toml
 name = "probe-A"
 sampleRate_Hz = 120000
-# channels = [0, 1, 2]
+# channels = []
 
 [__versionable__]
 object = "SensorConfig"

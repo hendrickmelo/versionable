@@ -20,6 +20,12 @@
   new keys.
 - The warning emitted by `load()` for files missing version metadata now reads `No version found …` (was
   `No __VERSION__ found …`).
+- TOML backend: switched the underlying library from `toml` (unmaintained since 2020) to
+  [`tomlkit`](https://github.com/python-poetry/tomlkit). File format is unchanged; output formatting may differ
+  byte-wise (whitespace, quote style). The `commentDefaults=True` code path is reimplemented on top of tomlkit's
+  structural document API, with commented-out default lines now placed alongside their parent table for cleaner
+  uncomment-to-override workflows. Round-trip preservation of user-added comments is not yet supported (planned for a
+  follow-up).
 
 ## 0.1.0
 

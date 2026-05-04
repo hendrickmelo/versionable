@@ -70,15 +70,15 @@ if __name__ == "__main__":
 # # maxConnections = 10
 # # timeoutSec = 30.0
 #
-# [logging]
-# # level = "INFO"
-# # filePath = "/var/log/app.log"
-# # rotateAfterMB = 100
-#
 # [database.__versionable__]
 # object = "DatabaseConfig"
 # version = 1
 # hash = ""
+#
+# [logging]
+# # level = "INFO"
+# # filePath = "/var/log/app.log"
+# # rotateAfterMB = 100
 #
 # [logging.__versionable__]
 # object = "LoggingConfig"
