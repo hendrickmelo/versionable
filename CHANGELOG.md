@@ -46,6 +46,12 @@
 - HDF5 backend now auto-registers `hdf5plugin` filters on import, so files written with zstd/blosc compression can be
   read without the consumer having to import `hdf5plugin` themselves. When `hdf5plugin` is missing and a load fails on a
   filter-related error, the raised `BackendError` now suggests `pip install hdf5plugin` (#20).
+- TOML backend: switched the underlying library from `toml` (unmaintained since 2020) to
+  [`tomlkit`](https://github.com/python-poetry/tomlkit). File format is unchanged; output formatting may differ
+  byte-wise (whitespace, quote style). The `commentDefaults=True` code path is reimplemented on top of tomlkit's
+  structural document API, with commented-out default lines now placed alongside their parent table for cleaner
+  uncomment-to-override workflows. Round-trip preservation of user-added comments is not yet supported (planned for a
+  follow-up).
 
 ## 0.1.0
 
