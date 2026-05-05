@@ -84,7 +84,7 @@ import versionable
 # Backend auto-selected by extension
 versionable.save(obj, "config.json")
 versionable.save(obj, "config.yaml")   # requires pyyaml
-versionable.save(obj, "config.toml")   # requires toml
+versionable.save(obj, "config.toml")   # requires tomlkit
 versionable.save(obj, "data.h5")       # requires h5py + hdf5plugin
 
 loaded = versionable.load(MyClass, "config.json")
