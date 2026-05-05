@@ -92,7 +92,7 @@ class TomlBackend(Backend):
         try:
             content = _emitWithCommentedDefaults(data, cls) if commentDefaults else tomlkit.dumps(data)
             path.write_text(content, encoding="utf-8")
-        except (OSError, TypeError) as e:
+        except (OSError, TypeError, TOMLKitError) as e:
             raise BackendError(f"Failed to write TOML to {path}: {e}") from e
 
     def load(self, path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -209,8 +209,10 @@ def _addContainerWithDefaults(
         if key in defaults and value == defaults[key]:
             scratch = tomlkit.document()
             scratch[key] = value
-            line = tomlkit.dumps(scratch).rstrip("\n")
-            container.add(tomlkit.comment(line))
+            # Multi-line defaults (e.g. list of nested tables) need every
+            # output line commented — tomlkit.comment wraps a single line.
+            for line in tomlkit.dumps(scratch).rstrip("\n").split("\n"):
+                container.add(tomlkit.comment(line))
         else:
             container[key] = value
 

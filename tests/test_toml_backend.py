@@ -59,6 +59,17 @@ class _NestedRoot(Versionable, version=1, hash="f4760d", register=False):
     db: _NestedHost = field(default_factory=_NestedHost)
 
 
+@dataclass
+class _ListItem(Versionable, version=1, hash="bc0926", register=False):
+    a: int = 1
+
+
+@dataclass
+class _ListRoot(Versionable, version=1, hash="cd806f", register=False):
+    label: str
+    items: list[_ListItem] = field(default_factory=lambda: [_ListItem()])
+
+
 class TestTomlMetadata:
     def test_metaTableInFile(self, tmp_path: Path) -> None:
         obj = SimpleConfig(name="test")
@@ -200,6 +211,25 @@ class TestTomlCommentDefaults:
         assert loaded.db.host == "elsewhere", (
             f"uncommented nested host did not override default; file content was:\n{p.read_text()}"
         )
+
+    def test_listOfVersionablesDefaultIsFullyCommented(self, tmp_path: Path) -> None:
+        """A list-of-Versionables default serializes to multi-line TOML; every line must be commented."""
+        obj = _ListRoot(label="x")  # `items` left at default
+        p = tmp_path / "out.toml"
+        versionable.save(obj, p, commentDefaults=True)
+
+        text = p.read_text()
+        # Every emitted line for the `items` array-of-tables must be commented.
+        # If only the first line was commented, an uncommented `a = 1` (etc.) would land
+        # as an active key in some other table.
+        assert "# [[items]]" in text
+        # No bare `[[items]]` or sub-table header at line start (would mean uncommented).
+        for line in text.splitlines():
+            assert not line.startswith("[[items]]"), f"uncommented line: {line!r}"
+            assert not line.startswith("[items."), f"uncommented line: {line!r}"
+        # Re-parse: the commented `items` should not exist as a key.
+        parsed = tomlkit.parse(text).unwrap()
+        assert "items" not in parsed
 
 
 class TestTomlLiteral:
