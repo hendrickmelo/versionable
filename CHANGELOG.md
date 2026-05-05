@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-05-05)
 
 - Migrations now apply recursively to nested `Versionable` values — direct fields, `list[B]` / `dict[K, B]` /
   `tuple[B, ...]` / `set[B]` elements, and any depth of nesting. Previously migrations only ran at the root of a load,
