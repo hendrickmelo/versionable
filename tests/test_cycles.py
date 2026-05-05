@@ -26,7 +26,7 @@ from versionable import CircularReferenceError, Versionable
 _DICT_BACKENDS: list[str] = [".json"]
 
 try:
-    import toml as _toml  # noqa: F401
+    import tomlkit as _tomlkit  # noqa: F401
 
     _DICT_BACKENDS.append(".toml")
 except ImportError:

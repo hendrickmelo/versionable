@@ -5,9 +5,9 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("toml")
+pytest.importorskip("tomlkit")
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
@@ -17,6 +17,8 @@ try:
     _HAS_NUMPY = True
 except ImportError:
     _HAS_NUMPY = False
+
+import tomlkit  # must follow pytest.importorskip above
 
 import versionable
 from versionable._base import Versionable
@@ -39,28 +41,53 @@ if _HAS_NUMPY:
         data: npt.NDArray[np.float64]
 
 
+# Module-level helpers for nested commentDefaults tests.  Defining these
+# at module scope (not inside a test method) lets `typing.get_type_hints`
+# resolve the forward reference under `from __future__ import annotations`,
+# so the nested class is recognized and its default-fields get commented.
+# Hashes are pinned literals per project convention; if you change a field
+# type below, expect a HashMismatchError telling you the new hash.
+@dataclass
+class _NestedHost(Versionable, version=1, hash="1c4d34", register=False):
+    host: str = "localhost"
+    port: int = 5432
+
+
+@dataclass
+class _NestedRoot(Versionable, version=1, hash="f4760d", register=False):
+    label: str
+    db: _NestedHost = field(default_factory=_NestedHost)
+
+
+@dataclass
+class _ListItem(Versionable, version=1, hash="bc0926", register=False):
+    a: int = 1
+
+
+@dataclass
+class _ListRoot(Versionable, version=1, hash="cd806f", register=False):
+    label: str
+    items: list[_ListItem] = field(default_factory=lambda: [_ListItem()])
+
+
 class TestTomlMetadata:
     def test_metaTableInFile(self, tmp_path: Path) -> None:
-        import toml
-
         obj = SimpleConfig(name="test")
         p = tmp_path / "out.toml"
         versionable.save(obj, p)
 
-        data = toml.loads(p.read_text())
+        data = tomlkit.parse(p.read_text()).unwrap()
         assert "__versionable__" in data
         assert data["__versionable__"]["object"] == "SimpleConfig"
         assert data["__versionable__"]["version"] == 1
 
     def test_nestedUsesNativeTable(self, tmp_path: Path) -> None:
         """Nested Versionable should use TOML table syntax, not JSON wrapper."""
-        import toml
-
         obj = WithNested(name="origin", point=Inner(x=1.0, y=2.0))
         p = tmp_path / "out.toml"
         versionable.save(obj, p)
 
-        data = toml.loads(p.read_text())
+        data = tomlkit.parse(p.read_text()).unwrap()
         # point should be a native TOML table, not a __ver_json__ wrapper
         assert isinstance(data["point"], dict)
         assert "__ver_json__" not in data["point"]
@@ -138,6 +165,72 @@ class TestTomlCommentDefaults:
         assert 'object = "Inner"' in text
         assert "# object" not in text
 
+    def test_commentDefaultsEmitsValidToml(self, tmp_path: Path) -> None:
+        """commentDefaults output is parseable as valid TOML and round-trips."""
+        obj = SimpleConfig(name="test")
+        p = tmp_path / "out.toml"
+        versionable.save(obj, p, commentDefaults=True)
+
+        # Parsing should not raise — the file with commented defaults is valid TOML
+        parsed = tomlkit.parse(p.read_text()).unwrap()
+        assert parsed["__versionable__"]["object"] == "SimpleConfig"
+        assert parsed["name"] == "test"
+        # Commented defaults are not present as keys
+        assert "debug" not in parsed
+        assert "retries" not in parsed
+
+    def test_uncommentingDefaultRoundTrips(self, tmp_path: Path) -> None:
+        """A user uncommenting a default line must produce a valid override at the right path."""
+        obj = SimpleConfig(name="test")
+        p = tmp_path / "out.toml"
+        versionable.save(obj, p, commentDefaults=True)
+
+        # Simulate a user uncommenting "# debug = false" and changing the value
+        text = p.read_text()
+        assert "# debug = false" in text  # baseline
+        modified = text.replace("# debug = false", "debug = true")
+        p.write_text(modified)
+
+        loaded = versionable.load(SimpleConfig, p)
+        assert loaded.debug is True, (
+            f"uncommented `debug = true` did not override default; file content was:\n{p.read_text()}"
+        )
+
+    def test_uncommentingNestedDefaultRoundTrips(self, tmp_path: Path) -> None:
+        """Same as above but for a field inside a nested Versionable."""
+        obj = _NestedRoot(label="x")
+        p = tmp_path / "out.toml"
+        versionable.save(obj, p, commentDefaults=True)
+
+        text = p.read_text()
+        assert "# host = " in text
+        modified = text.replace('# host = "localhost"', 'host = "elsewhere"')
+        p.write_text(modified)
+
+        loaded = versionable.load(_NestedRoot, p)
+        assert loaded.db.host == "elsewhere", (
+            f"uncommented nested host did not override default; file content was:\n{p.read_text()}"
+        )
+
+    def test_listOfVersionablesDefaultIsFullyCommented(self, tmp_path: Path) -> None:
+        """A list-of-Versionables default serializes to multi-line TOML; every line must be commented."""
+        obj = _ListRoot(label="x")  # `items` left at default
+        p = tmp_path / "out.toml"
+        versionable.save(obj, p, commentDefaults=True)
+
+        text = p.read_text()
+        # Every emitted line for the `items` array-of-tables must be commented.
+        # If only the first line was commented, an uncommented `a = 1` (etc.) would land
+        # as an active key in some other table.
+        assert "# [[items]]" in text
+        # No bare `[[items]]` or sub-table header at line start (would mean uncommented).
+        for line in text.splitlines():
+            assert not line.startswith("[[items]]"), f"uncommented line: {line!r}"
+            assert not line.startswith("[items."), f"uncommented line: {line!r}"
+        # Re-parse: the commented `items` should not exist as a key.
+        parsed = tomlkit.parse(text).unwrap()
+        assert "items" not in parsed
+
 
 class TestTomlLiteral:
     def test_literalRoundTrip(self, tmp_path: Path) -> None:
@@ -148,11 +241,9 @@ class TestTomlLiteral:
         assert loaded.mode == "slow"
 
     def test_invalidLiteralRaises(self, tmp_path: Path) -> None:
-        import toml
-
         p = tmp_path / "out.toml"
         p.write_text(
-            toml.dumps(
+            tomlkit.dumps(
                 {
                     "__versionable__": {"object": "WithLiteral", "version": 1, "hash": ""},
                     "name": "test",
@@ -252,3 +343,9 @@ class TestTomlBackCompat:
         loaded = versionable.load(_TomlArrLegacy, p)
         assert loaded.label == "legacy-array"
         np.testing.assert_array_equal(loaded.data, np.array([7.0, 8.0, 9.0]))
+
+
+def test_dependencyImport() -> None:
+    """tomlkit imports cleanly — guardrail against accidental dep removal."""
+    assert hasattr(tomlkit, "parse")
+    assert hasattr(tomlkit, "dumps")

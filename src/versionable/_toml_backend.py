@@ -7,11 +7,11 @@ Nested Versionable objects use native TOML table syntax, with each
 nested object's metadata under its own ``[<field>.__versionable__]``
 sub-table::
 
+    name = "myapp"
+
     [__versionable__]
     object = "Config"
     version = 1
-
-    name = "myapp"
 
     [point]
     x = 1.0
@@ -33,18 +33,18 @@ TOML limitations compared to JSON:
 
 from __future__ import annotations
 
-import io
 import json
 from pathlib import Path
 from typing import Any, ClassVar
 
 try:
-    import toml
+    import tomlkit
+    from tomlkit.exceptions import TOMLKitError
 except ImportError as e:
-    raise ImportError("TOML backend requires toml — install it with: `pip install toml`") from e
+    raise ImportError("TOML backend requires tomlkit — install it with: `pip install tomlkit`") from e
 
 from versionable._backend import Backend, registerBackend
-from versionable._base import _resolveFields
+from versionable._base import Versionable, _resolveFields
 from versionable._types import serialize
 from versionable.errors import BackendError
 
@@ -90,18 +90,16 @@ class TomlBackend(Backend):
             data[key] = _toTomlSafe(value)
 
         try:
-            content = toml.dumps(data)
-            if commentDefaults:
-                content = _commentDefaultLines(content, fields, meta["name"])
+            content = _emitWithCommentedDefaults(data, cls) if commentDefaults else tomlkit.dumps(data)
             path.write_text(content, encoding="utf-8")
-        except (OSError, TypeError) as e:
+        except (OSError, TypeError, TOMLKitError) as e:
             raise BackendError(f"Failed to write TOML to {path}: {e}") from e
 
     def load(self, path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         try:
             text = path.read_text(encoding="utf-8")
-            data = toml.loads(text)
-        except (OSError, toml.TomlDecodeError) as e:
+            data: dict[str, Any] = tomlkit.parse(text).unwrap()
+        except (OSError, TOMLKitError) as e:
             raise BackendError(f"Failed to read TOML from {path}: {e}") from e
 
         if not isinstance(data, dict):
@@ -175,37 +173,74 @@ def _fromTomlSafe(value: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) -> str:
-    """Comment out TOML value lines that match the class defaults.
+def _emitWithCommentedDefaults(data: dict[str, Any], cls: type) -> str:
+    """Build TOML output where fields at their default value appear as comment lines.
 
-    Section headers and ``__versionable__`` blocks are never commented — only
-    individual field value lines.  This ensures nested Versionable
-    sections remain structurally intact so users can uncomment just
-    the fields they need.
+    Walks `data` in parallel with the dataclass's defaults. For each scalar/list field
+    whose serialized value matches the default, emit a ``# key = value`` comment instead
+    of a key-value pair. Section headers and ``__versionable__`` envelope tables are
+    never commented. Nested Versionable tables recurse with their own defaults.
     """
+    doc = tomlkit.document()
+    _addContainerWithDefaults(doc, data, cls)
+    # str() coerces the return type for the minimal env's mypy run, where
+    # tomlkit isn't installed and dumps() resolves to Any.
+    return str(tomlkit.dumps(doc))
+
+
+def _addContainerWithDefaults(
+    container: Any,  # tomlkit.TOMLDocument | tomlkit.items.Table
+    data: dict[str, Any],
+    cls: type | None,
+) -> None:
+    """Populate `container` with `data`; commented defaults driven by `cls`.
+
+    Emits in three passes to satisfy the TOML structural rule that scalars
+    must precede any `[table]` header at a given level — without this, an
+    uncommented default would land inside the wrong table.
+    """
+    defaults = _classDefaultsToml(cls) if cls is not None else {}
+    fieldTypes = _resolveFields(cls) if cls is not None else {}
+
+    # Pass 1: scalar / list fields (with comment-out for at-default values)
+    for key, value in data.items():
+        if key == "__versionable__" or isinstance(value, dict):
+            continue
+        if key in defaults and value == defaults[key]:
+            scratch = tomlkit.document()
+            scratch[key] = value
+            # Multi-line defaults (e.g. list of nested tables) need every
+            # output line commented — tomlkit.comment wraps a single line.
+            for line in tomlkit.dumps(scratch).rstrip("\n").split("\n"):
+                container.add(tomlkit.comment(line))
+        else:
+            container[key] = value
+
+    # Pass 2: __versionable__ envelope (always uncommented)
+    envelope = data.get("__versionable__")
+    if isinstance(envelope, dict):
+        sub = tomlkit.table()
+        for metaKey, metaVal in envelope.items():
+            sub[metaKey] = metaVal
+        container["__versionable__"] = sub
+
+    # Pass 3: nested Versionable / table fields (recurse)
+    for key, value in data.items():
+        if key == "__versionable__" or not isinstance(value, dict):
+            continue
+        sub = tomlkit.table()
+        nestedCls = _findVersionableType(fieldTypes.get(key))
+        _addContainerWithDefaults(sub, value, nestedCls)
+        container[key] = sub
+
+
+def _classDefaultsToml(cls: type) -> dict[str, Any]:
+    """Compute serialized + TOML-safe defaults for each field of `cls`."""
     import dataclasses
 
-    from versionable._base import Versionable, _resolveFields, metadata, registeredClasses
-    from versionable._types import serialize
-
-    # Find the class — check registry first, then scan subclasses
-    cls: type | None = registeredClasses().get(objectName)
-    if cls is None:
-        for sub in Versionable.__subclasses__():
-            try:
-                if metadata(sub).name == objectName:
-                    cls = sub
-                    break
-            except Exception:
-                continue
-    if cls is None:
-        return content
-
-    # Build a set of TOML lines that represent the default values (per-field,
-    # to handle classes with required fields that can't be default-constructed).
     dcFields = {f.name: f for f in dataclasses.fields(cls)}
     resolvedFields = _resolveFields(cls)
-    defaultSerialized: dict[str, object] = {}
+    out: dict[str, Any] = {}
     for name, tp in resolvedFields.items():
         dcField = dcFields.get(name)
         if dcField is None:
@@ -213,47 +248,23 @@ def _commentDefaultLines(content: str, fields: dict[str, Any], objectName: str) 
         if dcField.default is not dataclasses.MISSING:
             val = serialize(dcField.default, tp)
             if val is not None:
-                defaultSerialized[name] = _toTomlSafe(val)
+                out[name] = _toTomlSafe(val)
         elif dcField.default_factory is not dataclasses.MISSING:
             val = serialize(dcField.default_factory(), tp)
             if val is not None:
-                defaultSerialized[name] = _toTomlSafe(val)
+                out[name] = _toTomlSafe(val)
+    return out
 
-    buf = io.StringIO()
-    toml.dump(defaultSerialized, buf)
-    defaultLineSet = set(buf.getvalue().splitlines())
 
-    # Walk input lines
-    lines = content.splitlines(keepends=True)
-    result: list[str] = []
-    inMetaSection = False
+def _findVersionableType(fieldType: Any) -> type | None:
+    """If `fieldType` is a Versionable subclass, return it; else None.
 
-    for line in lines:
-        stripped = line.rstrip("\n")
-
-        # Section header — always keep uncommented
-        if stripped.startswith("["):
-            inMetaSection = "__versionable__" in stripped
-            result.append(line)
-            continue
-
-        # Blank / comment line — pass through
-        if not stripped or stripped.startswith("#"):
-            result.append(line)
-            continue
-
-        # __versionable__ section — always keep uncommented
-        if inMetaSection:
-            result.append(line)
-            continue
-
-        # Value line — check against defaults
-        if stripped in defaultLineSet:
-            result.append("# " + line)
-        else:
-            result.append(line)
-
-    return "".join(result)
+    Parameterized types like ``list[Inner]`` are not unwrapped — commentDefaults
+    does not recurse into list elements (matches existing behavior).
+    """
+    if isinstance(fieldType, type) and issubclass(fieldType, Versionable):
+        return fieldType
+    return None
 
 
 # Register for .toml extension

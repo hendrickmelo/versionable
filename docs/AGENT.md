@@ -8,7 +8,7 @@ type converters, and pluggable storage backends.
 ```bash
 pip install versionable            # Core (JSON backend, no heavy deps)
 pip install pyyaml                 # Add YAML backend
-pip install toml                   # Add TOML backend
+pip install tomlkit                # Add TOML backend
 pip install h5py hdf5plugin        # Add HDF5 backend
 ```
 
@@ -84,7 +84,7 @@ import versionable
 # Backend auto-selected by extension
 versionable.save(obj, "config.json")
 versionable.save(obj, "config.yaml")   # requires pyyaml
-versionable.save(obj, "config.toml")   # requires toml
+versionable.save(obj, "config.toml")   # requires tomlkit
 versionable.save(obj, "data.h5")       # requires h5py + hdf5plugin
 
 loaded = versionable.load(MyClass, "config.json")

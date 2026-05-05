@@ -61,7 +61,7 @@ Add backend support as needed (JSON is included by default):
 
 ```bash
 pip install pyyaml                # YAML backend (.yaml, .yml)
-pip install toml                  # TOML backend (.toml)
+pip install tomlkit               # TOML backend (.toml)
 pip install h5py hdf5plugin       # HDF5 backend (.h5, .hdf5)
 ```
 
