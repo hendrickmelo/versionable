@@ -215,20 +215,6 @@ class TestYamlLiteral:
         with pytest.raises(ConverterError, match="banana"):
             versionable.load(WithLiteral, p)
 
-    def test_validateLiteralsOptOutViaLoad(self, tmp_path: Path) -> None:
-        p = tmp_path / "out.yaml"
-        p.write_text(
-            yaml.dump(
-                {
-                    "__versionable__": {"object": "WithLiteral", "version": 1, "hash": ""},
-                    "name": "test",
-                    "mode": "banana",
-                }
-            )
-        )
-        loaded = versionable.load(WithLiteral, p, validateLiterals=False)
-        assert loaded.mode == "banana"
-
     def test_validateLiteralsOptOutViaClass(self, tmp_path: Path) -> None:
         p = tmp_path / "out.yaml"
         p.write_text(

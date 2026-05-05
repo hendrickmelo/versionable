@@ -17,6 +17,7 @@ from typing import Any, TypeVar
 
 from versionable._backend import Backend, getBackend
 from versionable._base import Versionable, _resolveFields, metadata
+from versionable._migration import applyMigrationRange
 from versionable._types import deserialize
 from versionable.errors import BackendError, UnknownFieldError, VersionError
 
@@ -93,7 +94,6 @@ def load[T: Versionable](
     metadataOnly: bool = False,
     upgradeInPlace: bool = False,
     assumeVersion: int | None = None,
-    validateLiterals: bool | None = None,
 ) -> T:
     """Load a ``Versionable`` object from *path*.
 
@@ -106,12 +106,16 @@ def load[T: Versionable](
         upgradeInPlace: If True, allow file modification during migration.
         assumeVersion: Version to assume when the file has no ``version``
             metadata.  Defaults to the class's current version.
-        validateLiterals: Whether to validate ``Literal`` type values.
-            Overrides the class-level ``validate_literals`` setting.
-            Defaults to the class setting (``True`` unless overridden).
 
     Returns:
         An instance of *cls*.
+
+    Notes:
+        ``Literal`` field validation is governed by each class's
+        ``validate_literals`` setting (default ``True``). To skip validation
+        for a specific field with a known fallback value, use
+        ``literalFallback("...")``. To disable validation for a whole class,
+        declare it with ``validate_literals=False``.
     """
     # Ensure backend module is imported so backends are registered
     _ensureBackendsRegistered()
@@ -148,7 +152,7 @@ def load[T: Versionable](
 
     # Version check — apply migrations if needed
     if fileVersion < meta.version:
-        rawFields = _applyMigrations(cls, rawFields, fileVersion, meta.version)
+        rawFields = applyMigrationRange(cls, rawFields, fileVersion, meta.version, upgradeInPlace=upgradeInPlace)
     elif fileVersion > meta.version:
         raise VersionError(
             f"File version ({fileVersion}) is newer than class version "
@@ -172,7 +176,6 @@ def load[T: Versionable](
     import dataclasses
 
     nativeTypes = be.nativeTypes
-    effectiveValidateLiterals = validateLiterals if validateLiterals is not None else meta.validateLiterals
     # Versionable subclasses are always @dataclass; mypy/pyright can't prove that statically.
     dcFields = {f.name: f for f in dataclasses.fields(cls)}  # type: ignore[arg-type]
     kwargs: dict[str, Any] = {}
@@ -190,7 +193,8 @@ def load[T: Versionable](
                     fieldType,
                     nativeTypes=nativeTypes,
                     fieldMetadata=dcMeta,
-                    validateLiterals=effectiveValidateLiterals,
+                    validateLiterals=meta.validateLiterals,
+                    upgradeInPlace=upgradeInPlace,
                 )
         # Use dataclass default
         elif fieldName in dcFields:
@@ -249,33 +253,6 @@ def loadDynamic(
         raise BackendError(f"Object type {objectName!r} is not a subclass of {baseClass.__name__}")
 
     return load(cls, path, backend=backend)
-
-
-# ---------------------------------------------------------------------------
-# Migration helpers
-# ---------------------------------------------------------------------------
-
-
-def _applyMigrations(
-    cls: type[Versionable],
-    data: dict[str, Any],
-    fromVersion: int,
-    toVersion: int,
-) -> dict[str, Any]:
-    """Apply migrations to upgrade *data* from *fromVersion* to *toVersion*.
-
-    This is a placeholder — the full migration system is implemented in
-    Phase D (_migration.py).
-    """
-    try:
-        from versionable._migration import applyMigrations, resolveMigrations
-    except ImportError:
-        raise VersionError(
-            f"File is version {fromVersion} but class is version {toVersion}. Migration system not available."
-        ) from None
-
-    migrations = resolveMigrations(cls, fromVersion, toVersion)
-    return applyMigrations(data, migrations)
 
 
 # ---------------------------------------------------------------------------
