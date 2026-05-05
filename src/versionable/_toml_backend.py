@@ -183,7 +183,9 @@ def _emitWithCommentedDefaults(data: dict[str, Any], cls: type) -> str:
     """
     doc = tomlkit.document()
     _addContainerWithDefaults(doc, data, cls)
-    return tomlkit.dumps(doc)
+    # str() coerces the return type for the minimal env's mypy run, where
+    # tomlkit isn't installed and dumps() resolves to Any.
+    return str(tomlkit.dumps(doc))
 
 
 def _addContainerWithDefaults(
