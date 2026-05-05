@@ -1,7 +1,7 @@
 # versionable
 
 <p align="center">
-  <img src="docs/images/logo-horizontal-tagline.svg" alt="versionable logo"/>
+  <img src="docs/images/logo-horizontal-tagline.svg" alt="versionable - future proof data files"/>
 </p>
 
 Future-proof your data files. Save structured Python objects with versioning, declarative migrations, and open file

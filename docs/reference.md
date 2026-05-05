@@ -65,6 +65,23 @@ mypackage.models.MyClass. Give one of the classes an explicit name to
 disambiguate, e.g.: class MyClass(Versionable, ..., name="other.MyClass")
 ```
 
+## Nested Deserialization
+
+When `load()` deserializes a `Versionable` field, list/dict/tuple/set element, or any value reachable from the root,
+three things happen at every level:
+
+1. **Polymorphism resolution.** The per-element envelope's `object` name is looked up in the global registry. If found
+   and the resolved class is a subclass of the declared field type, the resolved class is used — `list[Animal]` saved
+   with `Dog` and `Cat` elements reconstructs as a list of `Dog` and `Cat` instances. If the envelope is missing or the
+   name matches the declared type, the declared type is used (back-compat).
+2. **Migration.** If the file's recorded version is less than the resolved class's current version, the resolved class's
+   `Migrate` chain runs against the field data before deserialization. If newer, `load()` raises `VersionError`
+   identifying the nested type.
+3. **Unknown-field handling.** The resolved class's `unknown="error"`/`"ignore"`/`"preserve"` setting governs extra
+   fields after migration.
+
+See [migrations.md](migrations.md) for declarative and imperative migration syntax, including nested examples.
+
 ## Field Serialization Rules
 
 A field is included in serialization if it:
