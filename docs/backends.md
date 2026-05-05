@@ -202,22 +202,28 @@ Pass `commentDefaults=True` to comment out fields whose values match the class d
 where you want users to see all available options without all of them being "active":
 
 ```python
-versionable.save(config, "config.toml", commentDefaults=True)
+@dataclass
+class SensorPreset(Versionable, version=1, hash="6f2809"):
+    name: str = "sensor"
+    sampleRate_Hz: int = 48000
+    enabledChannels: list[int] = field(default_factory=lambda: [0, 1])
+
+preset = SensorPreset(name="probe-A")  # only override name
+versionable.save(preset, "preset.toml", commentDefaults=True)
 ```
 
 ```toml
 name = "probe-A"
-sampleRate_Hz = 120000
-channels = [0, 1, 2]
+# sampleRate_Hz = 48000
+# enabledChannels = [0, 1]
 
 [__versionable__]
-object = "SensorConfig"
+object = "SensorPreset"
 version = 1
-hash = "9d6951"
+hash = "6f2809"
 ```
 
-`channels` is uncommented because `[0, 1, 2]` differs from the dataclass default (`[]`); a field whose value matches its
-default would render as `# channels = []`.
+Fields at their default render as `#`-prefixed lines; users uncomment any line to override that default.
 
 Note: hand-added comments in a TOML file are wiped on the next `save()` — the file is regenerated from the parsed Python
 dict, which doesn't carry comments. Round-trip preservation of user-added comments is planned for a follow-up release.
