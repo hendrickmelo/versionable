@@ -18,6 +18,8 @@ try:
 except ImportError:
     _HAS_NUMPY = False
 
+import tomlkit  # must follow pytest.importorskip above
+
 import versionable
 from versionable._base import Versionable
 from versionable.errors import BackendError, ConverterError
@@ -59,8 +61,6 @@ class _NestedRoot(Versionable, version=1, hash="f4760d", register=False):
 
 class TestTomlMetadata:
     def test_metaTableInFile(self, tmp_path: Path) -> None:
-        import tomlkit
-
         obj = SimpleConfig(name="test")
         p = tmp_path / "out.toml"
         versionable.save(obj, p)
@@ -72,8 +72,6 @@ class TestTomlMetadata:
 
     def test_nestedUsesNativeTable(self, tmp_path: Path) -> None:
         """Nested Versionable should use TOML table syntax, not JSON wrapper."""
-        import tomlkit
-
         obj = WithNested(name="origin", point=Inner(x=1.0, y=2.0))
         p = tmp_path / "out.toml"
         versionable.save(obj, p)
@@ -158,8 +156,6 @@ class TestTomlCommentDefaults:
 
     def test_commentDefaultsEmitsValidToml(self, tmp_path: Path) -> None:
         """commentDefaults output is parseable as valid TOML and round-trips."""
-        import tomlkit
-
         obj = SimpleConfig(name="test")
         p = tmp_path / "out.toml"
         versionable.save(obj, p, commentDefaults=True)
@@ -215,8 +211,6 @@ class TestTomlLiteral:
         assert loaded.mode == "slow"
 
     def test_invalidLiteralRaises(self, tmp_path: Path) -> None:
-        import tomlkit
-
         p = tmp_path / "out.toml"
         p.write_text(
             tomlkit.dumps(
@@ -323,7 +317,5 @@ class TestTomlBackCompat:
 
 def test_dependencyImport() -> None:
     """tomlkit imports cleanly — guardrail against accidental dep removal."""
-    import tomlkit
-
     assert hasattr(tomlkit, "parse")
     assert hasattr(tomlkit, "dumps")
