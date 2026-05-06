@@ -129,7 +129,7 @@ jobs:
 
       - name: Create PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
           NEXT_DEV: ${{ steps.next.outputs.version }}
         run: |
           BRANCH="chore/bump-${NEXT_DEV}"
