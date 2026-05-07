@@ -144,3 +144,10 @@ jobs:
             --body "Automated post-release version bump after publishing ${GITHUB_REF_NAME}." \
             --base main \
             --head "$BRANCH"
+
+      - name: Trigger CI on bump branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEXT_DEV: ${{ steps.next.outputs.version }}
+        run: |
+          gh workflow run ci.yml --ref "chore/bump-${NEXT_DEV}"
