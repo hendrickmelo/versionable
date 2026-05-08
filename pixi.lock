@@ -6553,8 +6553,8 @@ packages:
   timestamp: 1767320173250
 - pypi: ./
   name: versionable
-  version: 0.2.1.dev0
-  sha256: 22cdcff4358026b624f0788bfb14f9dd0a622acbf1b0010af058ee7d0acdb225
+  version: 0.2.1
+  sha256: bdc1d414795a47a7f6e8c6f8afc542c4115c568b3aec892b6fd390744b7b9803
   requires_dist:
   - tomlkit>=0.13 ; extra == 'toml'
   - pyyaml>=6.0 ; extra == 'yaml'
