@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 (2026-05-08)
+
+- Nested `Versionable` dataclasses with a field named `object`, `version`, `hash`, `format`, `format_be`, or
+  `shared_refs` now load correctly across all backends. Previously these field names collided with the internal
+  envelope-stripping logic and got silently dropped during deserialization, raising
+  `TypeError: missing required argument` when reconstructing the instance.
+
 ## 0.2.0 (2026-05-05)
 
 - Migrations now apply recursively to nested `Versionable` values — direct fields, `list[B]` / `dict[K, B]` /

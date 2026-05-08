@@ -642,29 +642,20 @@ def _serializeVersionable(obj: Versionable, visited: set[int], path: str) -> dic
 # Nested envelope reading and polymorphism resolution
 # ---------------------------------------------------------------------------
 #
-# Nested ``Versionable`` data dicts can carry envelope keys in three layouts:
+# Nested ``Versionable`` data dicts can carry envelope keys in two layouts:
 #
-# 1. Wrapped (current 0.2.0+ JSON/YAML/TOML files):
+# 1. Wrapped (current 0.2.0+ files, all backends):
 #    ``data["__versionable__"] = {"object": ..., "version": N, "hash": ...}``
-# 2. Flat new keys (current HDF5 read output, transient on the wire):
-#    ``data`` has top-level ``"object"``, ``"version"``, ``"hash"``.
-# 3. Flat dunder keys (0.1.x files):
+# 2. Flat dunder keys (0.1.x files, read-only back-compat):
 #    ``data`` has top-level ``"__OBJECT__"``, ``"__VERSION__"``, ``"__HASH__"``.
 #
-# ``_readNestedEnvelope`` reads any of these layouts; ``_stripEnvelope`` removes
+# ``_readNestedEnvelope`` reads either layout; ``_stripEnvelope`` removes
 # all envelope keys before migrations operate on field-name keys.
 
 _ENVELOPE_KEYS = frozenset(
     {
         "__versionable__",
-        # Flat new (0.2.0+, current HDF5 read output)
-        "object",
-        "version",
-        "hash",
-        "format",
-        "format_be",
-        "shared_refs",
-        # Flat dunder (0.1.x file format)
+        # Flat dunder (0.1.x file format, read-only back-compat)
         "__OBJECT__",
         "__VERSION__",
         "__HASH__",
@@ -678,8 +669,8 @@ _ENVELOPE_KEYS = frozenset(
 def _readNestedEnvelope(data: dict[str, Any]) -> dict[str, Any]:
     """Extract envelope fields (object, version, hash) from a nested Versionable's data dict.
 
-    Handles wrapped (``data["__versionable__"]``), flat-new (``object``/``version``/``hash``
-    at top level), and flat-dunder (``__OBJECT__``/``__VERSION__``/``__HASH__``) layouts.
+    Handles wrapped (``data["__versionable__"]``) and flat-dunder
+    (``__OBJECT__``/``__VERSION__``/``__HASH__``) layouts.
 
     Returns a dict with keys ``object``, ``version``, ``hash``. Values are ``None`` when
     the corresponding envelope field is not present.
@@ -695,9 +686,9 @@ def _readNestedEnvelope(data: dict[str, Any]) -> dict[str, Any]:
 def _stripEnvelope(data: dict[str, Any]) -> dict[str, Any]:
     """Return a copy of *data* with envelope keys removed.
 
-    Migration ops operate on field-name keys; envelope keys (``__versionable__``,
-    ``object``/``version``/``hash``, and the legacy dunder forms) must be removed before
-    migrations run so they don't get treated as user fields.
+    Migration ops operate on field-name keys; envelope keys (``__versionable__`` and
+    the legacy dunder forms ``__OBJECT__``/``__VERSION__``/``__HASH__``) must be removed
+    before migrations run so they don't get treated as user fields.
     """
     return {k: v for k, v in data.items() if k not in _ENVELOPE_KEYS}
 
