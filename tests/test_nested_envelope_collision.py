@@ -1,8 +1,9 @@
 """Regression: nested Versionable fields with envelope-like names round-trip cleanly.
 
 Before the fix, ``_stripEnvelope`` silently dropped any user field whose name matched a
-lowercase entry in ``_ENVELOPE_KEYS`` (``object``, ``version``, ``format``, ``format_be``,
-``shared_refs``). Loading then failed with a ``TypeError`` on missing required arguments.
+lowercase entry in ``_ENVELOPE_KEYS`` (``object``, ``version``, ``hash``, ``format``,
+``format_be``, ``shared_refs``). Loading then failed with a ``TypeError`` on missing required
+arguments.
 
 The flat-lowercase nested envelope layout was a transient dev-only format that never
 shipped in any released file format, so the entries were dead weight. The wrapped layout
@@ -109,6 +110,17 @@ class _OuterSharedRefs(Versionable, version=1, hash="9330f1", register=False):
     inner: _InnerSharedRefs
 
 
+@dataclass
+class _InnerHash(Versionable, version=1, hash="858e26", register=False):
+    payload: str
+    hash: str  # intentional shadow of Versionable.hash classmethod — tests collision survival
+
+
+@dataclass
+class _OuterHash(Versionable, version=1, hash="6fd49f", register=False):
+    inner: _InnerHash
+
+
 # ---------------------------------------------------------------------------
 # Parametrized round-trip tests across all backends
 # ---------------------------------------------------------------------------
@@ -164,20 +176,36 @@ def test_nested_field_named_shared_refs_roundtrips(tmp_path: Path, ext: str) -> 
     assert loaded.inner.payload == "p"
 
 
+@pytest.mark.parametrize("ext", _ALL_BACKENDS)
+def test_nested_field_named_hash_roundtrips(tmp_path: Path, ext: str) -> None:
+    """Field named `hash` round-trips even though it shadows the `Versionable.hash` classmethod.
+
+    The shadowing is class-level cosmetic — instance attribute access returns the field value, so
+    save/load works. (Class-level `cls.hash` still refers to the classmethod, irrelevant here.)
+    """
+    inst = _OuterHash(inner=_InnerHash(payload="p", hash="h-value"))
+    p = tmp_path / f"out{ext}"
+    save(inst, p)
+    loaded = load(_OuterHash, p)
+    assert loaded.inner.hash == "h-value"
+    assert loaded.inner.payload == "p"
+
+
 # ---------------------------------------------------------------------------
-# Combined-fields case: a single inner with all five envelope-named fields,
+# Combined-fields case: a single inner with all six envelope-named fields,
 # verifying that multiple collisions on the same object don't interact badly.
 # ---------------------------------------------------------------------------
 
 
 @dataclass
-class _InnerMultiple(Versionable, version=1, hash="491ce7", register=False):
+class _InnerMultiple(Versionable, version=1, hash="b8a48a", register=False):
     payload: str
     object: str
     version: str
     format: str
     format_be: str
     shared_refs: str
+    hash: str  # intentional shadow of Versionable.hash classmethod — tests collision survival
 
 
 @dataclass
@@ -187,7 +215,7 @@ class _OuterMultiple(Versionable, version=1, hash="b3a35c", register=False):
 
 @pytest.mark.parametrize("ext", _ALL_BACKENDS)
 def test_multiple_envelope_named_fields_roundtrip(tmp_path: Path, ext: str) -> None:
-    """All five envelope-named fields on one nested object round-trip together."""
+    """All six envelope-named fields on one nested object round-trip together."""
     inst = _OuterMultiple(
         inner=_InnerMultiple(
             payload="p",
@@ -196,6 +224,7 @@ def test_multiple_envelope_named_fields_roundtrip(tmp_path: Path, ext: str) -> N
             format="f",
             format_be="fbe",
             shared_refs="sr",
+            hash="h",
         )
     )
     p = tmp_path / f"out{ext}"
@@ -207,3 +236,4 @@ def test_multiple_envelope_named_fields_roundtrip(tmp_path: Path, ext: str) -> N
     assert loaded.inner.format == "f"
     assert loaded.inner.format_be == "fbe"
     assert loaded.inner.shared_refs == "sr"
+    assert loaded.inner.hash == "h"
