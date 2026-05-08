@@ -19,6 +19,36 @@ import pytest
 from versionable import Versionable, load, save
 
 # ---------------------------------------------------------------------------
+# Backend extensions — gate on availability so the minimal env (JSON only)
+# can still run this file.
+# ---------------------------------------------------------------------------
+
+_DICT_BACKENDS: list[str] = [".json"]
+
+try:
+    import tomlkit as _tomlkit  # noqa: F401
+
+    _DICT_BACKENDS.append(".toml")
+except ImportError:
+    pass
+
+try:
+    import yaml as _yaml  # noqa: F401
+
+    _DICT_BACKENDS.append(".yaml")
+except ImportError:
+    pass
+
+try:
+    import versionable._hdf5_backend  # noqa: F401
+
+    _HDF5_BACKENDS: list[str] = [".h5"]
+except ImportError:
+    _HDF5_BACKENDS = []
+
+_ALL_BACKENDS = [*_DICT_BACKENDS, *_HDF5_BACKENDS]
+
+# ---------------------------------------------------------------------------
 # Inner/outer pairs — one per envelope-like field name. Each inner has a
 # ``payload`` field (control) plus the envelope-named field.
 # ---------------------------------------------------------------------------
@@ -84,50 +114,50 @@ class _OuterSharedRefs(Versionable, version=1, hash="9330f1", register=False):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("ext", ["json", "yaml", "toml", "h5"])
+@pytest.mark.parametrize("ext", _ALL_BACKENDS)
 def test_nested_field_named_object_roundtrips(tmp_path: Path, ext: str) -> None:
     inst = _OuterObject(inner=_InnerObject(payload="p", object="o-value"))
-    p = tmp_path / f"out.{ext}"
+    p = tmp_path / f"out{ext}"
     save(inst, p)
     loaded = load(_OuterObject, p)
     assert loaded.inner.object == "o-value"
     assert loaded.inner.payload == "p"
 
 
-@pytest.mark.parametrize("ext", ["json", "yaml", "toml", "h5"])
+@pytest.mark.parametrize("ext", _ALL_BACKENDS)
 def test_nested_field_named_version_roundtrips(tmp_path: Path, ext: str) -> None:
     inst = _OuterVersion(inner=_InnerVersion(payload="p", version="v-value"))
-    p = tmp_path / f"out.{ext}"
+    p = tmp_path / f"out{ext}"
     save(inst, p)
     loaded = load(_OuterVersion, p)
     assert loaded.inner.version == "v-value"
     assert loaded.inner.payload == "p"
 
 
-@pytest.mark.parametrize("ext", ["json", "yaml", "toml", "h5"])
+@pytest.mark.parametrize("ext", _ALL_BACKENDS)
 def test_nested_field_named_format_roundtrips(tmp_path: Path, ext: str) -> None:
     inst = _OuterFormat(inner=_InnerFormat(payload="p", format="f-value"))
-    p = tmp_path / f"out.{ext}"
+    p = tmp_path / f"out{ext}"
     save(inst, p)
     loaded = load(_OuterFormat, p)
     assert loaded.inner.format == "f-value"
     assert loaded.inner.payload == "p"
 
 
-@pytest.mark.parametrize("ext", ["json", "yaml", "toml", "h5"])
+@pytest.mark.parametrize("ext", _ALL_BACKENDS)
 def test_nested_field_named_format_be_roundtrips(tmp_path: Path, ext: str) -> None:
     inst = _OuterFormatBe(inner=_InnerFormatBe(payload="p", format_be="fbe-value"))
-    p = tmp_path / f"out.{ext}"
+    p = tmp_path / f"out{ext}"
     save(inst, p)
     loaded = load(_OuterFormatBe, p)
     assert loaded.inner.format_be == "fbe-value"
     assert loaded.inner.payload == "p"
 
 
-@pytest.mark.parametrize("ext", ["json", "yaml", "toml", "h5"])
+@pytest.mark.parametrize("ext", _ALL_BACKENDS)
 def test_nested_field_named_shared_refs_roundtrips(tmp_path: Path, ext: str) -> None:
     inst = _OuterSharedRefs(inner=_InnerSharedRefs(payload="p", shared_refs="sr-value"))
-    p = tmp_path / f"out.{ext}"
+    p = tmp_path / f"out{ext}"
     save(inst, p)
     loaded = load(_OuterSharedRefs, p)
     assert loaded.inner.shared_refs == "sr-value"
@@ -155,7 +185,7 @@ class _OuterMultiple(Versionable, version=1, hash="b3a35c", register=False):
     inner: _InnerMultiple
 
 
-@pytest.mark.parametrize("ext", ["json", "yaml", "toml", "h5"])
+@pytest.mark.parametrize("ext", _ALL_BACKENDS)
 def test_multiple_envelope_named_fields_roundtrip(tmp_path: Path, ext: str) -> None:
     """All five envelope-named fields on one nested object round-trip together."""
     inst = _OuterMultiple(
@@ -168,7 +198,7 @@ def test_multiple_envelope_named_fields_roundtrip(tmp_path: Path, ext: str) -> N
             shared_refs="sr",
         )
     )
-    p = tmp_path / f"out.{ext}"
+    p = tmp_path / f"out{ext}"
     save(inst, p)
     loaded = load(_OuterMultiple, p)
     assert loaded.inner.payload == "p"
