@@ -316,8 +316,8 @@ class UserId(VersionableValue):
 
 ## Migrations
 
-When you change the meaning of a class's fields, increment `version`, update `hash`, and
-add a migration so old files load correctly.
+When you change the meaning of a class's fields, increment `version`, update `hash`, and add a migration so old files
+load correctly.
 
 ### Declarative Migrations
 
@@ -372,10 +372,10 @@ Migrations apply sequentially: a v1 file on a v5 class runs v1 → v2 → v3 →
 
 ### Avoid Unnecessary Version Bumps
 
-When adding a new field, consider whether a version bump is needed. If the new field's default is valid for
-*all* old files, just add the field and update the hash — no version bump, no migration. (The hash always
-changes when the field set changes: it is a definition-time integrity check, not a file-compatibility gate.
-The version is what gates file compatibility.)
+When adding a new field, consider whether a version bump is needed. If the new field's default is valid for _all_ old
+files, just add the field and update the hash — no version bump, no migration. (The hash always changes when the field
+set changes: it is a definition-time integrity check, not a file-compatibility gate. The version is what gates file
+compatibility.)
 
 ```python
 @dataclass
