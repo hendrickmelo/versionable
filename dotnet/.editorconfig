@@ -1,0 +1,138 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{json,yml,yaml,md}]
+indent_size = 2
+
+[*.{csproj,props,targets,sln}]
+indent_size = 2
+
+[*.cs]
+max_line_length = 120
+
+#### .NET code style ####
+
+# Namespaces — file-scoped, and the namespace must match the folder path. One rule, machine
+# enforced, so the layout cannot drift: src/Versionable/Errors/*.cs is Versionable.Errors,
+# and anything directly under src/Versionable/ is the root Versionable namespace.
+csharp_style_namespace_declarations = file_scoped:error
+dotnet_style_namespace_match_folder = true
+dotnet_diagnostic.IDE0130.severity = error
+
+# Usings
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+csharp_using_directive_placement = outside_namespace:error
+
+# this. qualification — never
+dotnet_style_qualification_for_field = false:error
+dotnet_style_qualification_for_property = false:error
+dotnet_style_qualification_for_method = false:error
+dotnet_style_qualification_for_event = false:error
+
+# Language keywords over BCL type names
+dotnet_style_predefined_type_for_locals_parameters_members = true:error
+dotnet_style_predefined_type_for_member_access = true:error
+
+# Modifiers
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:error
+csharp_preferred_modifier_order = public,private,protected,internal,file,static,extern,new,virtual,abstract,sealed,override,readonly,unsafe,required,volatile,async:suggestion
+dotnet_style_readonly_field = true:suggestion
+
+# Expression-level preferences
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_prefer_auto_properties = true:suggestion
+dotnet_style_null_propagation = true:suggestion
+dotnet_style_coalesce_expression = true:suggestion
+csharp_style_prefer_range_operator = true:suggestion
+csharp_prefer_simple_using_statement = true:suggestion
+
+# `var` — explicit types read better in serialization code where the runtime type matters
+csharp_style_var_for_built_in_types = false:suggestion
+csharp_style_var_when_type_is_apparent = false:suggestion
+csharp_style_var_elsewhere = false:suggestion
+
+# Braces are never optional
+csharp_prefer_braces = true:error
+
+# New-line preferences (Allman)
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+
+#### Naming: standard .NET conventions ####
+
+dotnet_naming_rule.interfaces_start_with_i.symbols = interface_symbols
+dotnet_naming_rule.interfaces_start_with_i.style = i_prefixed_pascal_case
+dotnet_naming_rule.interfaces_start_with_i.severity = error
+
+dotnet_naming_rule.types_are_pascal_case.symbols = type_symbols
+dotnet_naming_rule.types_are_pascal_case.style = pascal_case
+dotnet_naming_rule.types_are_pascal_case.severity = error
+
+# Methods are split out from other members so the tests section can relax method naming
+# alone without giving up naming enforcement on everything else.
+dotnet_naming_rule.methods_are_pascal_case.symbols = method_symbols
+dotnet_naming_rule.methods_are_pascal_case.style = pascal_case
+dotnet_naming_rule.methods_are_pascal_case.severity = error
+
+dotnet_naming_rule.members_are_pascal_case.symbols = member_symbols
+dotnet_naming_rule.members_are_pascal_case.style = pascal_case
+dotnet_naming_rule.members_are_pascal_case.severity = error
+
+dotnet_naming_rule.parameters_are_camel_case.symbols = parameter_symbols
+dotnet_naming_rule.parameters_are_camel_case.style = camel_case
+dotnet_naming_rule.parameters_are_camel_case.severity = error
+
+# Private fields — _camelCase, instance and static alike (no s_ / t_ variants).
+dotnet_naming_rule.private_fields_are_underscore_camel_case.symbols = private_field_symbols
+dotnet_naming_rule.private_fields_are_underscore_camel_case.style = underscore_camel_case
+dotnet_naming_rule.private_fields_are_underscore_camel_case.severity = error
+
+dotnet_naming_symbols.interface_symbols.applicable_kinds = interface
+dotnet_naming_symbols.interface_symbols.applicable_accessibilities = *
+
+dotnet_naming_symbols.type_symbols.applicable_kinds = class, struct, enum, delegate
+dotnet_naming_symbols.type_symbols.applicable_accessibilities = *
+
+dotnet_naming_symbols.method_symbols.applicable_kinds = method
+dotnet_naming_symbols.method_symbols.applicable_accessibilities = *
+
+dotnet_naming_symbols.member_symbols.applicable_kinds = property, event
+dotnet_naming_symbols.member_symbols.applicable_accessibilities = *
+
+dotnet_naming_symbols.parameter_symbols.applicable_kinds = parameter, local
+dotnet_naming_symbols.parameter_symbols.applicable_accessibilities = *
+
+dotnet_naming_symbols.private_field_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_field_symbols.applicable_accessibilities = private
+
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+dotnet_naming_style.camel_case.capitalization = camel_case
+dotnet_naming_style.i_prefixed_pascal_case.capitalization = pascal_case
+dotnet_naming_style.i_prefixed_pascal_case.required_prefix = I
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+
+#### Versionable analyzer diagnostics ####
+#
+# Severity knob for the compile-time schema hash check (ADR-0003) — the C# analogue of
+# Python's `versionable.ignoreHashErrors()` dev mode. The analyzer lands in task 2b;
+# uncomment then to downgrade hash mismatches to warnings while iterating on a schema:
+#
+# dotnet_diagnostic.VSN0001.severity = warning
+
+[tests/**/*.cs]
+# Test methods use the scenario_expectation convention, which is not PascalCase. Only the
+# method rule is relaxed — private fields, parameters, locals, properties, and types stay
+# under the same naming enforcement as src/.
+dotnet_naming_rule.methods_are_pascal_case.severity = none

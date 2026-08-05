@@ -24,6 +24,32 @@ jobs:
       - name: CI checks (${{ matrix.environment }})
         run: pixi run -e ${{ matrix.environment }} ci
 
+  # Runs on every PR rather than only on dotnet/** changes: the C# side reads the golden
+  # corpus and hash vectors under conformance/, which Python-side changes can invalidate.
+  dotnet:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dotnet
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -warnaserror
+
+      - name: Test
+        run: dotnet test --no-build
+
+      - name: Format check
+        run: dotnet format --verify-no-changes
+
   docs:
     runs-on: ubuntu-latest
     steps:

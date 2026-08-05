@@ -23,6 +23,7 @@ nbclean_check = "nb-clean check examples/"
 cleanup = { depends-on = ["format", "ruff", "mypy", "pyright", "prettier", "mdlint", "nbclean"] }
 ci = { depends-on = ["format_check", "ruff_check", "mypy", "pyright", "prettier_check", "mdlint_check", "nbclean_check", "test"] }
 ci-all = { cmd = "pixi run -e default ci && pixi run -e minimal ci", description = "Run CI in all environments" }
+dotnet-cleanup = { cmd = "dotnet format && dotnet build -warnaserror", cwd = "dotnet", description = "Format and build the .NET solution (requires dotnet on PATH)" }
 
 [dependencies]
 python = ">=3.12,<3.14"

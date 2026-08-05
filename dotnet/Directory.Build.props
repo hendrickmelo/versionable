@@ -1,0 +1,16 @@
+<Project>
+
+  <!-- Settings shared by every project in dotnet/. Per-project concerns (target
+       framework, package metadata, analyzer packaging) stay in the .csproj files. -->
+  <PropertyGroup>
+    <!-- Pinned, not `latest`: with TreatWarningsAsErrors a newer local SDK can surface
+         language features or warnings that CI's SDK does not, failing builds CI passes.
+         12.0 is what .NET 8 ships; raise it deliberately, together with global.json. -->
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+</Project>

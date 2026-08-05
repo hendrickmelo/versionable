@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.0 is mandatory for Roslyn components: the compiler loads them
+         into its own process, which may be .NET Framework (MSBuild.exe). -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- AnalyzerReleases.Shipped.md / .Unshipped.md sit next to this file; the analyzer
+       package's build props pick them up as AdditionalFiles automatically. They are the
+       release-tracking ledger (RS2008) for the diagnostics landing in task 2b. -->
+
+  <ItemGroup>
+    <!-- Phase 5 owns packaging; this item states the intended package layout so the
+         analyzer lands under analyzers/dotnet/cs when packing is switched on. -->
+    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+
+</Project>
