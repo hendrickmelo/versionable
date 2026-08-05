@@ -1,0 +1,12 @@
+{
+  "__versionable__": {
+    "object": "GoldenOptionals",
+    "version": 1,
+    "hash": "70c93b"
+  },
+  "present": "filled",
+  "absent": null,
+  "maybeCount": 5,
+  "money": "12.50",
+  "either": "text"
+}

@@ -1,0 +1,60 @@
+label = "assembly"
+
+[__versionable__]
+object = "GoldenNested"
+version = 1
+hash = "705e61"
+
+[inner]
+x = 1.5
+y = -2.5
+
+[inner.__versionable__]
+object = "GoldenInner"
+version = 1
+hash = "e37514"
+
+[[points]]
+x = 0.0
+y = 0.0
+
+[points.__versionable__]
+object = "GoldenInner"
+version = 1
+hash = "e37514"
+
+[[points]]
+x = 1.0
+y = 1.0
+
+[points.__versionable__]
+object = "GoldenInner"
+version = 1
+hash = "e37514"
+
+[byName.origin]
+x = 0.0
+y = 0.0
+
+[byName.origin.__versionable__]
+object = "GoldenInner"
+version = 1
+hash = "e37514"
+
+[byName.corner]
+x = 2.0
+y = 3.0
+
+[byName.corner.__versionable__]
+object = "GoldenInner"
+version = 1
+hash = "e37514"
+
+[optionalInner]
+x = 9.0
+y = 9.0
+
+[optionalInner.__versionable__]
+object = "GoldenInner"
+version = 1
+hash = "e37514"

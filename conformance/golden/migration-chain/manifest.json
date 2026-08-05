@@ -1,0 +1,50 @@
+{
+  "fixture": "migration-chain",
+  "serializationName": "GoldenWorker",
+  "schemaHash": "aac8a2",
+  "version": 3,
+  "note": "Current-version file plus v1 and v2 files that a reader must migrate forward. v1 -> v2 renames 'title' to 'name' and drops 'debug'; v2 -> v3 adds 'timeout_ms' defaulting old files to 0, not to the dataclass default of 30000.",
+  "files": {
+    "json": "migration-chain.json",
+    "yaml": "migration-chain.yaml",
+    "toml": "migration-chain.toml",
+    "hdf5": "migration-chain.h5"
+  },
+  "values": {
+    "name": "batch-processor",
+    "retries": 5,
+    "timeout_ms": 15000
+  },
+  "migrationSources": [
+    {
+      "fromVersion": 1,
+      "schemaHash": "5556c8",
+      "files": {
+        "json": "migration-chain-v1.json",
+        "yaml": "migration-chain-v1.yaml",
+        "toml": "migration-chain-v1.toml",
+        "hdf5": "migration-chain-v1.h5"
+      },
+      "expected": {
+        "name": "legacy-worker",
+        "retries": 9,
+        "timeout_ms": 0
+      }
+    },
+    {
+      "fromVersion": 2,
+      "schemaHash": "beb912",
+      "files": {
+        "json": "migration-chain-v2.json",
+        "yaml": "migration-chain-v2.yaml",
+        "toml": "migration-chain-v2.toml",
+        "hdf5": "migration-chain-v2.h5"
+      },
+      "expected": {
+        "name": "interim-worker",
+        "retries": 2,
+        "timeout_ms": 0
+      }
+    }
+  ]
+}

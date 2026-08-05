@@ -1,0 +1,22 @@
+{
+  "fixture": "optionals",
+  "serializationName": "GoldenOptionals",
+  "schemaHash": "70c93b",
+  "version": 1,
+  "note": "TOML has no null literal, so 'absent' is omitted from the TOML file entirely and is refilled from the dataclass default on load. 'either' exercises a union of two non-null members.",
+  "files": {
+    "json": "optionals.json",
+    "yaml": "optionals.yaml",
+    "toml": "optionals.toml",
+    "hdf5": "optionals.h5"
+  },
+  "values": {
+    "present": "filled",
+    "absent": null,
+    "maybeCount": 5,
+    "money": {
+      "$decimal": "12.50"
+    },
+    "either": "text"
+  }
+}

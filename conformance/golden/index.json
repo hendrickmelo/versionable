@@ -1,0 +1,106 @@
+{
+  "backends": {
+    "json": ".json",
+    "yaml": ".yaml",
+    "toml": ".toml",
+    "hdf5": ".h5"
+  },
+  "fixtures": [
+    {
+      "fixture": "scalars",
+      "serializationName": "GoldenScalars",
+      "schemaHash": "c51ec9",
+      "version": 1,
+      "migrationSources": []
+    },
+    {
+      "fixture": "containers",
+      "serializationName": "GoldenContainers",
+      "schemaHash": "846dc8",
+      "version": 1,
+      "migrationSources": []
+    },
+    {
+      "fixture": "optionals",
+      "serializationName": "GoldenOptionals",
+      "schemaHash": "70c93b",
+      "version": 1,
+      "migrationSources": []
+    },
+    {
+      "fixture": "enums",
+      "serializationName": "GoldenEnums",
+      "schemaHash": "660511",
+      "version": 1,
+      "migrationSources": []
+    },
+    {
+      "fixture": "literals",
+      "serializationName": "GoldenLiterals",
+      "schemaHash": "2085b2",
+      "version": 1,
+      "migrationSources": []
+    },
+    {
+      "fixture": "temporal",
+      "serializationName": "GoldenTemporal",
+      "schemaHash": "3856a2",
+      "version": 1,
+      "migrationSources": []
+    },
+    {
+      "fixture": "stdlib",
+      "serializationName": "GoldenStdlib",
+      "schemaHash": "c3ff88",
+      "version": 1,
+      "migrationSources": []
+    },
+    {
+      "fixture": "arrays",
+      "serializationName": "GoldenArrays",
+      "schemaHash": "b76a00",
+      "version": 1,
+      "migrationSources": []
+    },
+    {
+      "fixture": "nested",
+      "serializationName": "GoldenNested",
+      "schemaHash": "705e61",
+      "version": 1,
+      "migrationSources": []
+    },
+    {
+      "fixture": "polymorphic",
+      "serializationName": "GoldenPolymorphic",
+      "schemaHash": "cfb9bf",
+      "version": 1,
+      "migrationSources": []
+    },
+    {
+      "fixture": "migration-chain",
+      "serializationName": "GoldenWorker",
+      "schemaHash": "aac8a2",
+      "version": 3,
+      "migrationSources": [
+        1,
+        2
+      ]
+    }
+  ],
+  "knownGaps": [
+    {
+      "construct": "heterogeneous fixed tuple",
+      "example": "tuple[int, str, float]",
+      "status": "specified, hashable, NOT loadable",
+      "detail": "GRAMMAR.md section 5 defines fixed tuples as order-significant with per-position types, and vectors 'tuple-mixed' and 'tuple-mixed-reordered' lock their canonical strings and hashes. Rendering and hashing are therefore in scope and must be implemented. Round-tripping is not: no Python backend can currently LOAD a heterogeneous fixed tuple. The deserializer applies the first tuple argument to every element, so JSON/YAML/TOML raise ValueError ('invalid literal for int() with base 10') and HDF5 raises TypeError ('No conversion path for dtype'). This is a pre-existing Python bug, not a grammar question. Homogeneous fixed tuples (tuple[int, int]) and variadic tuples (tuple[float, ...]) do round-trip and are covered by the 'containers' fixture.",
+      "followUp": "issue to be filed at phase 5"
+    },
+    {
+      "construct": "bare (un-parameterized) ndarray",
+      "example": "ndarray",
+      "status": "specified, Python-only, omitted from the corpus",
+      "detail": "GRAMMAR.md section 7 defines bare 'ndarray' as the dynamic-dtype escape hatch. C# Tensor<T> is always typed, so a bare ndarray field cannot be mirrored in C# and no golden file could be read by both implementations. Vector 'ndarray-bare' is marked pythonOnly for the same reason. The 'arrays' fixture covers only declared, hash-significant dtypes.",
+      "followUp": "none — by design"
+    }
+  ]
+}

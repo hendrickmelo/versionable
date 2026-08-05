@@ -1,0 +1,49 @@
+names:
+- alpha
+- beta
+readings:
+- 1.5
+- -2.25
+- 0.0
+counts:
+- 1
+- 2
+- 3
+flags:
+- true
+- false
+- true
+lookup:
+  a: 1
+  b: 2
+byIndex:
+  '1': one
+  '2': two
+tags:
+- green
+- red
+ids:
+- 11
+- 7
+pair:
+- 3
+- 4
+samples:
+- 0.5
+- 1.5
+- 2.5
+matrix:
+- - 1.0
+  - 2.0
+- - 3.0
+  - 4.0
+grouped:
+  ch0:
+  - 0.5
+  - 1.5
+  ch1:
+  - 2.5
+__versionable__:
+  object: GoldenContainers
+  version: 1
+  hash: 846dc8

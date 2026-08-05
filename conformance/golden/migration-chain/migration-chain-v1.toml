@@ -1,0 +1,8 @@
+title = "legacy-worker"
+debug = true
+retries = 9
+
+[__versionable__]
+object = "GoldenWorker"
+version = 1
+hash = "5556c8"

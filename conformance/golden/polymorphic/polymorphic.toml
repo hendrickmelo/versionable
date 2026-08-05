@@ -1,0 +1,31 @@
+[__versionable__]
+object = "GoldenPolymorphic"
+version = 1
+hash = "cfb9bf"
+
+[[shapes]]
+label = "c1"
+radius = 2.5
+
+[shapes.__versionable__]
+object = "GoldenCircle"
+version = 1
+hash = "8e5e7c"
+
+[[shapes]]
+label = "s1"
+side = 4.0
+
+[shapes.__versionable__]
+object = "GoldenSquare"
+version = 1
+hash = "42fff3"
+
+[[shapes]]
+label = "c2"
+radius = 0.5
+
+[shapes.__versionable__]
+object = "GoldenCircle"
+version = 1
+hash = "8e5e7c"

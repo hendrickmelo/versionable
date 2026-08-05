@@ -1,0 +1,9 @@
+{
+  "__versionable__": {
+    "object": "GoldenWorker",
+    "version": 2,
+    "hash": "beb912"
+  },
+  "name": "interim-worker",
+  "retries": 2
+}

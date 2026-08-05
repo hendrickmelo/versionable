@@ -1,0 +1,8 @@
+name = "batch-processor"
+retries = 5
+timeout_ms = 15000
+
+[__versionable__]
+object = "GoldenWorker"
+version = 3
+hash = "aac8a2"

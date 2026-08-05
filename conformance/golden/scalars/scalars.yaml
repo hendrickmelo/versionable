@@ -1,0 +1,12 @@
+text: probe-A
+count: -42
+ratio: 9.8125
+enabled: true
+phase:
+- 1.5
+- -2.25
+blob: AAH+/w==
+__versionable__:
+  object: GoldenScalars
+  version: 1
+  hash: c51ec9

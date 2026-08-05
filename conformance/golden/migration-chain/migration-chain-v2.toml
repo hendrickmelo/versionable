@@ -1,0 +1,7 @@
+name = "interim-worker"
+retries = 2
+
+[__versionable__]
+object = "GoldenWorker"
+version = 2
+hash = "beb912"

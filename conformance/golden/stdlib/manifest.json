@@ -1,0 +1,42 @@
+{
+  "fixture": "stdlib",
+  "serializationName": "GoldenStdlib",
+  "schemaHash": "c3ff88",
+  "version": 1,
+  "note": "Registered converter types. Decimal wires as a string so no float precision is lost; the regex wires as its pattern source with flags dropped.",
+  "files": {
+    "json": "stdlib.json",
+    "yaml": "stdlib.yaml",
+    "toml": "stdlib.toml",
+    "hdf5": "stdlib.h5"
+  },
+  "values": {
+    "filePath": {
+      "$path": {
+        "kind": "PosixPath",
+        "value": "data/run-01.h5"
+      }
+    },
+    "posixPath": {
+      "$path": {
+        "kind": "PurePosixPath",
+        "value": "/var/log/device.log"
+      }
+    },
+    "windowsPath": {
+      "$path": {
+        "kind": "PureWindowsPath",
+        "value": "C:\\Devices\\probe.cfg"
+      }
+    },
+    "amount": {
+      "$decimal": "1234.5678"
+    },
+    "deviceId": {
+      "$uuid": "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+    },
+    "serialPattern": {
+      "$pattern": "^SN-\\d{6}$"
+    }
+  }
+}

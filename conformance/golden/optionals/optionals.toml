@@ -1,0 +1,9 @@
+present = "filled"
+maybeCount = 5
+money = "12.50"
+either = "text"
+
+[__versionable__]
+object = "GoldenOptionals"
+version = 1
+hash = "70c93b"

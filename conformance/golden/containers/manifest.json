@@ -1,0 +1,110 @@
+{
+  "fixture": "containers",
+  "serializationName": "GoldenContainers",
+  "schemaHash": "846dc8",
+  "version": 1,
+  "note": "All six container forms plus nesting and a non-string dict key. Sets are unordered on the wire; the manifest orders them for comparison only.",
+  "files": {
+    "json": "containers.json",
+    "yaml": "containers.yaml",
+    "toml": "containers.toml",
+    "hdf5": "containers.h5"
+  },
+  "values": {
+    "names": [
+      "alpha",
+      "beta"
+    ],
+    "readings": [
+      1.5,
+      -2.25,
+      0.0
+    ],
+    "counts": [
+      1,
+      2,
+      3
+    ],
+    "flags": [
+      true,
+      false,
+      true
+    ],
+    "lookup": {
+      "$dict": [
+        [
+          "a",
+          1
+        ],
+        [
+          "b",
+          2
+        ]
+      ]
+    },
+    "byIndex": {
+      "$dict": [
+        [
+          1,
+          "one"
+        ],
+        [
+          2,
+          "two"
+        ]
+      ]
+    },
+    "tags": {
+      "$set": [
+        "green",
+        "red"
+      ]
+    },
+    "ids": {
+      "$set": [
+        11,
+        7
+      ]
+    },
+    "pair": {
+      "$tuple": [
+        3,
+        4
+      ]
+    },
+    "samples": {
+      "$tuple": [
+        0.5,
+        1.5,
+        2.5
+      ]
+    },
+    "matrix": [
+      [
+        1.0,
+        2.0
+      ],
+      [
+        3.0,
+        4.0
+      ]
+    ],
+    "grouped": {
+      "$dict": [
+        [
+          "ch0",
+          [
+            0.5,
+            1.5
+          ]
+        ],
+        [
+          "ch1",
+          [
+            2.5
+          ]
+        ]
+      ]
+    }
+  }
+}
