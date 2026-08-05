@@ -40,7 +40,7 @@ class Priority(Enum):
 class WithEnum(
     Versionable,
     version=1,
-    hash="139030",
+    hash="986e2a",
     register=False,
 ):
     title: str
@@ -73,7 +73,7 @@ class WithNested(
 class WithDatetime(
     Versionable,
     version=1,
-    hash="221aca",
+    hash="ad4a69",
     register=False,
 ):
     label: str
@@ -108,7 +108,7 @@ class WithSkipDefaults(
 class WithLiteral(
     Versionable,
     version=1,
-    hash="3c2d1b",
+    hash="7ea541",
     register=False,
 ):
     name: str
@@ -119,7 +119,7 @@ class WithLiteral(
 class WithLiteralFallback(
     Versionable,
     version=1,
-    hash="3c2d1b",
+    hash="7ea541",
     register=False,
 ):
     name: str
@@ -130,7 +130,7 @@ class WithLiteralFallback(
 class WithLiteralNoValidation(
     Versionable,
     version=1,
-    hash="3c2d1b",
+    hash="7ea541",
     register=False,
     validate_literals=False,
 ):

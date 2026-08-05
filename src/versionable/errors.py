@@ -5,9 +5,26 @@ All exceptions are defined here to avoid circular imports between modules.
 
 from __future__ import annotations
 
+from typing import Literal
+
+# Where a dtype check was triggered from — used only in error messages.
+DtypeContext = Literal["save", "load"]
+
 
 class VersionableError(Exception):
     """Base exception for all versionable errors."""
+
+
+class UnsupportedTypeError(VersionableError):
+    """A declared type cannot be expressed in the canonical type grammar.
+
+    Raised at class definition time (while the schema hash is computed) for
+    constructs the language-neutral grammar deliberately closes off: a
+    ``Literal`` option that is not a string, int, bool, ``None`` or enum
+    member, and an array dtype outside the supported token table.  Falling
+    back to a Python-specific rendering would produce a hash no other
+    implementation could reproduce.
+    """
 
 
 class HashMismatchError(VersionableError):
@@ -62,6 +79,35 @@ class UnknownFieldError(VersionableError):
 
 class ConverterError(VersionableError):
     """A type conversion failed during serialization or deserialization."""
+
+
+class DtypeMismatchError(ConverterError):
+    """An array's dtype cannot be safely cast to the dtype its annotation declares.
+
+    Array dtype is hash-significant: ``NDArray[np.float64]`` canonicalises to
+    ``ndarray[float64]``.  Safe casts (``np.can_cast(..., casting='safe')``) are
+    applied silently; anything lossy raises this error rather than letting the
+    file disagree with the schema its hash describes.
+
+    Attributes:
+        declared: Canonical name of the declared dtype (e.g. ``float32``).
+        actual: Canonical name of the value's dtype.
+        fieldPath: Dotted path of the offending field, empty for the root.
+        context: ``'save'`` or ``'load'``.
+    """
+
+    def __init__(self, *, declared: str, actual: str, fieldPath: str = "", context: DtypeContext = "save") -> None:
+        self.declared = declared
+        self.actual = actual
+        self.fieldPath = fieldPath
+        self.context = context
+        super().__init__(
+            f"Array dtype mismatch at {fieldPath or '<root>'} during {context}: "
+            f"declared ndarray[{declared}], data is {actual}. "
+            f"Casting {actual} to {declared} is not safe. "
+            f"Cast explicitly with .astype('{declared}') if the loss is intended, "
+            f"or declare ndarray[{actual}] and update the schema hash."
+        )
 
 
 class BackendError(VersionableError):

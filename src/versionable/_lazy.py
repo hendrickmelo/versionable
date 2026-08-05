@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
     import numpy as np
 
+from versionable._arrays import coerceToDtype
 from versionable._hdf5_plugin import missingFilterHint
 from versionable.errors import ArrayNotLoadedError, BackendError
 
@@ -86,13 +87,19 @@ class LazyArray:
 
     _isLazySentinel = True
 
-    def __init__(self, filePath: Path, datasetPath: str) -> None:
+    def __init__(self, filePath: Path, datasetPath: str, declaredDtype: Any = None) -> None:
         self.filePath = filePath
         self.datasetPath = datasetPath
+        # Dtype the field annotation declares, applied per dataset when the data
+        # is materialized.  None when the field declares none.  Unsafe mismatches
+        # were already rejected when this sentinel was built.
+        self.declaredDtype = declaredDtype
 
     def load(self) -> np.ndarray:
         with _rewrapFilterErrors(self.filePath), h5py.File(self.filePath, "r") as f:
-            return _loadDataset(f, self.datasetPath)
+            data = _loadDataset(f, self.datasetPath)
+        result: np.ndarray = coerceToDtype(data, self.declaredDtype, fieldPath=self.datasetPath, context="load")
+        return result
 
     def __repr__(self) -> str:
         return f"LazyArray({self.datasetPath!r})"
@@ -107,10 +114,14 @@ class LazyArrayList:
 
     _isLazySentinel = True
 
-    def __init__(self, filePath: Path, groupPath: str, keys: list[str]) -> None:
+    def __init__(self, filePath: Path, groupPath: str, keys: list[str], declaredDtype: Any = None) -> None:
         self.filePath = filePath
         self.groupPath = groupPath
         self._keys = keys
+        # See LazyArray.declaredDtype.  Applied per element: elements of a
+        # collection may be stored with different dtypes, so one shared cast
+        # target would drop the cast for every element but the last.
+        self.declaredDtype = declaredDtype
         self._cache: dict[int, np.ndarray] = {}
 
     def __len__(self) -> int:
@@ -132,7 +143,10 @@ class LazyArrayList:
         if index not in self._cache:
             key = self._keys[index]
             with _rewrapFilterErrors(self.filePath), h5py.File(self.filePath, "r") as f:
-                self._cache[index] = _loadDataset(f, f"{self.groupPath}/{key}")
+                data = _loadDataset(f, f"{self.groupPath}/{key}")
+            self._cache[index] = coerceToDtype(
+                data, self.declaredDtype, fieldPath=f"{self.groupPath}/{key}", context="load"
+            )
             logger.debug("Lazy-loaded %s/%s", self.groupPath, key)
         return self._cache[index]
 
@@ -160,10 +174,13 @@ class LazyArrayDict:
         groupPath: str,
         keys: list[Any],
         hdf5Keys: list[str] | None = None,
+        declaredDtype: Any = None,
     ) -> None:
         self.filePath = filePath
         self.groupPath = groupPath
         self._keys = keys
+        # See LazyArrayList.declaredDtype — applied per value, not once.
+        self.declaredDtype = declaredDtype
         self._keySet: set[Any] = set(keys)
         # hdf5Keys are the raw (possibly percent-encoded) names in the file
         self._hdf5Keys = hdf5Keys or [str(k) for k in keys]
@@ -179,7 +196,10 @@ class LazyArrayDict:
                 raise KeyError(key)
             hdf5Key = self._keyToHdf5[key]
             with _rewrapFilterErrors(self.filePath), h5py.File(self.filePath, "r") as f:
-                self._cache[key] = _loadDataset(f, f"{self.groupPath}/{hdf5Key}")
+                data = _loadDataset(f, f"{self.groupPath}/{hdf5Key}")
+            self._cache[key] = coerceToDtype(
+                data, self.declaredDtype, fieldPath=f"{self.groupPath}/{hdf5Key}", context="load"
+            )
             logger.debug("Lazy-loaded %s/%s", self.groupPath, hdf5Key)
         return self._cache[key]
 

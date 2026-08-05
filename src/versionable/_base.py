@@ -13,7 +13,7 @@ import typing
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-from versionable._hash import computeHash
+from versionable._hash import collectSerializationNames, computeHash
 from versionable.errors import HashMismatchError, VersionableError
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 
 _REGISTRY: dict[str, type[Versionable]] = {}
 _ignoreHashErrors: bool = False
+
+# Classes already warned about for unresolvable annotations, keyed by id() so a
+# class is never kept alive by this set.
+_WARNED_UNRESOLVED: set[int] = set()
 
 
 def ignoreHashErrors(enable: bool = True) -> None:
@@ -154,20 +158,25 @@ class Versionable:
         )
         cls._serializer_meta_ = meta
 
-        # Validate hash (if provided)
-        if hash:
-            fields = _resolveFields(cls)
-            computed = computeHash(fields)
-            if computed != hash:
-                if _ignoreHashErrors:
-                    logger.warning(
-                        "%s: hash mismatch — declared %r, computed %r",
-                        cls.__qualname__,
-                        hash,
-                        computed,
-                    )
-                else:
-                    raise HashMismatchError(cls, hash, computed)
+        # Validate the schema itself, then the declared hash.  The hash is
+        # computed even when none is declared: canonicalisation is what rejects
+        # constructs the grammar closes off (unsupported Literal options, array
+        # dtypes outside the token table, colliding serialization names), and
+        # those are errors in the schema, not in the declared hash.
+        fields = _resolveFields(cls)
+        collectSerializationNames(fields)
+        computed = computeHash(fields)
+
+        if hash and computed != hash:
+            if _ignoreHashErrors:
+                logger.warning(
+                    "%s: hash mismatch — declared %r, computed %r",
+                    cls.__qualname__,
+                    hash,
+                    computed,
+                )
+            else:
+                raise HashMismatchError(cls, hash, computed)
 
         # Register class
         if register:
@@ -177,10 +186,10 @@ class Versionable:
             if existing is not None and existing is not cls:
                 raise VersionableError(
                     f"Versionable name {serializationName!r} is already registered to "
-                    f"{existing.__qualname__}. Give one of the classes an explicit name to "
-                    f"disambiguate, e.g.: "
+                    f"{existing.__qualname__}. Give one of the classes an explicit, distinct "
+                    f"name to disambiguate, e.g.: "
                     f"class {cls.__name__}(Versionable, ..., "
-                    f'name="{cls.__module__}.{cls.__name__}")'
+                    f'name="{cls.__name__}V2")  # any unused bare name'
                 )
             for oldName in oldNames:
                 existing = _REGISTRY.get(oldName)
@@ -205,6 +214,32 @@ def _hasOwnAnnotations(cls: type) -> bool:
     return "__annotations__" in cls.__dict__
 
 
+def _warnUnresolvedAnnotations(cls: type, hints: dict[str, Any]) -> None:
+    """Warn that *cls* has annotations that could not be resolved to real types.
+
+    An unresolved annotation reaches ``canonicalTypeName`` as a raw source
+    string and renders verbatim, so ``partner: Node | None`` yields the
+    canonical string ``Node | None`` rather than the grammar's
+    ``Union[None, Node]``.  The hash is still deterministic within Python, but
+    another implementation of the grammar cannot reproduce it.
+    """
+    unresolved = sorted(name for name, hint in hints.items() if isinstance(hint, str) and not name.startswith("_"))
+    # _resolveFields runs on every save and load, so warn once per class rather
+    # than once per operation.
+    if not unresolved or id(cls) in _WARNED_UNRESOLVED:
+        return
+    _WARNED_UNRESOLVED.add(id(cls))
+    logger.warning(
+        "%s: could not resolve the type annotations for %s; they will be hashed as their raw "
+        "source text, which may not match the canonical type grammar and may therefore produce "
+        "a schema hash another language implementation cannot reproduce. This usually means two "
+        "classes refer to each other; define them in one module and reference the later one by "
+        "name, or declare the field with an explicit resolvable type.",
+        cls.__qualname__,
+        ", ".join(repr(name) for name in unresolved),
+    )
+
+
 def _resolveFields(cls: type) -> dict[str, Any]:
     """Return the serializable fields for *cls* as ``{name: type}``.
 
@@ -214,14 +249,33 @@ def _resolveFields(cls: type) -> dict[str, Any]:
 
     Uses ``typing.get_type_hints`` to resolve forward references and
     ``Annotated`` wrappers.
+
+    During ``__init_subclass__`` the class's own name is not yet bound in its
+    module, so a self-referential annotation (``parent: Node | None``) cannot be
+    resolved from the module globals alone.  ``cls`` is passed in as a local
+    name for the retry: without it the raw annotation *string* would reach
+    ``canonicalTypeName`` and render verbatim as ``Node | None`` instead of the
+    canonical ``Union[Node, None]`` (GRAMMAR.md section 6), giving a
+    definition-time hash no other implementation can reproduce.
+
+    That retry does not cover *mutual* recursion (``A`` referring to a ``B``
+    defined later), where neither name exists yet.  Those annotations fall back
+    to their raw strings and the resulting hash may not be conformant, so the
+    fallback warns rather than failing silently — see the follow-up tracked in
+    ``docs/plans/csharp-port.md`` phase 5.
     """
     try:
         hints = typing.get_type_hints(cls, include_extras=True)
     except Exception:
-        # Fallback to raw annotations if resolution fails
-        hints = {}
-        for klass in reversed(cls.__mro__):
-            hints.update(getattr(klass, "__annotations__", {}))
+        try:
+            hints = typing.get_type_hints(cls, localns={cls.__name__: cls}, include_extras=True)
+        except Exception:
+            # Fallback to raw annotations if resolution still fails (e.g. mutual
+            # recursion, where the other class does not exist yet either).
+            hints = {}
+            for klass in reversed(cls.__mro__):
+                hints.update(getattr(klass, "__annotations__", {}))
+            _warnUnresolvedAnnotations(cls, hints)
 
     fields: dict[str, Any] = {}
     for fieldName, fieldType in hints.items():

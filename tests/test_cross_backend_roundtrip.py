@@ -53,7 +53,7 @@ class _Inner(Versionable, version=1, hash="e37514", name="CrossInner"):
 
 
 @dataclass
-class _KitchenSink(Versionable, version=1, hash="3b5a61", register=False):
+class _KitchenSink(Versionable, version=1, hash="d65c5e", register=False):
     name: str
     count: int
     rate: float
@@ -92,7 +92,7 @@ class _WithOptional(Versionable, version=1, hash="c599a5", register=False):
 if _HAS_NUMPY:
 
     @dataclass
-    class _WithArrays(Versionable, version=1, hash="e9fc06", register=False):
+    class _WithArrays(Versionable, version=1, hash="72070c", register=False):
         name: str
         data: npt.NDArray[np.float64]
         matrix: npt.NDArray[np.int32]
