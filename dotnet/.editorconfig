@@ -125,11 +125,26 @@ dotnet_naming_style.underscore_camel_case.required_prefix = _
 
 #### Versionable analyzer diagnostics ####
 #
-# Severity knob for the compile-time schema hash check (ADR-0003) — the C# analogue of
-# Python's `versionable.ignoreHashErrors()` dev mode. The analyzer lands in task 2b;
-# uncomment then to downgrade hash mismatches to warnings while iterating on a schema:
+# Every rule is configurable per-id. VSN0001 is the severity knob for the compile-time schema
+# hash check (ADR-0003) — the C# analogue of Python's `versionable.ignoreHashErrors()` dev
+# mode. Uncomment it to downgrade hash mismatches to warnings while iterating on a schema; the
+# message still prints the canonical payload and the hash to paste back in.
 #
 # dotnet_diagnostic.VSN0001.severity = warning
+#
+# | Id      | Default | Reports                                                              |
+# |---------|---------|----------------------------------------------------------------------|
+# | VSN0001 | error   | Declared Hash disagrees with the computed hash (message = payload)   |
+# | VSN0002 | error   | A field type has no form in the canonical grammar                    |
+# | VSN0003 | error   | The migration chain skips a version above its oldest entry           |
+# | VSN0004 | error   | Two reachable types claim one Serialization Name (GRAMMAR §9)        |
+# | VSN0005 | error   | A [Versionable] type, or an enclosing type, is not partial           |
+# | VSN0006 | error   | A [LiteralValues] option is outside the closed member list (§8)      |
+# | VSN0007 | error   | A wire name holds a payload separator or leaves the BMP (§2)         |
+# | VSN0008 | error   | Two members claim one wire name                                      |
+# | VSN0009 | warning | The type is compiled without nullable reference types (§6)           |
+# | VSN0010 | error   | No constructor can rebuild the type from its members                 |
+# | VSN0011 | warning | The type cannot carry a module initializer, so it never registers    |
 
 [tests/**/*.cs]
 # Test methods use the scenario_expectation convention, which is not PascalCase. Only the

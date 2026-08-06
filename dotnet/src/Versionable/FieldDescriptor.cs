@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Versionable;
 
 /// <summary>
@@ -29,6 +31,15 @@ public sealed record FieldDescriptor
     public required string ClrName { get; init; }
 
     /// <summary>Declared CLR type of the field.</summary>
+    /// <remarks>
+    /// Annotated <see cref="DynamicallyAccessedMemberTypes.PublicFields"/> because the engine
+    /// hands this type to <c>Converters.EnumConverter</c>, which reads an enum's members and
+    /// their <see cref="EnumValueAttribute"/> / <see cref="EnumFallbackAttribute"/> to map a
+    /// wire value onto a member. Without the annotation that call is an IL2072 trim warning at
+    /// the one boundary the engine cannot annotate away. The generator always assigns a
+    /// <c>typeof(T)</c> literal here, so the requirement costs nothing at the call site.
+    /// </remarks>
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)]
     public required Type ClrType { get; init; }
 
     /// <summary>
@@ -72,6 +83,16 @@ public sealed record FieldDescriptor
     /// (<c>conformance/GRAMMAR.md</c> §8). Members are <see cref="string"/>,
     /// <see cref="int"/>, <see cref="bool"/>, or <see langword="null"/>; nothing else is
     /// representable.
+    /// <para>
+    /// <b>Whole-field only.</b> There is one options list per field and nothing recording where
+    /// in the field's type the literal sits, so a <c>list[Literal['fast', 'slow']]</c> cannot be
+    /// validated from here — the value the engine checks is the list, and no list equals
+    /// <c>'fast'</c>. For a literal nested inside a container the generator therefore leaves this
+    /// <see langword="null"/> and validates element by element inside the
+    /// <see cref="WireReader"/> it already emits for that field; setting both would reject every
+    /// such file. Matching note on <c>Engine.ObjectMaterializer.ValidateLiteral</c>, which is
+    /// where the whole-field check lives.
+    /// </para>
     /// </remarks>
     public IReadOnlyList<object?>? LiteralOptions { get; init; }
 

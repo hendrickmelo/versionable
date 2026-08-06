@@ -11,18 +11,33 @@ namespace Versionable.Tests;
 /// implementation tasks; these assert only on the pinned surface.
 /// </summary>
 /// <remarks>
-/// The three registries are process-wide statics, so each test starts by resetting them
-/// through the internal test seam. xUnit runs the tests of one class serially, which is what
-/// makes that safe; a second test class touching the registries would need its own xUnit
-/// collection to stay off this one's toes.
+/// The three registries are process-wide statics, so each test starts from an empty one through
+/// the internal <c>Reset</c> seam — the only way to assert on collision behavior without the rest
+/// of the assembly's registrations in the way.
+/// <para>
+/// A reset here is destructive beyond this class: every built-in converter and the JSON backend
+/// arrive through <c>[ModuleInitializer]</c> methods, which run once per process and can never be
+/// re-run, so a naive reset silently disarms every later test that resolves a converter. Two
+/// things make it safe. <see cref="Dispose"/> puts all of it back by hand, and this class is in
+/// <see cref="RegistryCollection"/> with every other class that reads a registry, so nothing runs
+/// in the window between the reset and the restore.
+/// </para>
 /// </remarks>
-public class ContractsSmokeTests
+[Collection(RegistryCollection.Name)]
+public class ContractsSmokeTests : IDisposable
 {
     public ContractsSmokeTests()
     {
         VersionableRegistry.Reset();
         BackendRegistry.Reset();
         ConverterRegistry.Reset();
+    }
+
+    /// <summary>Restores everything the constructor's reset removed.</summary>
+    public void Dispose()
+    {
+        GoldenSchemas.EnsureRegistered();
+        GC.SuppressFinalize(this);
     }
 
     [Fact]
@@ -67,6 +82,8 @@ public class ContractsSmokeTests
     [Fact]
     public void hash_mismatch_message_names_the_computed_hash()
     {
+        // Both hashes are arbitrary; nothing computes them. In particular "74a182" is unrelated to
+        // SmokeConfig's real hash "c81f91" — see the Describe helper below.
         HashMismatchException error = new("Config", "74a182", "a1b2c3");
 
         Assert.Equal("74a182", error.Declared);
@@ -191,6 +208,9 @@ public class ContractsSmokeTests
         Assert.Equal("prod", metadata.Fields[0].Getter(instance));
         Assert.Equal("str", metadata.Fields[0].CanonicalType);
         Assert.Equal(1, metadata.Version);
+
+        // Describe's own placeholder, not SmokeConfig's real hash "c81f91": this asserts that the
+        // record carries what it was given, and never recomputes it.
         Assert.Equal("74a182", metadata.Hash);
         Assert.Equal(UnknownFieldPolicy.Ignore, metadata.Unknown);
     }
@@ -243,6 +263,21 @@ public class ContractsSmokeTests
         Assert.Equal("VersionableMetadataGenerator", marker.Value);
     }
 
+    /// <summary>
+    /// Metadata built by hand, for the registry and descriptor assertions.
+    /// </summary>
+    /// <remarks>
+    /// <c>Hash</c> is a placeholder and is deliberately <em>not</em> <see cref="SmokeConfig"/>'s
+    /// real hash <c>c81f91</c>, which the analyzer computes from the declaration and the generator
+    /// emits. Nothing here recomputes a hash: these tests are about the registry and the
+    /// descriptor shape, and a payload-derived literal would suggest otherwise. The two values
+    /// sitting in one file is the deliberate part — a hand-built descriptor and a generated one
+    /// are different objects and are never compared.
+    /// </remarks>
+    /// <param name="clrType">Type to describe.</param>
+    /// <param name="name">Serialization Name to claim.</param>
+    /// <param name="oldNames">Previously used names that must still resolve.</param>
+    /// <returns>The metadata.</returns>
     private static VersionableMetadata Describe(Type clrType, string name, string[]? oldNames = null) => new()
     {
         ClrType = clrType,
@@ -308,16 +343,21 @@ public class ContractsSmokeTests
 }
 
 /// <summary>
-/// Minimal declaration proving the attribute surface binds and composes. Hash is a
-/// placeholder — nothing computes hashes until task 2b.
+/// Minimal declaration proving the attribute surface binds and composes.
 /// </summary>
 /// <remarks>
 /// <c>partial</c> because the generator implements
 /// <see cref="IVersionableMetadataProvider"/> by emitting another part of the type, and a
 /// static abstract member cannot be implemented from outside its declaring type. Every
 /// <c>[Versionable]</c> type must be declared this way.
+/// <para>
+/// The hash is the real one now that the analyzer computes it:
+/// <c>Mode:Literal['fast', 'slow'],name:str</c>. <c>Mode</c> keeps its C# casing because only
+/// <c>Name</c> carries a <c>[VersionableField]</c> override — the pair is deliberate, it
+/// shows both wire-name paths in one payload.
+/// </para>
 /// </remarks>
-[Versionable(Version = 1, Hash = "74a182", Unknown = UnknownFieldPolicy.Error)]
+[Versionable(Version = 1, Hash = "c81f91", Unknown = UnknownFieldPolicy.Error)]
 [SerializationName("SmokeConfig")]
 public sealed partial class SmokeConfig(string name, string mode)
 {

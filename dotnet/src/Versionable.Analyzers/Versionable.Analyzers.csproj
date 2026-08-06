@@ -15,9 +15,17 @@
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The canonical grammar renderer and the schema model are internal: they are an
+         implementation detail shared by the analyzer and the generator, not API. The tests
+         drive them directly, because the conformance vectors assert on the rendered string
+         and the payload, not on a diagnostic. -->
+    <InternalsVisibleTo Include="Versionable.Tests" />
+  </ItemGroup>
+
   <!-- AnalyzerReleases.Shipped.md / .Unshipped.md sit next to this file; the analyzer
        package's build props pick them up as AdditionalFiles automatically. They are the
-       release-tracking ledger (RS2008) for the diagnostics landing in task 2b. -->
+       release-tracking ledger (RS2008) for the diagnostics. -->
 
   <ItemGroup>
     <!-- Phase 5 owns packaging; this item states the intended package layout so the
