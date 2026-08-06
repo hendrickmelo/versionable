@@ -138,6 +138,10 @@ serializationName := identifier                                      ; bare; nev
 `int`/`float` field is width-less, so widening a C# field is a lossless, language-local detail. Out-of-range values fail
 loudly at load, not at hash time.
 
+C# `char` erases the same way, into `str`: Python has no character type, and a one-character string is what a `char` is
+on the wire. The same erasure applies to a `Literal` option — `[LiteralValues('a')]` renders `Literal['a']`,
+indistinguishable from the string spelling.
+
 `bool` is **never** collapsed into `int`, in either direction.
 
 `None` is most often seen as a `Union` member (§6), but it is also legal as a **standalone** field type — a field whose
@@ -232,6 +236,13 @@ Notes:
 - `byte[]` is a **carve-out**: it renders `bytes` (§4), not an array. Use `Tensor<byte>` for a `uint8` array.
 - Bare `ndarray` is the dynamic-dtype escape hatch. C# has no equivalent (`Tensor<T>` is always typed), so a bare
   `ndarray` field is Python-only and cannot be mirrored in C#.
+- **0-d (scalar) arrays cannot materialize in C#.** Shape is erased from the hash, so a 0-d `float64` array and a 1-D
+  one render the same `ndarray[float64]` and a Python schema holding one hashes identically in C#; the file, however,
+  will not load. `System.Numerics.Tensors` normalizes an empty shape to rank 1 length 0 —
+  `Tensor.Create(new[] { 7.0 }, [])` reports `FlattenedLength == 0` — so a numpy scalar array has no faithful
+  `Tensor<T>` representation. The C# NPY/NPZ codec reads and writes shape `()` correctly; the converter refuses to hand
+  one to `Tensor<T>` rather than silently reshaping it. Store the value as a scalar field, or as a shape-`(1,)` array,
+  if the file must be readable from both languages.
 - Python performs runtime dtype validation on dtype-annotated fields: safe casts are applied silently, unsafe mismatches
   raise.
 - The pre-version-1 leaked form `ndarray[tuple[typing.Any, Ellipsis], numpy.dtype[numpy.float64]]` is gone (§12).
@@ -308,14 +319,21 @@ the six containers, plus `Union`, `ndarray`, `Literal`) are **dropped**. So `re.
 anyway, and preserving it would require every implementation to agree on how to render language-specific generic
 arguments. Vector `parameterized-non-container` locks this.
 
-Declaring an override in Python:
+Declaring an override:
 
-| Kind                | Mechanism                                                        |
-| ------------------- | ---------------------------------------------------------------- |
-| `Versionable` class | `class Foo(Versionable, ..., name="Bar")`                        |
-| Enum                | `VERSIONABLE_NAME` class attribute, assigned after the enum body |
-| Converter type      | `registerConverter(..., name="Bar")`                             |
-| Anything else       | `setSerializationName(SomeType, "Bar")`                          |
+| Kind                | Python                                            | C#                                 |
+| ------------------- | ------------------------------------------------- | ---------------------------------- |
+| `Versionable` class | `class Foo(Versionable, ..., name="Bar")`         | `[SerializationName("Bar")]`       |
+| Enum                | `VERSIONABLE_NAME` attribute, after the enum body | `[SerializationName("Bar")]`       |
+| Converter type      | `registerConverter(..., name="Bar")`              | `IWireConverter.SerializationName` |
+| Anything else       | `setSerializationName(SomeType, "Bar")`           | `[SerializationName("Bar")]`       |
+
+C# unifies Python's three declaration sites into one attribute, which applies to classes, structs, enums, and interfaces
+alike; `[Versionable]` therefore has no `Name` member. The one case C# cannot express is Python's
+`setSerializationName()` applied to a type the caller does not own — an attribute has to go on the declaration. A
+foreign type reachable from a schema either keeps its bare name or is wrapped. Note also that an explicit
+`[SerializationName]` wins over the built-in converter names in the table below: a type declaring one renders that name
+even where a converter would otherwise have supplied one.
 
 Built-in converter types and their canonical names:
 
@@ -343,34 +361,38 @@ not change the schema hash.
 `float`, and `list[Annotated[float, 'volts']]` renders `list[float]`.
 
 The same rule holds for C# attributes that carry documentation or validation metadata: they do not appear in the hash.
-`[VersionableField("...")]` is the exception — it changes the **wire name**, which is part of the payload (§1).
+Two are exceptions, because both change the payload itself (§1): `[VersionableField("...")]` changes a field's **wire
+name**, and `[VersionableIgnore]` removes the field from the schema outright. Python needs no counterpart to the latter
+— a dataclass field is an annotated attribute, so anything that should not persist simply goes unannotated.
 
 ## 11. C# → grammar mapping (summary)
 
-| C#                                                                 | Canonical                     |
-| ------------------------------------------------------------------ | ----------------------------- |
-| `byte`, `sbyte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong` | `int`                         |
-| `float`, `double`                                                  | `float`                       |
-| `string`                                                           | `str`                         |
-| `bool`                                                             | `bool`                        |
-| `byte[]`                                                           | `bytes` (carve-out)           |
-| `System.Numerics.Complex`                                          | `complex`                     |
-| `decimal`                                                          | `Decimal`                     |
-| `Guid`                                                             | `UUID`                        |
-| `DateTime`, `DateTimeOffset`                                       | `datetime`                    |
-| `DateOnly` / `TimeOnly` / `TimeSpan`                               | `date` / `time` / `timedelta` |
-| `Regex`                                                            | `Pattern`                     |
-| `FilePath`                                                         | `Path`                        |
-| `T?` (nullable value type or nullable reference type)              | `Union[None, T]` (sorted)     |
-| `List<T>`, `T[]` (except `byte[]`)                                 | `list[T]`                     |
-| `Dictionary<K, V>`                                                 | `dict[K, V]`                  |
-| `HashSet<T>`                                                       | `set[T]`                      |
-| `FrozenSet<T>`                                                     | `frozenset[T]`                |
-| `(A, B)` / `ValueTuple<A, B>`                                      | `tuple[A, B]`                 |
-| `Tensor<double>`                                                   | `ndarray[float64]` (§7)       |
-| `enum` type                                                        | Serialization Name            |
-| Versionable class                                                  | Serialization Name            |
-| `[LiteralValues(...)]` property                                    | `Literal[...]`                |
+| C#                                                                 | Canonical                      |
+| ------------------------------------------------------------------ | ------------------------------ |
+| `byte`, `sbyte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong` | `int`                          |
+| `nint`, `nuint`                                                    | `int`                          |
+| `char`                                                             | `str` (a one-character string) |
+| `float`, `double`                                                  | `float`                        |
+| `string`                                                           | `str`                          |
+| `bool`                                                             | `bool`                         |
+| `byte[]`                                                           | `bytes` (carve-out)            |
+| `System.Numerics.Complex`                                          | `complex`                      |
+| `decimal`                                                          | `Decimal`                      |
+| `Guid`                                                             | `UUID`                         |
+| `DateTime`, `DateTimeOffset`                                       | `datetime`                     |
+| `DateOnly` / `TimeOnly` / `TimeSpan`                               | `date` / `time` / `timedelta`  |
+| `Regex`                                                            | `Pattern`                      |
+| `FilePath`                                                         | `Path`                         |
+| `T?` (nullable value type or nullable reference type)              | `Union[None, T]` (sorted)      |
+| `List<T>`, `T[]` (except `byte[]`)                                 | `list[T]`                      |
+| `Dictionary<K, V>`                                                 | `dict[K, V]`                   |
+| `HashSet<T>`                                                       | `set[T]`                       |
+| `FrozenSet<T>`                                                     | `frozenset[T]`                 |
+| `(A, B)` / `ValueTuple<A, B>`                                      | `tuple[A, B]`                  |
+| `Tensor<double>`                                                   | `ndarray[float64]` (§7)        |
+| `enum` type                                                        | Serialization Name             |
+| Versionable class                                                  | Serialization Name             |
+| `[LiteralValues(...)]` property                                    | `Literal[...]`                 |
 
 ## 12. Changes in grammar version 1
 
@@ -424,16 +446,33 @@ uniqueness (§9), the closed `Literal` member-kind list (§8), and the wire-name
 }
 ```
 
-| Key          | Required | Meaning                                                                              |
-| ------------ | -------- | ------------------------------------------------------------------------------------ |
-| `name`       | yes      | Unique, stable vector id. Test failures cite it.                                     |
-| `note`       | yes      | Description, incl. the source annotation when it differs from the canonical string.  |
-| `fields`     | yes      | `wireName` → canonical type string.                                                  |
-| `payload`    | yes      | The `,`-joined, name-sorted pairs (§1). Redundant, so a bad sort is caught directly. |
-| `hash`       | yes      | 6 lowercase hex characters.                                                          |
-| `pythonOnly` | no       | `true` when the construct has no C# equivalent; the C# suite skips these.            |
-| `mustMatch`  | no       | Vector names whose `hash` must equal this one's. Reciprocal.                         |
-| `mustDiffer` | no       | Vector names whose `hash` must differ from this one's. Reciprocal.                   |
+| Key                | Required | Meaning                                                                              |
+| ------------------ | -------- | ------------------------------------------------------------------------------------ |
+| `name`             | yes      | Unique, stable vector id. Test failures cite it.                                     |
+| `note`             | yes      | Description, incl. the source annotation when it differs from the canonical string.  |
+| `fields`           | yes      | `wireName` → canonical type string.                                                  |
+| `payload`          | yes      | The `,`-joined, name-sorted pairs (§1). Redundant, so a bad sort is caught directly. |
+| `hash`             | yes      | 6 lowercase hex characters.                                                          |
+| `pythonOnly`       | no       | `true` when the construct has no C# equivalent; the C# suite skips these.            |
+| `csharpDeclarable` | no       | `false` when C# can _read_ but not _declare_ the form; the C# suite excuses these.   |
+| `mustMatch`        | no       | Vector names whose `hash` must equal this one's. Reciprocal.                         |
+| `mustDiffer`       | no       | Vector names whose `hash` must differ from this one's. Reciprocal.                   |
+
+`pythonOnly` and `csharpDeclarable` are not opposites and never apply to the same vector. `pythonOnly` marks a construct
+with no C# form at all — a standalone `None` field, a bare `ndarray`, a variadic tuple — so neither language can be
+asked to agree about it. `csharpDeclarable: false` marks a form C# must still _reproduce the hash of_, because a
+Python-written file can contain it, but which no C# type declaration can produce: the only current case is a `Union` of
+three or more members, since C# spells optionality as `T?` and has no n-ary union type. A C# implementation passes such
+a vector by reading its `payload`, not by declaring a fixture.
+
+There is a third case, which the vectors do not carry but the golden corpus does: a schema whose C# mirror is _loadable
+but not hash-identical_, because one of its fields uses a construct C# renders differently. The `containers` fixture
+(`tuple[float, ...]` → `list[float]`, `846dc8` → `51917e`) and the `stdlib` fixture (`PurePosixPath` / `PureWindowsPath`
+→ `Path`, `c3ff88` → `b38e82`) are the two current instances, recorded under `knownGaps` in
+[`golden/index.json`](golden/index.json). **The consequence is a standing constraint: the envelope hash cannot become a
+load-time cross-language gate.** A reader that rejected a file whose stored hash disagreed with the loading type's would
+refuse those two fixtures in C# while accepting them in Python. The hash is a definition-time schema-drift check — the
+analyzer in C#, class definition in Python — and any future load-time validation must exclude or special-case them.
 
 **`fields` key order is informational only.** Some vectors deliberately declare fields out of sorted order to exercise
 §1 step 3, but JSON object key order is not guaranteed by every parser. `payload` is the **authoritative** ordered form:

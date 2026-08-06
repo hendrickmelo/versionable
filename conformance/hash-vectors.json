@@ -230,6 +230,7 @@
     {
       "name": "union-sorting",
       "note": "Declared as Union[str, int, bool]; members are sorted by their rendered canonical strings, so declaration order is irrelevant.",
+      "csharpDeclarable": false,
       "fields": {
         "value": "Union[bool, int, str]"
       },
@@ -248,6 +249,7 @@
     {
       "name": "union-none-middle",
       "note": "'None' lands in the middle: Decimal < None < Path.",
+      "csharpDeclarable": false,
       "fields": {
         "value": "Union[Decimal, None, Path]"
       },
@@ -257,6 +259,7 @@
     {
       "name": "union-nested",
       "note": "Union members may themselves be containers; they sort by their full rendered string ('None' < 'list[int]' < 'str').",
+      "csharpDeclarable": false,
       "fields": {
         "value": "Union[None, list[int], str]"
       },
@@ -275,6 +278,7 @@
     {
       "name": "union-of-serialization-names",
       "note": "Serialization Names take part in union sorting like any other token.",
+      "csharpDeclarable": false,
       "fields": {
         "node": "Union[Leaf, Node, None]"
       },

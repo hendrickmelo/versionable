@@ -101,6 +101,13 @@
       "status": "specified, Python-only, omitted from the corpus",
       "detail": "GRAMMAR.md section 7 defines bare 'ndarray' as the dynamic-dtype escape hatch. C# Tensor<T> is always typed, so a bare ndarray field cannot be mirrored in C# and no golden file could be read by both implementations. Vector 'ndarray-bare' is marked pythonOnly for the same reason. The 'arrays' fixture covers only declared, hash-significant dtypes.",
       "followUp": "none — by design"
+    },
+    {
+      "construct": "fixtures whose C# schema hash differs from the manifest's",
+      "example": "containers (846dc8 -> 51917e), stdlib (c3ff88 -> b38e82)",
+      "status": "specified, loadable in both languages, NOT hash-identical",
+      "detail": "Two fixtures declare Python constructs C# has no spelling for, so the C# mirror renders a different canonical payload and therefore a different schema hash. 'containers' declares samples: tuple[float, ...]; GRAMMAR.md section 5 lists the variadic tuple as having no C# equivalent, so C# declares double[] and renders list[float], hashing 51917e instead of 846dc8. 'stdlib' declares posixPath: PurePosixPath and windowsPath: PureWindowsPath; GRAMMAR.md section 9 lists both as '(none)' in C#, so all three path fields are FilePath and render Path, hashing b38e82 instead of c3ff88. Neither divergence affects the wire form: both fixtures load in C# and every value compares equal to this manifest, which is why they stay in the corpus. FORWARD CONSTRAINT: the envelope hash therefore CANNOT become a load-time cross-language gate. A reader that rejected a file whose stored hash disagreed with the loading type's would refuse these two fixtures in C# while accepting them in Python. Any future load-time hash validation must exclude or special-case them — or the two constructs must first gain C# spellings, at which point the C# suite's 'a_fixture_csharp_cannot_spell_mirrors_everything_but_its_hash' theory fails and says so. The hash remains what it has always been: a build-time/definition-time schema-drift check, validated by the analyzer in C# and at class definition in Python.",
+      "followUp": "revisit if load-time hash validation is ever proposed"
     }
   ]
 }
