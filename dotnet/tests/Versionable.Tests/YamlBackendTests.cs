@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using Versionable.Backends;
 using Versionable.Backends.Yaml;
@@ -735,22 +734,5 @@ public class YamlBackendTests : IDisposable
         }
     }
 
-    private static string GoldenRoot()
-    {
-        for (DirectoryInfo? directory = new(AppContext.BaseDirectory);
-            directory is not null;
-            directory = directory.Parent)
-        {
-            string candidate = Path.Combine(directory.FullName, "conformance", "golden");
-            if (File.Exists(Path.Combine(candidate, "index.json")))
-            {
-                return candidate;
-            }
-        }
-
-        throw new InvalidOperationException(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"conformance/golden not found above '{AppContext.BaseDirectory}'."));
-    }
+    private static string GoldenRoot() => GoldenCorpus.Root;
 }

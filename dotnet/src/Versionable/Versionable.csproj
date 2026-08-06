@@ -6,9 +6,14 @@
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
-  <!-- NuGet metadata. Packaging and publishing are wired in phase 5; nothing packs on build. -->
+  <!-- NuGet metadata. Nothing packs on build; `dotnet pack` and the publish-nuget workflow do. -->
   <PropertyGroup>
     <PackageId>Versionable</PackageId>
+    <!-- A placeholder, not a release version. The release workflow passes -p:Version from the
+         `dotnet-vX.Y.Z` tag; the default would otherwise be 1.0.0, which is a plausible-looking
+         version to publish by accident. Versions are chosen at release time (ADR-0004: the
+         major.minor generation is shared with the PyPI package). -->
+    <Version>0.0.0-dev</Version>
     <Authors>Hendrick Melo</Authors>
     <Description>Versioned persistence with schema hash validation, declarative migrations, and pluggable storage backends. Files interchange with the Python `versionable` package.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -39,5 +44,28 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Versionable.Tests" />
   </ItemGroup>
+
+  <!-- The analyzer ships inside this package rather than as a package of its own (ADR-0003):
+       referencing the runtime is what should turn on the compile-time hash check and the
+       metadata generator, since the runtime cannot work without generated metadata. NuGet
+       treats anything under analyzers/dotnet/cs as an analyzer, so the assembly is loaded by
+       the compiler and never becomes a reference — which matters here, because it targets
+       netstandard2.0 and references Roslyn.
+
+       The path comes from the resolved @(Analyzer) item rather than a hand-built bin path, so
+       it follows configuration and target framework. The condition is required: @(Analyzer)
+       also holds the SDK's own analyzers, which must not be redistributed. -->
+  <Target Name="_PackVersionableAnalyzer" BeforeTargets="_GetPackageFiles" DependsOnTargets="ResolveReferences">
+    <ItemGroup>
+      <None Include="@(Analyzer)"
+            Condition="'%(Filename)%(Extension)' == 'Versionable.Analyzers.dll'"
+            Pack="true"
+            PackagePath="analyzers/dotnet/cs"
+            Visible="false" />
+    </ItemGroup>
+
+    <Error Condition="'@(None->WithMetadataValue('PackagePath', 'analyzers/dotnet/cs'))' == ''"
+           Text="Versionable.Analyzers.dll was not found among the resolved analyzers, so the package would ship without its analyzer and generator. Check the ProjectReference's OutputItemType." />
+  </Target>
 
 </Project>

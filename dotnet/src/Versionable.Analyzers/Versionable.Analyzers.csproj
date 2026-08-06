@@ -27,10 +27,9 @@
        package's build props pick them up as AdditionalFiles automatically. They are the
        release-tracking ledger (RS2008) for the diagnostics. -->
 
-  <ItemGroup>
-    <!-- Phase 5 owns packaging; this item states the intended package layout so the
-         analyzer lands under analyzers/dotnet/cs when packing is switched on. -->
-    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
-  </ItemGroup>
+  <!-- This project ships no package of its own: the analyzer travels inside the Versionable
+       nupkg (ADR-0003), because a consumer who references the runtime must get the
+       compile-time hash check and the metadata generator, not opt into them separately.
+       Versionable.csproj's _PackVersionableAnalyzer target does the packing. -->
 
 </Project>

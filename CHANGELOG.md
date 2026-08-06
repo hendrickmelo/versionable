@@ -1,5 +1,49 @@
 # Changelog
 
+## Unreleased
+
+**Breaking change: every schema hash changes.** The canonical type grammar — the string a schema hashes to — was cleaned
+up so that two implementations of versionable can compute the same hash for the same schema. The file format is
+untouched and old files still load; what changes is the `hash="..."` literal every `Versionable` subclass declares.
+
+**Upgrading.** Import your modules and let the hash check tell you the new values: each class raises `HashMismatchError`
+at definition time with the message `declared 'abc123', computed 'def456'. Update the hash parameter to 'def456'.` Fix
+one, re-import, repeat. To collect them all in one pass instead of one per import, call
+`versionable.ignoreHashErrors(True)` first — every mismatch is then logged as a warning carrying the same computed hash,
+and nothing raises.
+
+Grammar changes, all of which move hashes:
+
+- Enums, converter-backed types, and any type reached by fallthrough render as a **bare class name** instead of a
+  module-qualified path, so moving a class between files no longer changes a hash. Names must now be unique across a
+  schema's reachable types; duplicates are rejected at class definition. Override with `VERSIONABLE_NAME`,
+  `registerConverter(name=...)`, or `setSerializationName()`.
+- numpy arrays render as `ndarray[<dtype>]` against a closed dtype-token table rather than whatever `np.dtype.name`
+  returns, which drifted between numpy 1.x and 2.x. The dtype is now enforced at runtime as well as hashed: safe casts
+  are applied per element and unsafe ones raise `DtypeMismatchError`, on lazy HDF5 loads included
+  ([ADR-0002](docs/adr/0002-array-dtype-hash-significant.md)).
+- `Literal` values render unprefixed, with strings quoted and integers bare, so `Literal['1']` and `Literal[1]` are now
+  distinct schemas. Enum members take precedence over their values. `Literal` members that are not `str`, `int`, `bool`,
+  `None`, or an enum member are rejected at class definition.
+- Variadic tuples render `tuple[T, ...]`, and non-container types never carry type parameters.
+- Self-referential annotations resolve at class definition, so a self-referencing class hashes to what the grammar says
+  it should. Annotations that still cannot resolve — mutual recursion between two classes — fall back to their raw
+  source text and now warn that the resulting hash may not be reproducible by another implementation.
+
+Also in this release:
+
+- **A C# implementation.** The `Versionable` NuGet package is the same library for .NET: same canonical grammar, same
+  file format, same migration semantics, and files written by either implementation load in the other. A Roslyn analyzer
+  validates each type's declared hash at compile time and a source generator emits its metadata, so the runtime never
+  reflects over user types and supports Native AOT and trimming
+  ([ADR-0003](docs/adr/0003-csharp-compile-time-validation-codegen.md)). The two packages share their `major.minor`:
+  matching that digit pair means interchangeable files ([ADR-0004](docs/adr/0004-shared-generation-versioning.md)). See
+  [`dotnet/README.md`](dotnet/README.md), including its HDF5 compression notes — gzip interchanges everywhere, some
+  other filters do not.
+- `conformance/` holds the cross-language contract: the grammar specification, hash vectors, and a golden corpus of
+  files with per-fixture manifests. CI reads it from both languages and, on every pull request, has each
+  implementation's writers checked against the other's readers.
+
 ## 0.2.1 (2026-05-08)
 
 - Nested `Versionable` dataclasses with a field named `object`, `version`, `hash`, `format`, `format_be`, or

@@ -7,25 +7,52 @@ comparable form. The C# suite reads the same bytes and asserts against the same 
 These tests never regenerate anything: they load the committed bytes and compare. A failure
 means either a serializer changed behaviour (regenerate deliberately with
 `pixi run -- python conformance/generate_golden.py` and review the diff) or a reader broke.
+
+`TestForeignWrittenCorpus` at the bottom is the exception: it reads files *another
+implementation* wrote, from a directory named by `VERSIONABLE_FOREIGN_CORPUS`, and is skipped
+when that variable is unset. It is the Python end of the C#-writes/Python-reads leg of the
+bidirectional conformance job in `.github/workflows/ci.yml`.
+
+Setting that variable also makes this module's backend dependencies mandatory rather than
+skippable — see `_require_backend`. Without that, a dependency regression would skip the file at
+collection time and the CI step would pass having asserted nothing.
 """
 
 from __future__ import annotations
 
+import importlib
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+import versionable
+from versionable import Versionable
+from versionable._base import metadata as get_metadata
+
+FOREIGN_ROOT_VARIABLE = "VERSIONABLE_FOREIGN_CORPUS"
+_FOREIGN_ROOT = os.environ.get(FOREIGN_ROOT_VARIABLE)
+
+# Asking for the foreign-corpus leg makes these backends mandatory rather than skippable. The
+# importorskips below are right in the minimal environment, which has no numpy or h5py and should
+# not pretend to run corpus tests. They are wrong once a caller has set FOREIGN_ROOT_VARIABLE: a
+# dependency regression would then skip this file at collection time, pytest would exit 0, and the
+# CI step would go green having made zero cross-language assertions. Importing here instead turns
+# that into a collection error. Deliberately keyed off the same variable rather than a second
+# "required" flag — two flags can be set independently, which is the failure this exists to prevent.
+if _FOREIGN_ROOT:
+    for _module in ("numpy", "yaml", "tomlkit", "h5py"):
+        importlib.import_module(_module)
+
+# These gate the corpus tests, not `versionable` itself, which imports fine without them — hence
+# their position below the imports above rather than at the top of the file.
 pytest.importorskip("numpy")
 pytest.importorskip("yaml")
 pytest.importorskip("tomlkit")
 pytest.importorskip("h5py")
-
-import versionable
-from versionable import Versionable
-from versionable._base import metadata as get_metadata
 
 _CONFORMANCE_DIR = Path(__file__).resolve().parent.parent / "conformance"
 if str(_CONFORMANCE_DIR) not in sys.path:
@@ -300,3 +327,76 @@ class TestWireFormat:
         with h5py.File(GOLDEN_ROOT / "arrays" / "arrays.h5", "r") as handle:
             for name, dtype in expected.items():
                 assert handle[name].dtype == dtype
+
+
+# ---------------------------------------------------------------------------
+# Files another implementation wrote
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not _FOREIGN_ROOT, reason=f"{FOREIGN_ROOT_VARIABLE} is unset")
+class TestForeignWrittenCorpus:
+    """Files written by the C# implementation load here into the values the manifests record.
+
+    This is the direction the committed corpus cannot cover. `conformance/golden/` is
+    Python-written, so every other test in this file — and every corpus test on the C# side —
+    exercises Python's writers against one reader or the other. Nothing checks that C#'s writers
+    produce files *Python* accepts until something runs the C# writer and points this at it.
+
+    The C# entry point is `CorpusWriterTests` in `dotnet/tests/Versionable.Tests/`, run with
+    `VERSIONABLE_CORPUS_OUT` set; CI wires the two together. The expected values still come from
+    the committed manifests: the foreign directory holds data files only, so a mistake on either
+    side shows up as a value mismatch rather than as two implementations agreeing on a
+    self-consistent error.
+
+    Migration sources are absent by construction — no writer emits an envelope for a version
+    other than its type's current one — so this covers current-version files, and the other
+    direction covers old-file migration.
+    """
+
+    @staticmethod
+    def _root() -> Path:
+        assert _FOREIGN_ROOT is not None  # guaranteed by the skipif above
+        root = Path(_FOREIGN_ROOT).resolve()
+        assert root.is_dir(), f"{FOREIGN_ROOT_VARIABLE} points at {root}, which is not a directory"
+        return root
+
+    @pytest.mark.parametrize(("fixture", "backend"), _current_cases())
+    def test_values_match_the_manifest(self, fixture: str, backend: str) -> None:
+        manifest = _manifest(fixture)
+        cls = _schema_class(manifest["serializationName"])
+        path = self._root() / fixture / manifest["files"][backend]
+
+        assert path.is_file(), f"the foreign corpus is missing {fixture}/{manifest['files'][backend]}"
+        assert _encode(_load(cls, path)) == manifest["values"]
+
+    @pytest.mark.parametrize("fixture", FIXTURE_NAMES)
+    def test_the_envelope_names_the_expected_schema(self, fixture: str) -> None:
+        """The foreign writer stamped the right Serialization Name and version.
+
+        The *hash* is deliberately not asserted equal. Two fixtures declare Python constructs C#
+        has no spelling for, so their C# schema hash legitimately differs — see the third entry
+        in `conformance/golden/index.json`'s `knownGaps`, which also records why that forbids the
+        envelope hash from ever becoming a load-time cross-language gate. This test is what keeps
+        that constraint honest: it passes for a divergent hash, and would have to change if the
+        hash ever became a gate.
+        """
+        manifest = _manifest(fixture)
+        envelope = _load_json(self._root() / fixture / manifest["files"]["json"])["__versionable__"]
+
+        assert envelope["object"] == manifest["serializationName"]
+        assert envelope["version"] == manifest["version"]
+        assert envelope["hash"]
+
+    @pytest.mark.parametrize("fixture", FIXTURE_NAMES)
+    def test_all_foreign_backends_agree_with_each_other(self, fixture: str) -> None:
+        """A value that survives the foreign JSON writer but not its TOML writer would hide."""
+        manifest = _manifest(fixture)
+        cls = _schema_class(manifest["serializationName"])
+        encoded = {
+            backend: _encode(_load(cls, self._root() / fixture / file_name))
+            for backend, file_name in manifest["files"].items()
+        }
+        reference = encoded["json"]
+        for backend, values in encoded.items():
+            assert values == reference, f"{backend} disagrees with json for fixture {fixture!r}"

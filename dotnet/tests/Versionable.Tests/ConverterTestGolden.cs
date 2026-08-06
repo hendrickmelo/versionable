@@ -1,21 +1,18 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 namespace Versionable.Tests;
 
 /// <summary>
-/// Locates and parses the checked-in golden corpus.
+/// Parses files out of the golden corpus <see cref="GoldenCorpus"/> resolves.
 /// </summary>
 /// <remarks>
-/// The corpus under <c>conformance/golden/</c> is Python-written and is the contract
-/// (<c>docs/plans/csharp-port.md</c>, § Conformance): each fixture pairs a
-/// <c>manifest.json</c> of expected values with the four backend files that hold them. Tests
-/// read the bytes from the repository rather than from a copied build artefact, so a fixture
-/// regenerated on the Python side is picked up without a corresponding change here.
+/// Each fixture pairs a <c>manifest.json</c> of expected values with the four backend files that
+/// hold them; this reads either. The corpus is Python-written and is the contract
+/// (<c>docs/plans/csharp-port.md</c>, § Conformance).
 /// </remarks>
 internal static class ConverterTestGolden
 {
-    private static readonly string _goldenRoot = FindGoldenRoot();
+    private static readonly string _goldenRoot = GoldenCorpus.Root;
 
     /// <summary>Reads a file out of one fixture directory.</summary>
     /// <param name="fixture">Fixture directory name, e.g. <c>arrays</c>.</param>
@@ -41,32 +38,5 @@ internal static class ConverterTestGolden
     {
         using JsonDocument document = Read(fixture, fixture + ".json");
         return document.RootElement.Clone();
-    }
-
-    private static string FindGoldenRoot([CallerFilePath] string thisFile = "")
-    {
-        // Walk up rather than hard-coding a depth, and try the source location as well as the
-        // output one: bin/<config>/<tfm>/ sits under the repository for `dotnet test`, but not
-        // when the suite is compiled into a scratch project elsewhere.
-        return SearchUp(AppContext.BaseDirectory)
-            ?? SearchUp(Path.GetDirectoryName(thisFile))
-            ?? throw new DirectoryNotFoundException(
-                $"No conformance/golden/index.json above {AppContext.BaseDirectory} or {thisFile}.");
-    }
-
-    private static string? SearchUp(string? start)
-    {
-        for (DirectoryInfo? directory = start is null ? null : new DirectoryInfo(start);
-             directory is not null;
-             directory = directory.Parent)
-        {
-            string candidate = Path.Combine(directory.FullName, "conformance", "golden");
-            if (File.Exists(Path.Combine(candidate, "index.json")))
-            {
-                return candidate;
-            }
-        }
-
-        return null;
     }
 }

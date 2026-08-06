@@ -50,6 +50,75 @@ jobs:
       - name: Format check
         run: dotnet format --verify-no-changes
 
+  # Files written by either implementation must load in the other. Both suites already read the
+  # committed corpus under conformance/golden/ (the `ci` and `dotnet` jobs above cover that leg),
+  # but the committed corpus is Python-written, so on its own it only ever tests Python's writers.
+  # This job runs each language's writers against the other's readers, on files produced during the
+  # run. Its own steps say what each one proves.
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: prefix-dev/setup-pixi@v0.9.1
+        with:
+          environments: default
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build the C# suite
+        working-directory: dotnet
+        run: dotnet build -warnaserror
+
+      # ------------------------------------------------------------------
+      # Python writes -> C# reads
+      # ------------------------------------------------------------------
+
+      - name: Python writes every fixture fresh
+        run: pixi run -- python conformance/generate_golden.py --output "${{ runner.temp }}/python-corpus"
+
+      # Regenerating is meant to be a deliberate act, so a corpus that no longer matches what the
+      # current Python code emits is a stale contract and this says so. The .h5 files are excluded:
+      # their bytes depend on the HDF5 C library build, not only on this repository. Value equality
+      # for HDF5 is asserted by the corpus suites either way.
+      - name: The committed corpus is what Python still writes
+        run: diff -r -x '*.h5' conformance/golden "${{ runner.temp }}/python-corpus"
+
+      # The whole C# suite, not just the corpus classes: pointing GoldenCorpus.Root at the fresh
+      # directory redirects every manifest assertion, byte-identity theory, and migration-forward
+      # test at bytes written on this run.
+      - name: C# reads what Python just wrote
+        working-directory: dotnet
+        env:
+          VERSIONABLE_GOLDEN_ROOT: ${{ runner.temp }}/python-corpus
+        run: dotnet test --no-build
+
+      # ------------------------------------------------------------------
+      # C# writes -> Python reads
+      # ------------------------------------------------------------------
+
+      - name: C# writes every fixture
+        working-directory: dotnet
+        env:
+          VERSIONABLE_CORPUS_OUT: ${{ runner.temp }}/csharp-corpus
+        run: dotnet test --no-build --filter "FullyQualifiedName~CorpusWriterTests"
+
+      # Expected values come from the committed manifests, not from anything C# emitted alongside
+      # the data, so the two implementations cannot agree on a self-consistent wrong answer.
+      - name: Python reads what C# just wrote
+        env:
+          VERSIONABLE_FOREIGN_CORPUS: ${{ runner.temp }}/csharp-corpus
+        run: |
+          # Two ways this step could pass without comparing anything, both closed. Here: an empty
+          # or partial output directory (11 fixtures x 4 backends). In the test module: setting
+          # VERSIONABLE_FOREIGN_CORPUS also turns its numpy/yaml/tomlkit/h5py importorskips into
+          # hard imports, so a dependency regression is a collection error rather than a skip.
+          written=$(find "$VERSIONABLE_FOREIGN_CORPUS" -type f | wc -l)
+          test "$written" -eq 44 || { echo "::error::expected 44 C#-written files, found $written"; exit 1; }
+          pixi run -- pytest tests/test_golden_corpus.py -k ForeignWrittenCorpus -v
+
   docs:
     runs-on: ubuntu-latest
     steps:

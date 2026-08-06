@@ -47,6 +47,7 @@ that ordering is a manifest detail and says nothing about the on-disk file forma
 
 from __future__ import annotations
 
+import argparse
 import base64
 import datetime
 import json
@@ -432,9 +433,9 @@ def writeAllBackends(obj: Versionable, directory: Path, stem: str) -> dict[str, 
     return written
 
 
-def buildManifest(fixture: Fixture) -> dict[str, Any]:
-    """Build the manifest for *fixture*, writing its files as a side effect."""
-    directory = GOLDEN_ROOT / fixture.name
+def buildManifest(fixture: Fixture, root: Path = GOLDEN_ROOT) -> dict[str, Any]:
+    """Build the manifest for *fixture*, writing its files under *root* as a side effect."""
+    directory = root / fixture.name
     directory.mkdir(parents=True, exist_ok=True)
 
     meta = getMetadata(type(fixture.obj))
@@ -465,17 +466,17 @@ def buildManifest(fixture: Fixture) -> dict[str, Any]:
     return manifest
 
 
-def main() -> None:
-    """Regenerate the whole corpus from scratch."""
-    if GOLDEN_ROOT.exists():
-        shutil.rmtree(GOLDEN_ROOT)
-    GOLDEN_ROOT.mkdir(parents=True)
+def generate(root: Path = GOLDEN_ROOT) -> None:
+    """Regenerate the whole corpus from scratch under *root*."""
+    if root.exists():
+        shutil.rmtree(root)
+    root.mkdir(parents=True)
 
     fixtures = buildFixtures()
     index: list[dict[str, Any]] = []
     for fixture in fixtures:
-        manifest = buildManifest(fixture)
-        manifestPath = GOLDEN_ROOT / fixture.name / "manifest.json"
+        manifest = buildManifest(fixture, root)
+        manifestPath = root / fixture.name / "manifest.json"
         manifestPath.write_text(
             json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=False) + "\n",
             encoding="utf-8",
@@ -491,7 +492,7 @@ def main() -> None:
         )
         print(f"wrote {fixture.name}: {len(manifest['files'])} backends")
 
-    indexPath = GOLDEN_ROOT / "index.json"
+    indexPath = root / "index.json"
     indexPath.write_text(
         json.dumps(
             {"backends": BACKENDS, "fixtures": index, "knownGaps": KNOWN_GAPS},
@@ -501,9 +502,26 @@ def main() -> None:
         + "\n",
         encoding="utf-8",
     )
-    print(
-        f"wrote {indexPath.relative_to(CONFORMANCE_DIR.parent)} ({len(index)} fixtures, {len(KNOWN_GAPS)} known gaps)"
+    print(f"wrote {indexPath} ({len(index)} fixtures, {len(KNOWN_GAPS)} known gaps)")
+
+
+def main() -> None:
+    """Regenerate the corpus, into ``conformance/golden/`` or wherever ``--output`` says.
+
+    ``--output`` is what the bidirectional conformance job uses: CI regenerates every fixture
+    into a scratch directory and points the C# suite at it via ``VERSIONABLE_GOLDEN_ROOT``, so
+    the Python-writes/C#-reads direction is tested against bytes written on that run rather than
+    against the committed ones.  Writing to a scratch directory never touches the corpus, so the
+    job cannot mask a serializer change by regenerating over the contract.
+    """
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=GOLDEN_ROOT,
+        help="directory to write the corpus into (default: conformance/golden/). Deleted first.",
     )
+    generate(parser.parse_args().output.resolve())
 
 
 if __name__ == "__main__":

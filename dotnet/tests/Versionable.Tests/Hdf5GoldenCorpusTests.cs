@@ -28,7 +28,7 @@ namespace Versionable.Tests;
 [Collection(RegistryCollection.Name)]
 public class Hdf5GoldenCorpusTests
 {
-    private static readonly string _goldenRoot = FindGoldenRoot();
+    private static readonly string _goldenRoot = GoldenCorpus.Root;
 
     public Hdf5GoldenCorpusTests()
     {
@@ -552,24 +552,5 @@ public class Hdf5GoldenCorpusTests
             File.ReadAllBytes(Path.Combine(_goldenRoot, fixture, "manifest.json")));
 
         return document.RootElement.Clone();
-    }
-
-    private static string FindGoldenRoot()
-    {
-        for (DirectoryInfo? directory = new(AppContext.BaseDirectory);
-            directory is not null;
-            directory = directory.Parent)
-        {
-            string candidate = Path.Combine(directory.FullName, "conformance", "golden");
-            if (File.Exists(Path.Combine(candidate, "index.json")))
-            {
-                return candidate;
-            }
-        }
-
-        throw new InvalidOperationException(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"conformance/golden not found above '{AppContext.BaseDirectory}'."));
     }
 }
