@@ -1,3 +1,4 @@
+using System.Numerics.Tensors;
 using Versionable.Engine;
 using Versionable.Migrations;
 
@@ -599,4 +600,341 @@ internal sealed class EngineLiteralList(List<string> modes) : IVersionableMetada
                 $"EngineLiteralList.modes: value '{value}' is not a valid Literal option. "
                     + $"Allowed values: ['{string.Join("', '", _allowed)}'].");
     }
+}
+
+/// <summary>
+/// Tuple-valued fields, which the walker has to lower without a generated writer.
+/// </summary>
+/// <remarks>
+/// A tuple gets a <see cref="FieldDescriptor.WireReader"/> — constructing one needs generated help
+/// — but no <see cref="FieldDescriptor.WireWriter"/>, because lowering it does not: the engine
+/// walks it through <see cref="System.Runtime.CompilerServices.ITuple"/>. The descriptors below
+/// leave <c>wireWriter</c> null on purpose; filling it in would hide the engine path this fixture
+/// exists to exercise.
+/// </remarks>
+internal sealed class EngineTupleHolder((int Code, string Label) pair, (int Id, (double X, string Tag) Inner) nested)
+    : IVersionableMetadataProvider
+{
+    /// <summary>A flat two-element tuple of mixed element types.</summary>
+    public (int Code, string Label) Pair { get; } = pair;
+
+    /// <summary>A tuple holding another tuple, which recurses through the same path.</summary>
+    public (int Id, (double X, string Tag) Inner) Nested { get; } = nested;
+
+    /// <summary>Metadata, as the generator would emit it.</summary>
+    public static VersionableMetadata Metadata { get; } = new()
+    {
+        ClrType = typeof(EngineTupleHolder),
+        Name = "EngineTupleHolder",
+        Version = 1,
+        Hash = "555555",
+        Fields =
+        [
+            TestMetadata.Field<EngineTupleHolder>(
+                "pair", "Pair", typeof((int, string)), "tuple[int, str]",
+                holder => holder.Pair,
+                () => default((int, string)),
+                wire =>
+                {
+                    IReadOnlyList<object?> items = WireValues.AsList(wire);
+                    return (TestMetadata.Scalar<int>(items[0]), TestMetadata.Scalar<string>(items[1]));
+                }),
+            TestMetadata.Field<EngineTupleHolder>(
+                "nested", "Nested", typeof((int, (double, string))), "tuple[int, tuple[float, str]]",
+                holder => holder.Nested,
+                () => default((int, (double, string))),
+                wire =>
+                {
+                    IReadOnlyList<object?> items = WireValues.AsList(wire);
+                    IReadOnlyList<object?> inner = WireValues.AsList(items[1]);
+                    return (
+                        TestMetadata.Scalar<int>(items[0]),
+                        (TestMetadata.Scalar<double>(inner[0]), TestMetadata.Scalar<string>(inner[1])));
+                }),
+        ],
+        Factory = values => new EngineTupleHolder(
+            ((int, string))values[0]!, ((int, (double, string)))values[1]!),
+    };
+
+    static VersionableMetadata IVersionableMetadataProvider.VersionableMetadata => Metadata;
+}
+
+/// <summary>
+/// An array field that declares a default, for the <c>MetadataOnly</c> path.
+/// </summary>
+/// <remarks>
+/// The counterpart of <c>GoldenArrays</c>, whose array fields are <c>required</c> with no
+/// initializer. A backend told to skip a field hands the materializer a name with no value, and
+/// what happens next turns entirely on whether the schema said what an unset value is — so both
+/// halves need a fixture.
+/// </remarks>
+internal sealed class EngineLazyHolder(string label, int count, Tensor<double> samples)
+    : IVersionableMetadataProvider
+{
+    /// <summary>A scalar, which <c>MetadataOnly</c> still reads.</summary>
+    public string Label { get; } = label;
+
+    /// <summary>Another scalar.</summary>
+    public int Count { get; } = count;
+
+    /// <summary>An array, which <c>MetadataOnly</c> skips — and which declares a default.</summary>
+    public Tensor<double> Samples { get; } = samples;
+
+    /// <summary>The value a skipped <see cref="Samples"/> comes back as.</summary>
+    public static Tensor<double> EmptySamples { get; } = Tensor.Create(Array.Empty<double>(), [(nint)0]);
+
+    /// <summary>Metadata, as the generator would emit it.</summary>
+    public static VersionableMetadata Metadata { get; } = new()
+    {
+        ClrType = typeof(EngineLazyHolder),
+        Name = "EngineLazyHolder",
+        Version = 1,
+        Hash = "666666",
+        Fields =
+        [
+            TestMetadata.Field<EngineLazyHolder>(
+                "label", "Label", typeof(string), "str", holder => holder.Label, () => ""),
+            TestMetadata.Field<EngineLazyHolder>(
+                "count", "Count", typeof(int), "int", holder => holder.Count, () => 0),
+            TestMetadata.Field<EngineLazyHolder>(
+                "samples", "Samples", typeof(Tensor<double>), "ndarray[float64]",
+                holder => holder.Samples,
+                () => EmptySamples),
+        ],
+        Factory = values => new EngineLazyHolder(
+            (string)values[0]!, (int)values[1]!, (Tensor<double>)values[2]!),
+    };
+
+    static VersionableMetadata IVersionableMetadataProvider.VersionableMetadata => Metadata;
+}
+
+/// <summary>An array field with no default, for the strict half of the skipped-field semantic.</summary>
+internal sealed class EngineStrictArray(Tensor<double> values) : IVersionableMetadataProvider
+{
+    /// <summary>An array the schema gives no stand-in for.</summary>
+    public Tensor<double> Values { get; } = values;
+
+    /// <summary>Metadata, as the generator would emit it.</summary>
+    public static VersionableMetadata Metadata { get; } = new()
+    {
+        ClrType = typeof(EngineStrictArray),
+        Name = "EngineStrictArray",
+        Version = 1,
+        Hash = "777777",
+        Fields =
+        [
+            TestMetadata.Field<EngineStrictArray>(
+                "values", "Values", typeof(Tensor<double>), "ndarray[float64]", holder => holder.Values),
+        ],
+        Factory = values => new EngineStrictArray((Tensor<double>)values[0]!),
+    };
+
+    static VersionableMetadata IVersionableMetadataProvider.VersionableMetadata => Metadata;
+}
+
+/// <summary>An object whose nested object has a skippable array with a default.</summary>
+internal sealed class EngineNestedLazy(string label, EngineLazyHolder inner) : IVersionableMetadataProvider
+{
+    /// <summary>A scalar at the root.</summary>
+    public string Label { get; } = label;
+
+    /// <summary>The nested object, whose own array field is what gets skipped.</summary>
+    public EngineLazyHolder Inner { get; } = inner;
+
+    /// <summary>Metadata, as the generator would emit it.</summary>
+    public static VersionableMetadata Metadata { get; } = new()
+    {
+        ClrType = typeof(EngineNestedLazy),
+        Name = "EngineNestedLazy",
+        Version = 1,
+        Hash = "888888",
+        Fields =
+        [
+            TestMetadata.Field<EngineNestedLazy>(
+                "label", "Label", typeof(string), "str", outer => outer.Label, () => ""),
+            TestMetadata.Field<EngineNestedLazy>(
+                "inner", "Inner", typeof(EngineLazyHolder), "EngineLazyHolder", outer => outer.Inner),
+        ],
+        Factory = values => new EngineNestedLazy((string)values[0]!, (EngineLazyHolder)values[1]!),
+    };
+
+    static VersionableMetadata IVersionableMetadataProvider.VersionableMetadata => Metadata;
+}
+
+/// <summary>An object whose nested object has a skippable array with no default.</summary>
+internal sealed class EngineNestedStrict(string label, EngineStrictArray inner) : IVersionableMetadataProvider
+{
+    /// <summary>A scalar at the root.</summary>
+    public string Label { get; } = label;
+
+    /// <summary>The nested object with the unsubstitutable array.</summary>
+    public EngineStrictArray Inner { get; } = inner;
+
+    /// <summary>Metadata, as the generator would emit it.</summary>
+    public static VersionableMetadata Metadata { get; } = new()
+    {
+        ClrType = typeof(EngineNestedStrict),
+        Name = "EngineNestedStrict",
+        Version = 1,
+        Hash = "999999",
+        Fields =
+        [
+            TestMetadata.Field<EngineNestedStrict>(
+                "label", "Label", typeof(string), "str", outer => outer.Label, () => ""),
+            TestMetadata.Field<EngineNestedStrict>(
+                "inner", "Inner", typeof(EngineStrictArray), "EngineStrictArray", outer => outer.Inner),
+        ],
+        Factory = values => new EngineNestedStrict((string)values[0]!, (EngineStrictArray)values[1]!),
+    };
+
+    static VersionableMetadata IVersionableMetadataProvider.VersionableMetadata => Metadata;
+}
+
+/// <summary>
+/// A collection of nested objects, each with a skippable array — two levels down, through a
+/// generated container reader that never sees an element's index.
+/// </summary>
+internal sealed class EngineDeepLazy(string label, List<EngineLazyHolder> items) : IVersionableMetadataProvider
+{
+    /// <summary>A scalar at the root.</summary>
+    public string Label { get; } = label;
+
+    /// <summary>The elements, whose skipped array field records once, as <c>items/samples</c>.</summary>
+    public List<EngineLazyHolder> Items { get; } = items;
+
+    /// <summary>Metadata, as the generator would emit it.</summary>
+    public static VersionableMetadata Metadata { get; } = new()
+    {
+        ClrType = typeof(EngineDeepLazy),
+        Name = "EngineDeepLazy",
+        Version = 1,
+        Hash = "aabbcc",
+        Fields =
+        [
+            TestMetadata.Field<EngineDeepLazy>(
+                "label", "Label", typeof(string), "str", outer => outer.Label, () => ""),
+            TestMetadata.Field<EngineDeepLazy>(
+                "items", "Items", typeof(List<EngineLazyHolder>), "list[EngineLazyHolder]",
+                outer => outer.Items,
+                () => new List<EngineLazyHolder>(),
+                wire => TestMetadata.ReadList(
+                    wire, item => (EngineLazyHolder)WireValues.ReadVersionable(item, EngineLazyHolder.Metadata))),
+        ],
+        Factory = values => new EngineDeepLazy((string)values[0]!, (List<EngineLazyHolder>)values[1]!),
+    };
+
+    static VersionableMetadata IVersionableMetadataProvider.VersionableMetadata => Metadata;
+}
+
+/// <summary>
+/// A dictionary of lists of nested objects: the skipped array is two containers down.
+/// </summary>
+/// <remarks>
+/// The shape that broke index-qualified paths. With indexes recorded, the reader wrote
+/// <c>groups/g1/0/samples</c> and no amount of prefix arithmetic could match it back to an element
+/// the engine only knows as "an element". With indexes collapsed it records <c>groups/samples</c>,
+/// and one segment of narrowing carries it to every element at any depth.
+/// </remarks>
+internal sealed class EngineGroupedLazy(Dictionary<string, List<EngineLazyHolder>> groups)
+    : IVersionableMetadataProvider
+{
+    /// <summary>Nested objects two containers down.</summary>
+    public Dictionary<string, List<EngineLazyHolder>> Groups { get; } = groups;
+
+    /// <summary>Metadata, as the generator would emit it.</summary>
+    public static VersionableMetadata Metadata { get; } = new()
+    {
+        ClrType = typeof(EngineGroupedLazy),
+        Name = "EngineGroupedLazy",
+        Version = 1,
+        Hash = "bbccdd",
+        Fields =
+        [
+            TestMetadata.Field<EngineGroupedLazy>(
+                "groups", "Groups", typeof(Dictionary<string, List<EngineLazyHolder>>),
+                "dict[str, list[EngineLazyHolder]]",
+                outer => outer.Groups,
+                () => new Dictionary<string, List<EngineLazyHolder>>(StringComparer.Ordinal),
+                wire => TestMetadata.ReadMap(
+                    wire,
+                    key => key,
+                    list => TestMetadata.ReadList(
+                        list, item => (EngineLazyHolder)WireValues.ReadVersionable(item, EngineLazyHolder.Metadata)))),
+        ],
+        Factory = values => new EngineGroupedLazy((Dictionary<string, List<EngineLazyHolder>>)values[0]!),
+    };
+
+    static VersionableMetadata IVersionableMetadataProvider.VersionableMetadata => Metadata;
+}
+
+/// <summary>The same shape, with an element type that declares no default.</summary>
+internal sealed class EngineGroupedStrict(Dictionary<string, List<EngineStrictArray>> groups)
+    : IVersionableMetadataProvider
+{
+    /// <summary>Nested objects two containers down, none of which can stand in for a skipped array.</summary>
+    public Dictionary<string, List<EngineStrictArray>> Groups { get; } = groups;
+
+    /// <summary>Metadata, as the generator would emit it.</summary>
+    public static VersionableMetadata Metadata { get; } = new()
+    {
+        ClrType = typeof(EngineGroupedStrict),
+        Name = "EngineGroupedStrict",
+        Version = 1,
+        Hash = "ccddee",
+        Fields =
+        [
+            TestMetadata.Field<EngineGroupedStrict>(
+                "groups", "Groups", typeof(Dictionary<string, List<EngineStrictArray>>),
+                "dict[str, list[EngineStrictArray]]",
+                outer => outer.Groups,
+                () => new Dictionary<string, List<EngineStrictArray>>(StringComparer.Ordinal),
+                wire => TestMetadata.ReadMap(
+                    wire,
+                    key => key,
+                    list => TestMetadata.ReadList(
+                        list,
+                        item => (EngineStrictArray)WireValues.ReadVersionable(
+                            item, EngineStrictArray.Metadata)))),
+        ],
+        Factory = values => new EngineGroupedStrict((Dictionary<string, List<EngineStrictArray>>)values[0]!),
+    };
+
+    static VersionableMetadata IVersionableMetadataProvider.VersionableMetadata => Metadata;
+}
+
+/// <summary>
+/// A list of dictionaries of nested objects — three container levels, to prove depth does not
+/// matter.
+/// </summary>
+internal sealed class EngineLayeredLazy(List<Dictionary<string, EngineLazyHolder>> layers)
+    : IVersionableMetadataProvider
+{
+    /// <summary>Nested objects behind a list and then a dictionary.</summary>
+    public List<Dictionary<string, EngineLazyHolder>> Layers { get; } = layers;
+
+    /// <summary>Metadata, as the generator would emit it.</summary>
+    public static VersionableMetadata Metadata { get; } = new()
+    {
+        ClrType = typeof(EngineLayeredLazy),
+        Name = "EngineLayeredLazy",
+        Version = 1,
+        Hash = "ddeeff",
+        Fields =
+        [
+            TestMetadata.Field<EngineLayeredLazy>(
+                "layers", "Layers", typeof(List<Dictionary<string, EngineLazyHolder>>),
+                "list[dict[str, EngineLazyHolder]]",
+                outer => outer.Layers,
+                () => new List<Dictionary<string, EngineLazyHolder>>(),
+                wire => TestMetadata.ReadList(
+                    wire,
+                    layer => TestMetadata.ReadMap(
+                        layer,
+                        key => key,
+                        item => (EngineLazyHolder)WireValues.ReadVersionable(item, EngineLazyHolder.Metadata)))),
+        ],
+        Factory = values => new EngineLayeredLazy((List<Dictionary<string, EngineLazyHolder>>)values[0]!),
+    };
+
+    static VersionableMetadata IVersionableMetadataProvider.VersionableMetadata => Metadata;
 }

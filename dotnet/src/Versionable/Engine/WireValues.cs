@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using Versionable.Converters;
 using Versionable.Errors;
 
@@ -190,6 +191,14 @@ public static class WireValues
             return WriteSequence(sequence, IsSet(type), scope);
         }
 
+        if (value is ITuple tuple)
+        {
+            // A tuple is not IEnumerable, so it would otherwise fall off the end of this dispatch
+            // and be unwritable — which is what it was until a save of a tuple-bearing type failed
+            // on every text backend. It lowers to a list, as Python's tuple does.
+            return WriteTuple(tuple, scope);
+        }
+
         throw new UnsupportedTypeException(
             $"Cannot serialize '{type}' at field {Describe(scope.Path)}. Register an "
                 + $"{nameof(IWireConverter)} for it, or declare the type [Versionable].");
@@ -264,6 +273,34 @@ public static class WireValues
         {
             scope.Path = $"{parentPath}[{index}]";
             wire.Add(WriteValue(items[index], scope));
+        }
+
+        scope.Path = parentPath;
+        return wire;
+    }
+
+    /// <summary>
+    /// Lowers a tuple element-wise, the way Python lowers <c>tuple</c>: to a list.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ITuple"/> rather than reflection over <c>ItemN</c> fields: it is the interface
+    /// every <c>ValueTuple</c> and <c>Tuple</c> already implements, its indexer is a plain virtual
+    /// call, and it flattens the nested <c>Rest</c> field of an eight-or-more element tuple by
+    /// itself — so this stays reflection-free and AOT-safe (ADR-0003).
+    /// <para>
+    /// Only the write path needs this. Reading a tuple means constructing one, which is the
+    /// generated <see cref="FieldDescriptor.WireReader"/>'s job; there is no
+    /// <see cref="FieldDescriptor.WireWriter"/> for a tuple, because there does not need to be.
+    /// </para>
+    /// </remarks>
+    private static List<object?> WriteTuple(ITuple tuple, WriteScope scope)
+    {
+        string parentPath = scope.Path;
+        List<object?> wire = new(tuple.Length);
+        for (int index = 0; index < tuple.Length; index++)
+        {
+            scope.Path = $"{parentPath}[{index}]";
+            wire.Add(WriteValue(tuple[index], scope));
         }
 
         scope.Path = parentPath;

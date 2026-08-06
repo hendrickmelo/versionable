@@ -20,6 +20,27 @@ namespace Versionable.Backends;
 /// <paramref name="Fields"/>, because <see cref="BackendLoadOptions.Preload"/> or
 /// <see cref="BackendLoadOptions.MetadataOnly"/> excluded them. Empty for backends that always
 /// load eagerly.
+/// <para>
+/// <b>Entries are <c>/</c>-separated chains of <em>field names</em> relative to the load root</b>:
+/// <c>values</c> for a field of the root object, <c>inner/values</c> for a field of a nested
+/// object. A flat name is simply the zero-depth case, so a backend whose skips are all root-level
+/// — and a schema with no nesting — needs to do nothing differently.
+/// </para>
+/// <para>
+/// <b>Container indexes and keys never appear.</b> A <c>Dictionary&lt;string, List&lt;Inner&gt;&gt;</c>
+/// named <c>groups</c> whose element type skips <c>samples</c> records <c>groups/samples</c> once,
+/// however many elements there are and however deeply the containers nest. Every element of a
+/// container has one declared type, so a field skipped in one is skipped in all, and an index is
+/// not part of a skip's identity. It is also not reconstructable: the generated reader that
+/// materializes a container hands the engine an element, never which element, so a path carrying
+/// <c>0</c> could never be matched back to anything.
+/// </para>
+/// <para>
+/// The qualification is what lets the engine tell <em>which</em> object skipped a field. Without
+/// it, a nested skip is indistinguishable from a field the file never had, and the load reports
+/// a missing field instead of a skipped one — which is the bug this convention exists to make
+/// unrepresentable.
+/// </para>
 /// </param>
 public sealed record BackendLoadResult(
     IReadOnlyDictionary<string, object?> Fields,

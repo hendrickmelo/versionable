@@ -56,6 +56,31 @@ public sealed record VersionableLoadOptions
     /// <summary>
     /// Read the envelope and the non-array fields only. Python counterpart: <c>metadataOnly</c>.
     /// </summary>
+    /// <remarks>
+    /// <b>What the skipped fields hold afterwards.</b> Python leaves a sentinel in each skipped
+    /// field and raises <see cref="Errors.ArrayNotLoadedException"/> when something reads it, so the
+    /// failure lands on the access. C# v1 has no lazy-instance proxy — that is Tier 3 and post-v1 —
+    /// so a skipped field is resolved when the object is built instead:
+    /// <list type="bullet">
+    ///   <item>
+    ///     <description>
+    ///     A field with a <b>declared default</b> gets that default. A <c>MetadataOnly</c> load of
+    ///     such a type succeeds and carries its array fields unpopulated, at whatever the schema
+    ///     says an unset value is.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <description>
+    ///     A field with <b>no default</b> raises <see cref="Errors.ArrayNotLoadedException"/>,
+    ///     naming the field and this option. Substituting an empty array instead would be
+    ///     indistinguishable from a genuinely empty one — a caller could not tell a skipped read
+    ///     from real data, which is the one outcome worse than an error.
+    ///     </description>
+    ///   </item>
+    /// </list>
+    /// So <c>MetadataOnly</c> is for reading a file's envelope and scalars cheaply. To get an object
+    /// with its arrays, use <see cref="PreloadAll"/> or name the fields in <see cref="Preload"/>.
+    /// </remarks>
     public bool MetadataOnly { get; init; }
 
     /// <summary>

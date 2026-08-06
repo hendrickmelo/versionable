@@ -22,5 +22,58 @@ public sealed record BackendSaveOptions
     /// has comments (TOML, YAML). Ignored elsewhere. Python counterpart:
     /// <c>commentDefaults</c>.
     /// </summary>
+    /// <remarks>
+    /// Two backends implement this — <c>Versionable.Backends.Yaml.YamlBackend</c> and
+    /// <c>Versionable.Backends.Toml.TomlEmitter</c> — and they agree on what it means, which
+    /// Python's two do not. The rules, and the three places C# deliberately departs from Python:
+    /// <list type="number">
+    ///   <item>
+    ///     <description>
+    ///     <b>A defaulted field is commented out whole, including when it is a block.</b> A nested
+    ///     object or a list of them left at its default takes its header, its keys, and its
+    ///     <c>__versionable__</c> sub-table into the comment with it. Python's TOML backend leaves
+    ///     the header and the envelope live and comments only the data keys under them, which
+    ///     writes an envelope declaring an object the file does not actually set; "not set" already
+    ///     means "absent" for every other field, and a partly-commented block is not something a
+    ///     reader can uncomment correctly.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <description>
+    ///     <b>A commented block carries its full dotted path.</b> TOML writes
+    ///     <c># [[inner.items]]</c> where Python — which renders the default block in isolation —
+    ///     writes <c># [[items]]</c>. Deleting the <c>#</c> is the entire point of the line, and
+    ///     Python's spelling lands the values in a root field of that name rather than in the
+    ///     field the default came from.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <description>
+    ///     <b>Blank lines inside a commented block are dropped rather than written as a bare
+    ///     <c>#</c>.</b> Python emits the empty comment; nothing reads it either way.
+    ///     </description>
+    ///   </item>
+    /// </list>
+    /// <para>
+    /// <b>A commented block must survive being uncommented</b>, which is the whole reason to write
+    /// one, and in TOML that constrains where it goes: a bare <c>key = value</c> binds to the most
+    /// recent table header, so a live key printed after a commented <c>[section]</c> would join
+    /// that block's last table the moment a reader deletes the <c>#</c>. TOML therefore emits
+    /// commented sections with the other sections, after every key/value line at their level,
+    /// rather than inline where the field is declared. YAML needs no such rule: its comments are
+    /// indentation-scoped and a commented block is positionally inert.
+    /// </para>
+    /// <para>
+    /// One difference between the two C# backends remains, and it is the formats': TOML sections
+    /// are addressable, so a nested object the caller <em>did</em> set keeps its section and the
+    /// defaults still standing inside it are commented in place. YAML comments top-level fields
+    /// only — a nested mapping is emitted by the block emitter as one unit. Both, and the
+    /// uncommenting semantic above, are pinned by <c>YamlTomlCommentDefaultsTests</c>.
+    /// </para>
+    /// <para>
+    /// The envelope itself is never commented in either format, whatever the fields do: without it
+    /// the file loads version-less and, through the dynamic entry point, type-less.
+    /// </para>
+    /// </remarks>
     public bool CommentDefaults { get; init; }
 }

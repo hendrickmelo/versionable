@@ -2,7 +2,10 @@ using System.Collections.Frozen;
 using System.Numerics;
 using System.Numerics.Tensors;
 using System.Text.RegularExpressions;
+using Versionable.Backends.Hdf5;
 using Versionable.Backends.Json;
+using Versionable.Backends.Toml;
+using Versionable.Backends.Yaml;
 using Versionable.Converters;
 using Versionable.Engine;
 using Versionable.Errors;
@@ -87,6 +90,15 @@ internal static class GoldenSchemas
         EngineEnumHolder.Metadata,
         EngineNumbers.Metadata,
         EngineLiteralList.Metadata,
+        EngineTupleHolder.Metadata,
+        EngineLazyHolder.Metadata,
+        EngineStrictArray.Metadata,
+        EngineNestedLazy.Metadata,
+        EngineNestedStrict.Metadata,
+        EngineDeepLazy.Metadata,
+        EngineGroupedLazy.Metadata,
+        EngineGroupedStrict.Metadata,
+        EngineLayeredLazy.Metadata,
     ];
 
     /// <summary>
@@ -97,7 +109,14 @@ internal static class GoldenSchemas
     /// normally hold come from <c>[ModuleInitializer]</c> methods — which run once per process and
     /// can never be re-run. So a reset is only survivable if something can put the entries back by
     /// hand, and this is that something: the generated metadata of every <c>[Versionable]</c> type
-    /// in this assembly, plus the two module initializers <c>Versionable.dll</c> itself carries.
+    /// in this assembly, plus every module initializer <c>Versionable.dll</c> itself carries.
+    /// <para>
+    /// <b>All four backends, not just JSON.</b> The registry is one process-wide table, so a test
+    /// class that only re-registered the backend it happens to use left the other three missing for
+    /// whatever ran next in the same collection — which made the suite's result depend on class
+    /// order. Restoring the same set a fresh process would hold is what makes the collection
+    /// order-independent, and it is why no test class registers a backend of its own.
+    /// </para>
     /// <para>
     /// Called from the constructor of every test class in the registry collection, and from
     /// <see cref="ContractsSmokeTests.Dispose"/> — the one place that resets. Registering the same
@@ -116,6 +135,9 @@ internal static class GoldenSchemas
 
             BuiltinConverters.RegisterAll();
             JsonBackend.RegisterExtensions();
+            YamlBackend.RegisterExtensions();
+            TomlBackend.RegisterExtensions();
+            Hdf5Backend.RegisterExtensions();
         }
     }
 }

@@ -51,4 +51,20 @@ internal sealed class ReadScope
     /// class-scoped, so it crosses nested object boundaries unchanged — as it does in Python.
     /// </summary>
     public bool UpgradeInPlace { get; init; }
+
+    /// <summary>
+    /// Fields the backend skipped <em>in the object currently being materialized</em>, with the
+    /// path of everything above it already stripped.
+    /// </summary>
+    /// <remarks>
+    /// Ambient because a nested object is reached through
+    /// <see cref="WireValues.ReadVersionable"/> — from the engine for a plain nested field, and
+    /// from a generated container reader for an element — and neither route has anywhere to pass
+    /// the parent's skip set. The materializer narrows it on the way down and restores it on the
+    /// way back up.
+    /// </remarks>
+    public IReadOnlySet<string>? LazyFields { get; set; }
+
+    /// <summary>Path of the field being materialized, for messages. <c>/</c>-separated.</summary>
+    public string Path { get; set; } = string.Empty;
 }

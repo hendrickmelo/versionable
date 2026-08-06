@@ -113,6 +113,35 @@ public class EngineWalkerTests
     }
 
     [Fact]
+    public void a_tuple_lowers_to_a_list_without_a_generated_writer()
+    {
+        // Until this landed, a tuple fell off the end of the write dispatch — it is not
+        // IEnumerable — so saving any type with a tuple field failed on every text backend, while
+        // loading one worked. The generator emits no WireWriter for a tuple, and does not need to.
+        EngineTupleHolder holder = new((7, "seven"), (1, (2.5, "inner")));
+
+        IReadOnlyDictionary<string, object?> wire = WireValues.AsMap(WireValues.Write(holder));
+
+        Assert.Equal([7, "seven"], WireValues.AsList(wire["pair"]));
+
+        IReadOnlyList<object?> nested = WireValues.AsList(wire["nested"]);
+        Assert.Equal(1, nested[0]);
+        Assert.Equal([2.5, "inner"], WireValues.AsList(nested[1]));
+    }
+
+    [Fact]
+    public void a_tuple_round_trips_through_the_walker()
+    {
+        EngineTupleHolder holder = new((7, "seven"), (1, (2.5, "inner")));
+
+        EngineTupleHolder restored =
+            (EngineTupleHolder)WireValues.ReadVersionable(WireValues.Write(holder), EngineTupleHolder.Metadata);
+
+        Assert.Equal(holder.Pair, restored.Pair);
+        Assert.Equal(holder.Nested, restored.Nested);
+    }
+
+    [Fact]
     public void a_type_nothing_can_lower_is_rejected()
     {
         UnsupportedTypeException error = Assert.Throws<UnsupportedTypeException>(

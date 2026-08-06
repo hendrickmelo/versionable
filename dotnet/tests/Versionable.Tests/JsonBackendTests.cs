@@ -198,6 +198,39 @@ public class JsonBackendTests : IDisposable
     }
 
     [Fact]
+    public void a_type_with_tuple_fields_saves_and_loads_back_equal()
+    {
+        string path = Path.Combine(_directory, "tuples.json");
+        EngineTupleHolder holder = new((7, "seven"), (1, (2.5, "inner")));
+
+        VersionableFile.Save(holder, path);
+        EngineTupleHolder loaded = VersionableFile.Load<EngineTupleHolder>(path);
+
+        Assert.Equal(holder.Pair, loaded.Pair);
+        Assert.Equal(holder.Nested, loaded.Nested);
+    }
+
+    [Fact]
+    public void a_tuple_is_written_as_a_json_array()
+    {
+        // Python writes its tuples as JSON arrays, so a C#-written file has to look the same or
+        // Python cannot read it back into `tuple[int, str]`.
+        string path = Path.Combine(_directory, "tuples.json");
+
+        VersionableFile.Save(new EngineTupleHolder((7, "seven"), (1, (2.5, "inner"))), path);
+
+        using JsonDocument document = JsonDocument.Parse(File.ReadAllBytes(path));
+        JsonElement pair = document.RootElement.GetProperty("pair");
+        Assert.Equal(JsonValueKind.Array, pair.ValueKind);
+        Assert.Equal(7, pair[0].GetInt32());
+        Assert.Equal("seven", pair[1].GetString());
+
+        JsonElement nested = document.RootElement.GetProperty("nested");
+        Assert.Equal(JsonValueKind.Array, nested[1].ValueKind);
+        Assert.Equal(2.5, nested[1][0].GetDouble());
+    }
+
+    [Fact]
     public void integers_survive_the_round_trip_as_integers()
     {
         // Regression: the number reader used a conditional expression whose best common type was
