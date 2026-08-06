@@ -287,7 +287,7 @@ internal static class Hdf5Reader
     /// the case that looks like an oversight and is not: <c>_isArrayField(None)</c> returns
     /// <c>True</c>. An <em>unannotated dataset</em> is assumed to be array data, which is what
     /// makes the metadata-only probe cheap before the file has named its type — and
-    /// <c>VersionableFile.Load(path)</c> probes exactly that way, with no
+    /// <c>VersionableFile.LoadDynamic(path)</c> probes exactly that way, with no
     /// <see cref="BackendLoadOptions.TargetMetadata"/> to consult. An unannotated <em>group</em>
     /// is not assumed to be anything and is read, as Python reads it.
     /// <para>

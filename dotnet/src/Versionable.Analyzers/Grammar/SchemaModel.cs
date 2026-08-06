@@ -77,6 +77,35 @@ internal sealed class SchemaField
     internal Location Location { get; set; } = Location.None;
 }
 
+/// <summary>One migration declared in a type's nested <c>Migrate</c> class.</summary>
+/// <remarks>
+/// The member name is what the generator emits a reference to, so the pair (version, member) is
+/// the whole of what a compile-time chain needs: <c>MigrationStep.Of(1, Migrate.V1)</c> for a
+/// declarative member, and the same with a method group for an imperative one.
+/// </remarks>
+internal sealed class SchemaMigration
+{
+    /// <summary>Initializes a new instance of the <see cref="SchemaMigration"/> class.</summary>
+    /// <param name="fromVersion">Schema version the migration reads.</param>
+    /// <param name="memberName">Name of the member on the <c>Migrate</c> class.</param>
+    /// <param name="imperative">Whether the member is a <c>[Migration]</c> method.</param>
+    internal SchemaMigration(int fromVersion, string memberName, bool imperative)
+    {
+        FromVersion = fromVersion;
+        MemberName = memberName;
+        Imperative = imperative;
+    }
+
+    /// <summary>Schema version the migration reads; it produces data at one version later.</summary>
+    internal int FromVersion { get; }
+
+    /// <summary>Name of the member on the <c>Migrate</c> class.</summary>
+    internal string MemberName { get; }
+
+    /// <summary>Whether the member is a <c>[Migration]</c> method rather than a builder member.</summary>
+    internal bool Imperative { get; }
+}
+
 /// <summary>How the generator reconstructs an instance from field values.</summary>
 internal sealed class FactoryPlan
 {
@@ -138,8 +167,11 @@ internal sealed class SchemaModel
     /// <summary>Named types reachable from the fields that claim a Serialization Name.</summary>
     internal ImmutableArray<INamedTypeSymbol> ReferencedTypes { get; set; } = ImmutableArray<INamedTypeSymbol>.Empty;
 
-    /// <summary>Source versions found in the nested <c>Migrate</c> class, ascending.</summary>
-    internal ImmutableArray<int> MigrationVersions { get; set; } = ImmutableArray<int>.Empty;
+    /// <summary>
+    /// Migrations declared as members of the nested <c>Migrate</c> class, ascending by source
+    /// version. Empty when <see cref="MigrateTypeIsChain"/> is set, which supersedes them.
+    /// </summary>
+    internal ImmutableArray<SchemaMigration> Migrations { get; set; } = ImmutableArray<SchemaMigration>.Empty;
 
     /// <summary>
     /// Whether the nested <c>Migrate</c> type is itself an instantiable
@@ -147,9 +179,9 @@ internal sealed class SchemaModel
     /// <c>VersionableMetadata.Migrations</c>.
     /// </summary>
     /// <remarks>
-    /// The imperative escape hatch, and the only migration form that exists before the
-    /// declarative <c>Migration</c> builder lands in phase 4. See
-    /// <c>VersionableMetadataGenerator.RenderBody</c> for why the two forms cannot collide.
+    /// The escape hatch for a chain assembled at run time. Its source versions are a run-time
+    /// value, so neither the contiguity check nor the member collection applies to it — see
+    /// <c>VersionableMetadataGenerator.RenderBody</c>.
     /// </remarks>
     internal bool MigrateTypeIsChain { get; set; }
 
@@ -204,7 +236,7 @@ internal sealed class SchemaModel
                 // coherent, and failing to generate would bury the real diagnostic under a
                 // cascade of "does not implement IVersionableMetadataProvider" errors.
                 if (problem.Id != VersionableDiagnostics.HashMismatch
-                    && problem.Id != VersionableDiagnostics.MigrationChainGap
+                    && problem.Id != VersionableDiagnostics.MigrationChainInvalid
                     && problem.Id != VersionableDiagnostics.NullableContextDisabled)
                 {
                     return true;

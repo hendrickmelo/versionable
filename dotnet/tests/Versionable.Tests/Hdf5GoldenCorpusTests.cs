@@ -73,7 +73,7 @@ public class Hdf5GoldenCorpusTests
         string file,
         Type expected)
     {
-        object loaded = VersionableFile.Load(Path.Combine(_goldenRoot, fixture, file));
+        object loaded = VersionableFile.LoadDynamic(Path.Combine(_goldenRoot, fixture, file));
         Assert.IsType(expected, loaded);
     }
 
@@ -105,7 +105,7 @@ public class Hdf5GoldenCorpusTests
         Assert.Contains("traces", result.LazyFields!);
         Assert.Contains("channels", result.LazyFields!);
 
-        // The probe VersionableFile.Load(path) runs has no TargetMetadata — it is reading the
+        // The probe VersionableFile.LoadDynamic(path) runs has no TargetMetadata — it is reading the
         // file to find out what type to ask for. An unannotated dataset is assumed to be array
         // data there, which is the whole reason the probe is cheap; Python's _isArrayField makes
         // the same assumption for the same reason.

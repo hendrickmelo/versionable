@@ -128,7 +128,7 @@ public class JsonBackendTests : IDisposable
         string path = Path.Combine(_directory, "leaf.json");
         VersionableFile.Save(new EngineLeaf("tip", 1.5), path);
 
-        object loaded = VersionableFile.Load(path);
+        object loaded = VersionableFile.LoadDynamic(path);
 
         Assert.Equal("tip", Assert.IsType<EngineLeaf>(loaded).Name);
     }
@@ -141,7 +141,7 @@ public class JsonBackendTests : IDisposable
             path,
             """{"__versionable__": {"object": "NotRegistered", "version": 1, "hash": "000000"}}""");
 
-        BackendException error = Assert.Throws<BackendException>(() => VersionableFile.Load(path));
+        BackendException error = Assert.Throws<BackendException>(() => VersionableFile.LoadDynamic(path));
 
         Assert.Contains("Unknown object type 'NotRegistered'", error.Message, StringComparison.Ordinal);
     }

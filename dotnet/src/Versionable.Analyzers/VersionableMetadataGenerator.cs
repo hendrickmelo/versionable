@@ -174,15 +174,7 @@ public sealed class VersionableMetadataGenerator : IIncrementalGenerator
 
         writer.Line($"Factory = static values => {FactoryExpression(model, self)},");
 
-        // The imperative migration form: a nested `Migrate` that is itself an IMigrationChain.
-        // The declarative form — `static class Migrate` holding V1/V2 builder members — needs
-        // the phase-4 `Migration` type to compose a chain from, and is emitted then; the two
-        // shapes cannot collide, because a static class can neither implement an interface nor
-        // be constructed.
-        if (model.MigrateTypeIsChain)
-        {
-            writer.Line($"Migrations = new {self}.{SchemaModelBuilder.MigrateClassName}(),");
-        }
+        RenderMigrations(writer, model, self);
 
         writer.CloseWith("};");
 
@@ -191,6 +183,55 @@ public sealed class VersionableMetadataGenerator : IIncrementalGenerator
             writer.Line();
             RenderRegistration(writer, model, self, hide);
         }
+    }
+
+    /// <summary>
+    /// Emits <c>VersionableMetadata.Migrations</c> from whichever of the two declaration forms the
+    /// type used.
+    /// </summary>
+    /// <remarks>
+    /// A nested <c>Migrate</c> that is itself an <c>IMigrationChain</c> is handed over as-is; that
+    /// is the escape hatch for a chain decided at run time. Otherwise the members of the nested
+    /// <c>Migrate</c> class — <c>V1</c>/<c>V2</c> builders and <c>[Migration]</c> methods — are
+    /// composed into one <c>MigrationChain</c> here, at compile time, which is what Python's
+    /// <c>resolveMigrations</c> does by walking <c>dir(Migrate)</c> on every load.
+    /// <para>
+    /// The two forms are checked in that order rather than assumed disjoint: a <c>Migrate</c> that
+    /// implements the interface may also hold builder members, and the interface is the more
+    /// explicit statement of intent.
+    /// </para>
+    /// </remarks>
+    private static void RenderMigrations(Writer writer, SchemaModel model, string self)
+    {
+        string migrate = $"{self}.{SchemaModelBuilder.MigrateClassName}";
+
+        if (model.MigrateTypeIsChain)
+        {
+            writer.Line($"Migrations = new {migrate}(),");
+            return;
+        }
+
+        if (model.Migrations.Length == 0)
+        {
+            return;
+        }
+
+        writer.Line($"Migrations = new {Runtime}Migrations.MigrationChain(");
+        writer.Indent();
+        for (int i = 0; i < model.Migrations.Length; i++)
+        {
+            SchemaMigration migration = model.Migrations[i];
+
+            // The last step closes the constructor call, and the comma after it is the object
+            // initializer's own separator.
+            string separator = i == model.Migrations.Length - 1 ? ")," : ",";
+            writer.Line(
+                $"{Runtime}Migrations.MigrationStep.Of("
+                    + $"{migration.FromVersion.ToString(CultureInfo.InvariantCulture)}, "
+                    + $"{migrate}.{migration.MemberName}){separator}");
+        }
+
+        writer.Outdent();
     }
 
     private static void RenderField(Writer writer, SchemaField field, string self)
@@ -214,8 +255,24 @@ public sealed class VersionableMetadataGenerator : IIncrementalGenerator
 
         if (field.DefaultExpression is not null)
         {
+            // The cast carries the nullable annotation for a reference type, because
+            // `Foo? Star { get; init; } = null;` is an ordinary declaration and `(Foo)(null)` is
+            // CS8600 — an error under the TreatWarningsAsErrors this repo and its consumers use,
+            // reported against generated source the author cannot edit. A field declared where
+            // nullable is switched off gets the same treatment: the annotation is unknown there,
+            // but the generated file is always `#nullable enable`, so a null default would trip
+            // the same diagnostic.
+            //
+            // Value types keep their exact spelling. Widening `int` to `int?` here would turn
+            // `= default` into null rather than 0, which the engine would then hand to the
+            // factory as a missing value.
+            bool castNullable = field.ClrType.IsReferenceType
+                && field.ClrType.NullableAnnotation != NullableAnnotation.NotAnnotated;
+
             writer.Line("HasDefault = true,");
-            writer.Line($"DefaultFactory = static () => ({clrType})({field.DefaultExpression}),");
+            writer.Line(
+                $"DefaultFactory = static () => ({(castNullable ? FqNullable(field.ClrType) : clrType)})"
+                + $"({field.DefaultExpression}),");
         }
 
         if (field.IsLiteral)

@@ -92,8 +92,8 @@ public static class VersionableFile
     /// The file's envelope names a type, and this deliberately ignores it in favour of
     /// <typeparamref name="T"/> — a caller who asked for a <c>Config</c> gets a <c>Config</c> or
     /// an error. Python's <c>load(cls, path)</c> behaves the same way; resolving the type from the
-    /// file is what <see cref="Load(string, IVersionableBackend?, VersionableLoadOptions?)"/> is
-    /// for. Envelope-driven resolution still happens for <em>nested</em> values, which is what
+    /// file is what <see cref="LoadDynamic(string, IVersionableBackend?, VersionableLoadOptions?)"/>
+    /// is for. Envelope-driven resolution still happens for <em>nested</em> values, which is what
     /// makes polymorphic collections work.
     /// </remarks>
     /// <exception cref="VersionException">The file's version cannot be reconciled with the type's.</exception>
@@ -112,41 +112,108 @@ public static class VersionableFile
     /// Python counterpart: <c>loadDynamic()</c>. The envelope is read first, the Serialization
     /// Name resolved through <see cref="VersionableRegistry"/>, and the file then read in full —
     /// two reads, as Python does, because a backend that maps values onto declared field types
-    /// needs to know the type before it can do the real read.
+    /// needs to know the type before it can do the real read. Everything that follows is the
+    /// ordinary load: version dispatch, migrations, unknown-field policy, defaults.
+    /// <para>
+    /// Only types declared <c>Register = true</c> can be reached this way, because only they claim
+    /// a Serialization Name. Old names resolve too — the registry indexes them — so a file written
+    /// before a rename still loads.
+    /// </para>
     /// </remarks>
     /// <param name="path">Input path; its extension selects the backend.</param>
     /// <param name="backend">Backend to use instead of selecting by extension.</param>
     /// <param name="options">Load options; see <see cref="VersionableLoadOptions"/>.</param>
-    /// <returns>The loaded instance.</returns>
+    /// <returns>The loaded instance, typed as the file said it was.</returns>
     /// <exception cref="BackendException">
     /// The file names no type, or names one that is not registered.
     /// </exception>
-    public static object Load(
+    public static object LoadDynamic(
         string path,
         IVersionableBackend? backend = null,
         VersionableLoadOptions? options = null)
     {
         IVersionableBackend resolved = BackendRegistry.Resolve(path, backend);
-        BackendLoadResult probe = resolved.Load(
+        return LoadCore(ResolveFromEnvelope(path, resolved, out _), path, resolved, options);
+    }
+
+    /// <summary>
+    /// Loads an object whose type is named by the file's envelope, requiring it to be a
+    /// <typeparamref name="TBase"/>.
+    /// </summary>
+    /// <remarks>
+    /// Python counterpart: <c>loadDynamic(path, baseClass=...)</c>. The bound is checked before
+    /// the file is read in full, so a file naming the wrong type fails on its name rather than
+    /// part-way through materializing something the caller cannot use.
+    /// <para>
+    /// <b>The constraint is deliberately wider than Python's.</b> Python types <c>baseClass</c> as
+    /// <c>type[Versionable]</c>, so the bound must itself be persistable; here it is any reference
+    /// type, which additionally allows an <em>interface</em> the persistable types implement — a
+    /// bound C# schemas can express and Python's inheritance-based one cannot. Nothing is lost by
+    /// widening it: the check is assignability either way, and a bound no registered type
+    /// satisfies simply refuses every file rather than failing to compile.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TBase">The type the file's object must be assignable to.</typeparam>
+    /// <param name="path">Input path; its extension selects the backend.</param>
+    /// <param name="backend">Backend to use instead of selecting by extension.</param>
+    /// <param name="options">Load options; see <see cref="VersionableLoadOptions"/>.</param>
+    /// <returns>The loaded instance.</returns>
+    /// <exception cref="BackendException">
+    /// The file names no type, names one that is not registered, or names one that is not a
+    /// <typeparamref name="TBase"/>.
+    /// </exception>
+    public static TBase LoadDynamic<TBase>(
+        string path,
+        IVersionableBackend? backend = null,
+        VersionableLoadOptions? options = null)
+        where TBase : class
+    {
+        IVersionableBackend resolved = BackendRegistry.Resolve(path, backend);
+        VersionableMetadata metadata = ResolveFromEnvelope(path, resolved, out string name);
+
+        if (!typeof(TBase).IsAssignableFrom(metadata.ClrType))
+        {
+            throw new BackendException(
+                $"Object type '{name}' in '{path}' resolves to {metadata.ClrType}, which is not "
+                    + $"assignable to {typeof(TBase)}.");
+        }
+
+        return (TBase)LoadCore(metadata, path, resolved, options);
+    }
+
+    private static VersionableMetadata ResolveFromEnvelope(
+        string path,
+        IVersionableBackend backend,
+        out string name)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+
+        BackendLoadResult probe = backend.Load(
             path,
             new BackendLoadOptions { Preload = FrozenSet<string>.Empty, MetadataOnly = true });
 
-        string? name = probe.Envelope.ObjectName;
-        if (string.IsNullOrEmpty(name))
+        string? objectName = probe.Envelope.ObjectName;
+        if (string.IsNullOrEmpty(objectName))
         {
+            // Deliberately not Python's message. There, a missing name defaults to "" and falls
+            // into the same registry lookup as a real one, so the file is reported as naming an
+            // unknown type called '' — which sends a reader looking for a type rather than at the
+            // file, and hides the fact that the generic overload would have loaded it. Same
+            // exception type, same failure point; only the wording differs.
             throw new BackendException(
                 $"'{path}' records no object name, so its type cannot be resolved. Load it with "
                     + $"{nameof(Load)}<T>() instead.");
         }
 
-        if (!VersionableRegistry.TryGetByName(name, out VersionableMetadata? metadata))
+        if (!VersionableRegistry.TryGetByName(objectName, out VersionableMetadata? metadata))
         {
             throw new BackendException(
-                $"Unknown object type '{name}' in '{path}'. The type is not registered, it has been "
-                    + "removed, or it is declared Register = false.");
+                $"Unknown object type '{objectName}' in '{path}'. The type is not registered, it has "
+                    + "been removed, or it is declared Register = false.");
         }
 
-        return LoadCore(metadata, path, resolved, options);
+        name = objectName;
+        return metadata;
     }
 
     private static void SaveCore(
@@ -159,14 +226,20 @@ public static class VersionableFile
         ArgumentException.ThrowIfNullOrEmpty(path);
 
         IVersionableBackend resolved = BackendRegistry.Resolve(path, backend);
+        BackendSaveOptions saveOptions = options ?? new BackendSaveOptions();
+
+        // The type's declaration is the default and the caller's option overrides it; Python has
+        // only the declaration, so `null` here is Python's behavior exactly.
+        bool skipDefaults = saveOptions.SkipDefaults ?? metadata.SkipDefaults;
 
         Dictionary<string, object?> raw = new(metadata.Fields.Count, StringComparer.Ordinal);
         foreach (FieldDescriptor field in metadata.Fields)
         {
             object? fieldValue = field.Getter(value);
 
-            if (metadata.SkipDefaults && field.HasDefault && field.DefaultFactory is not null
-                && Equals(fieldValue, field.DefaultFactory()))
+            // Root fields only, matching Python's save(). WireValues.WriteVersionable says why a
+            // nested object never drops one.
+            if (skipDefaults && WireEquality.IsAtDefault(field, fieldValue, metadata, resolved.NativeTypes))
             {
                 continue;
             }
@@ -179,7 +252,7 @@ public static class VersionableFile
             new EnvelopeMetadata(metadata.Name, metadata.Version, metadata.Hash),
             path,
             metadata,
-            options ?? new BackendSaveOptions());
+            saveOptions);
     }
 
     private static object LoadCore(

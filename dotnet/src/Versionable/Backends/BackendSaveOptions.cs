@@ -76,4 +76,43 @@ public sealed record BackendSaveOptions
     /// </para>
     /// </remarks>
     public bool CommentDefaults { get; init; }
+
+    /// <summary>
+    /// Omit fields still at their declared default, overriding the type's own
+    /// <see cref="VersionableMetadata.SkipDefaults"/> for this one save.
+    /// </summary>
+    /// <remarks>
+    /// <see langword="null"/>, the default, means "whatever the type declares", which is the only
+    /// setting Python has: <c>skip_defaults</c> there is a class parameter, not a <c>save()</c>
+    /// argument. So the zero-configuration behavior is Python's exactly, and this is an escape
+    /// hatch for a caller who wants a compact file out of a type that did not ask for one — or a
+    /// complete file out of a type that did.
+    /// <para>
+    /// <b>Where it applies.</b> To the root object's fields only, which is where Python applies
+    /// <c>skip_defaults</c> (in <c>save()</c>, before the backend is called). A nested object
+    /// always writes every field: a nested value that silently dropped fields would be
+    /// indistinguishable from one whose fields were never written, and the enclosing file gives a
+    /// reader nothing to reconstruct them from.
+    /// </para>
+    /// <para>
+    /// <b>What counts as "at its default" — and the limit on it.</b> The comparison is structural
+    /// and happens on the wire, so an empty <c>List&lt;int&gt;</c> counts as equal to an empty
+    /// declared default and a nested object counts as equal to an equal nested default; the
+    /// question asked is whether the two would write the same file. But it can only compare
+    /// against a default the generator
+    /// could see: <see cref="FieldDescriptor.HasDefault"/> covers <b>literal initializers and
+    /// closure-free empty constructions</b> — <c>= 8080</c>, <c>= "anon"</c>, <c>= null</c>,
+    /// <c>= default</c>, <c>= new()</c>, <c>= []</c>. Everything else is invisible: a default
+    /// assigned in a constructor body, an initializer that closes over other state, an object
+    /// initializer such as <c>= new Inner { Depth = 2 }</c>, and a property with no initializer at
+    /// all. A field whose default is invisible is never skipped and is always written. That is the
+    /// safe direction — a field that could have been omitted merely appears — and it is the
+    /// deliberate limit of the feature rather than a bug to widen the generator for.
+    /// </para>
+    /// <para>
+    /// Loads round-trip either way: an omitted field is absent from the file, and an absent field
+    /// materializes from the same declared default it was omitted for.
+    /// </para>
+    /// </remarks>
+    public bool? SkipDefaults { get; init; }
 }

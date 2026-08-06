@@ -43,7 +43,7 @@ public static class MigrationRunner
     /// <exception cref="VersionException">
     /// The file is newer than the code, or older with no chain reaching back that far.
     /// </exception>
-    /// <exception cref="MigrationException">The chain has no runner, or a migration failed.</exception>
+    /// <exception cref="MigrationException">A migration failed.</exception>
     public static IDictionary<string, object?> Run(
         IDictionary<string, object?> fields,
         VersionableMetadata metadata,
@@ -74,15 +74,7 @@ public static class MigrationRunner
 
         EnsureReachable(chain, metadata, fromVersion, description);
 
-        if (chain is not IMigrationChainExecutor executor)
-        {
-            throw new MigrationException(
-                $"{description}: the migration chain declares source versions "
-                    + $"[{string.Join(", ", chain.FromVersions)}] but does not implement "
-                    + $"{nameof(IMigrationChainExecutor)}, so it cannot be run.");
-        }
-
-        return executor.Apply(fields, fromVersion, metadata.Version, upgradeInPlace);
+        return chain.Apply(fields, fromVersion, metadata.Version, upgradeInPlace);
     }
 
     private static void EnsureReachable(
@@ -108,9 +100,9 @@ public static class MigrationRunner
             if (!chain.FromVersions.Contains(version))
             {
                 throw new VersionException(
-                    $"{description}: no migration from version {version} to {version + 1}. "
-                        + $"Migrating {fromVersion} -> {metadata.Version} needs every step in "
-                        + $"between; declared steps: [{string.Join(", ", chain.FromVersions)}].");
+                    $"{description}: "
+                        + MigrationMessages.MissingStep(
+                            version, fromVersion, metadata.Version, chain.FromVersions));
             }
         }
     }

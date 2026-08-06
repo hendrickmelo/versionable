@@ -371,12 +371,14 @@ internal sealed class EngineSettings(string name, int port, string required) : I
 /// A chain that renames one field per step, for the version-dispatch tests.
 /// </summary>
 /// <remarks>
-/// The phase-4 builder API will replace this with generated ops; what the load path needs from a
-/// chain — the reachability members plus <see cref="IMigrationChainExecutor.Apply"/> — is already
-/// fixed, so exercising it now is exercising the real seam.
+/// Hand-written rather than built with <see cref="Migration"/>: these tests are about what
+/// <c>MigrationRunner</c> decides — which steps run, in what order, and which files it refuses —
+/// so the chain records what it was asked to do instead of doing anything interesting. The
+/// builder's own ops are covered by <c>MigrationBuilderTests</c>, and the composed chain by the
+/// golden corpus.
 /// </remarks>
 internal sealed class EngineRenameChain(IReadOnlyList<int> fromVersions, int? minReversibleVersion)
-    : IMigrationChain, IMigrationChainExecutor
+    : IMigrationChain
 {
     /// <inheritdoc/>
     public IReadOnlyList<int> FromVersions { get; } = fromVersions;

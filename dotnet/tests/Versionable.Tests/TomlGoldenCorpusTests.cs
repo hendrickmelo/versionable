@@ -24,7 +24,7 @@ namespace Versionable.Tests;
 /// fails against Python's numbers rather than against its own output.
 /// </para>
 /// <para>
-/// Both loads go through <see cref="VersionableFile.Load(string, Versionable.Backends.IVersionableBackend?,
+/// Both loads go through <see cref="VersionableFile.LoadDynamic(string, Versionable.Backends.IVersionableBackend?,
 /// VersionableLoadOptions?)"/> — the envelope-driven overload — so the object name written into
 /// <c>[__versionable__]</c> is exercised on every fixture rather than being supplied by the test.
 /// </para>
@@ -68,7 +68,7 @@ public class TomlGoldenCorpusTests : IDisposable
         JsonElement manifest = Manifest(fixture);
         string file = manifest.GetProperty("files").GetProperty("toml").GetString()!;
 
-        object loaded = VersionableFile.Load(Path.Combine(_goldenRoot, fixture, file));
+        object loaded = VersionableFile.LoadDynamic(Path.Combine(_goldenRoot, fixture, file));
 
         AssertFixture(fixture, manifest.GetProperty("values"), loaded);
     }
@@ -99,11 +99,11 @@ public class TomlGoldenCorpusTests : IDisposable
         JsonElement manifest = Manifest(fixture);
         string file = manifest.GetProperty("files").GetProperty("toml").GetString()!;
 
-        object loaded = VersionableFile.Load(Path.Combine(_goldenRoot, fixture, file));
+        object loaded = VersionableFile.LoadDynamic(Path.Combine(_goldenRoot, fixture, file));
         string written = Path.Combine(_directory, $"{fixture}.toml");
         VersionableFile.Save(loaded, written);
 
-        object reloaded = VersionableFile.Load(written);
+        object reloaded = VersionableFile.LoadDynamic(written);
 
         AssertFixture(fixture, manifest.GetProperty("values"), reloaded);
     }
@@ -146,7 +146,7 @@ public class TomlGoldenCorpusTests : IDisposable
         string source = Path.Combine(_goldenRoot, fixture, file);
         string written = Path.Combine(_directory, $"identity-{file}");
 
-        VersionableFile.Save(VersionableFile.Load(source), written);
+        VersionableFile.Save(VersionableFile.LoadDynamic(source), written);
 
         Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(written));
     }

@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Numerics.Tensors;
 using System.Text.Json;
 using Versionable.Engine;
+using Versionable.Migrations;
 using Xunit;
 
 namespace Versionable.Tests;
@@ -126,9 +127,12 @@ public class JsonGoldenCorpusTests
             Assert.Same(metadata, MetadataFor(name));
         }
 
-        // The generator emits Migrations only for a nested Migrate that is itself a chain, and
-        // the migration-chain fixture is the only thing proving it does.
-        Assert.IsType<GoldenWorker.Migrate>(GoldenWorker.VersionableMetadata.Migrations);
+        // The chain in the metadata is composed by the generator out of GoldenWorker.Migrate's V1
+        // and V2 builder members: the fixture proves the emission, and the older corpus files
+        // below prove the composition runs.
+        MigrationChain chain = Assert.IsType<MigrationChain>(GoldenWorker.VersionableMetadata.Migrations);
+        Assert.Equal([1, 2], chain.FromVersions);
+        Assert.Same(GoldenWorker.Migrate.V1, Assert.Single(chain.Steps, step => step.FromVersion == 1).Declarative);
     }
 
     // ------------------------------------------------------------------
@@ -167,7 +171,7 @@ public class JsonGoldenCorpusTests
     [InlineData("migration-chain", "migration-chain.json")]
     public void a_fixture_csharp_wrote_loads_back_identical(string fixture, string file)
     {
-        object fromCorpus = VersionableFile.Load(Path.Combine(_goldenRoot, fixture, file));
+        object fromCorpus = VersionableFile.LoadDynamic(Path.Combine(_goldenRoot, fixture, file));
 
         string directory = Path.Combine(Path.GetTempPath(), $"versionable-golden-{Path.GetRandomFileName()}");
         Directory.CreateDirectory(directory);
@@ -176,7 +180,7 @@ public class JsonGoldenCorpusTests
             string written = Path.Combine(directory, file);
             VersionableFile.Save(fromCorpus, written);
 
-            Assert.Equal(Canonical(fromCorpus), Canonical(VersionableFile.Load(written)));
+            Assert.Equal(Canonical(fromCorpus), Canonical(VersionableFile.LoadDynamic(written)));
         }
         finally
         {

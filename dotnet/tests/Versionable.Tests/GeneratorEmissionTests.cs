@@ -339,6 +339,49 @@ public class GeneratorEmissionTests
     }
 
     [Fact]
+    public void a_nullable_reference_default_is_cast_with_its_annotation()
+    {
+        // `Foo? X { get; init; } = null;` is an ordinary declaration — and the only way a
+        // nullable nested object survives a TOML round trip, since TOML omits nulls and a
+        // defaultless field then fails the load. Casting the default to the non-nullable
+        // spelling made it CS8600 in a file the author cannot edit.
+        (Compilation compilation, IReadOnlyList<(string HintName, string Text)> generated) =
+            GrammarTestHarness.Generate($$"""
+                {{GrammarTestHarness.Preamble}}
+
+                [Versionable(Version = 1)]
+                public sealed partial class Fixture
+                {
+                    public NestedLeaf? FromNull { get; init; } = null;
+
+                    public NestedLeaf? FromDefault { get; init; } = default;
+
+                    public NestedLeaf? FromValue { get; init; } = new();
+
+                    public string Required { get; init; } = "fast";
+                }
+                """);
+
+        Assert.Empty(compilation.GetDiagnostics().Where(diagnostic =>
+            diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+
+        string emitted = Source(generated, "Fixture");
+        Assert.Contains("DefaultFactory = static () => (global::NestedLeaf?)(null),", emitted, StringComparison.Ordinal);
+        Assert.Contains(
+            "DefaultFactory = static () => (global::NestedLeaf?)(default(global::NestedLeaf?)),",
+            emitted,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "DefaultFactory = static () => (global::NestedLeaf?)(new global::NestedLeaf()),",
+            emitted,
+            StringComparison.Ordinal);
+
+        // A non-nullable member keeps its exact spelling: widening every cast would hide a
+        // genuinely null default behind a nullable target.
+        Assert.Contains("""DefaultFactory = static () => (string)("fast"),""", emitted, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void a_generic_versionable_type_is_not_generated()
     {
         IReadOnlyList<(string HintName, string Text)> generated = GrammarTestHarness.Generate($$"""
@@ -433,6 +476,12 @@ public class GeneratorEmissionTests
                         public IReadOnlyList<int> FromVersions { get; } = new[] { 1 };
 
                         public int? MinReversibleVersion => null;
+
+                        public IDictionary<string, object?> Apply(
+                            IDictionary<string, object?> fields,
+                            int fromVersion,
+                            int toVersion,
+                            bool upgradeInPlace) => fields;
                     }
                 }
                 """);
@@ -442,24 +491,55 @@ public class GeneratorEmissionTests
     }
 
     [Fact]
-    public void a_declarative_migrate_class_gets_no_migrations_member_yet()
+    public void a_declarative_migrate_class_is_composed_into_a_chain()
     {
-        // The form IMigrationChain documents — static V1/V2 members — needs the phase-4
-        // `Migration` builder to compose a chain from. Until then the generator must leave
-        // Migrations null rather than guess, and a static class can implement nothing anyway.
-        string emitted = Source(
+        // What Python's resolveMigrations does by walking dir(Migrate) on every load, done once at
+        // compile time: a static class cannot be a chain itself, so the members become one.
+        (Compilation compilation, IReadOnlyList<(string HintName, string Text)> generated) =
             GrammarTestHarness.Generate($$"""
+                using Versionable.Migrations;
                 {{GrammarTestHarness.Preamble}}
 
-                [Versionable(Version = 2, Hash = "fa9c8c")]
+                [Versionable(Version = 3, Hash = "fa9c8c")]
                 public sealed partial class Job
                 {
                     public string Name { get; init; } = "";
 
                     public static class Migrate
                     {
-                        public static readonly string V1 = "rename";
+                        public static readonly Migration V1 = new Migration().Rename("nm", "Name");
+
+                        [Migration(FromVersion = 2)]
+                        public static void ToV3(MigrationContext data) => data["Name"] = "";
                     }
+                }
+                """);
+
+        Assert.Empty(compilation.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+
+        string emitted = Source(generated, "Job");
+        Assert.Contains("Migrations = new global::Versionable.Migrations.MigrationChain(", emitted, StringComparison.Ordinal);
+        Assert.Contains(
+            "global::Versionable.Migrations.MigrationStep.Of(1, global::Job.Migrate.V1),",
+            emitted,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "global::Versionable.Migrations.MigrationStep.Of(2, global::Job.Migrate.ToV3)),",
+            emitted,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void a_type_with_no_migrate_class_gets_no_migrations_member()
+    {
+        string emitted = Source(
+            GrammarTestHarness.Generate($$"""
+                {{GrammarTestHarness.Preamble}}
+
+                [Versionable(Version = 1, Hash = "fa9c8c")]
+                public sealed partial class Job
+                {
+                    public string Name { get; init; } = "";
                 }
                 """).Generated,
             "Job");

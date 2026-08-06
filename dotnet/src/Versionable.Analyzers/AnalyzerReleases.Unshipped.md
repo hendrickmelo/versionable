@@ -10,7 +10,7 @@ Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
 VSN0001 | Versionable | Error | Declared Hash disagrees with the hash computed from the fields; the message carries the canonical payload.
 VSN0002 | Versionable | Error | A field type has no form in the canonical type grammar.
-VSN0003 | Versionable | Error | The migration chain skips a version above its oldest entry.
+VSN0003 | Versionable | Error | The migration chain skips a version above its oldest entry, or declares a member that cannot be run as a migration.
 VSN0004 | Versionable | Error | Two reachable types claim one Serialization Name.
 VSN0005 | Versionable | Error | A [Versionable] type, or an enclosing type, is not declared partial.
 VSN0006 | Versionable | Error | A [LiteralValues] option is outside the grammar's closed member list.

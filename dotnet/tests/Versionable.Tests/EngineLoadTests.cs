@@ -72,7 +72,7 @@ public class EngineLoadTests
         VersionException error = Assert.Throws<VersionException>(
             () => Load<EngineVersioned>(metadata, new() { ["name_v1"] = "ancient" }, version: 1));
 
-        Assert.Contains("no migration from version 2 to 3", error.Message, StringComparison.Ordinal);
+        Assert.Contains("No migration from version 2 to 3", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -84,19 +84,6 @@ public class EngineLoadTests
             () => Load<EngineVersioned>(metadata, new() { ["name_v1"] = "ancient" }, version: 1));
 
         Assert.Contains("no longer supported", error.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void a_chain_with_no_runner_is_reported_rather_than_ignored()
-    {
-        // Loading the data unmigrated would hand the factory a dictionary shaped for a schema that
-        // has not existed for two versions.
-        VersionableMetadata metadata = EngineVersioned.At(new DeclarationOnlyChain());
-
-        MigrationException error = Assert.Throws<MigrationException>(
-            () => Load<EngineVersioned>(metadata, new() { ["name_v1"] = "ancient" }, version: 1));
-
-        Assert.Contains(nameof(IMigrationChainExecutor), error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -374,7 +361,7 @@ public class EngineLoadTests
         VersionableRegistry.Register(metadata);
         try
         {
-            return VersionableFile.Load("memory.stub", backend, options);
+            return VersionableFile.LoadDynamic("memory.stub", backend, options);
         }
         finally
         {
@@ -433,11 +420,4 @@ public class EngineLoadTests
         }
     }
 
-    /// <summary>A chain that describes itself but cannot run.</summary>
-    private sealed class DeclarationOnlyChain : IMigrationChain
-    {
-        public IReadOnlyList<int> FromVersions { get; } = [1, 2];
-
-        public int? MinReversibleVersion => null;
-    }
 }

@@ -39,23 +39,28 @@ namespace Versionable.Migrations;
 /// <example>
 /// <code>
 /// [Versionable(Version = 3, Hash = "a1b2c3")]
-/// public sealed class Config
+/// public sealed partial class Config
 /// {
 ///     public static class Migrate
 ///     {
 ///         public static readonly Migration V1 = new Migration().Rename("nm", "name");
 ///
 ///         [Migration(FromVersion = 2)]
-///         public static void V2(MigrationContext data) =&gt; data["port"] = 8080;
+///         public static void ToV3(MigrationContext data) =&gt; data["port"] = 8080;
 ///     }
 /// }
 /// </code>
+/// From those members the generator emits
+/// <c>Migrations = new MigrationChain(MigrationStep.Of(1, Migrate.V1), MigrationStep.Of(2, Migrate.ToV3))</c>.
 /// </example>
 ///
-/// <para>
-/// Contract only: the migration engine — builder ops, the context type, in-place upgrades —
-/// lands with the migrations work in phase 4. Implementations may add members; those here
-/// are what the load path needs to decide whether a file's version is reachable.
+/// <para><b>The hand-written form.</b> A nested <c>Migrate</c> that <em>is</em> an
+/// <see cref="IMigrationChain"/> — a non-static, non-abstract, non-generic class with an accessible
+/// parameterless constructor — is taken as the chain itself and emitted as
+/// <c>Migrations = new Migrate()</c>. It is the escape hatch for a chain that is decided at run
+/// time; its <see cref="FromVersions"/> is a run-time value, so the analyzer cannot check its
+/// contiguity and does not try. When a type declares both shapes the chain type wins, since it is
+/// the more explicit statement.
 /// </para>
 /// </remarks>
 public interface IMigrationChain
@@ -72,4 +77,37 @@ public interface IMigrationChain
     /// <c>VersionableMetadata.minReversibleVersion</c> in <c>src/versionable/_base.py</c>.
     /// </summary>
     int? MinReversibleVersion { get; }
+
+    /// <summary>
+    /// Runs every migration from <paramref name="fromVersion"/> up to
+    /// <paramref name="toVersion"/> over <paramref name="fields"/>.
+    /// </summary>
+    /// <param name="fields">
+    /// Raw field values keyed by the wire names found in the file, envelope keys already
+    /// stripped. Implementations may mutate and return it.
+    /// </param>
+    /// <param name="fromVersion">Schema version the data is currently shaped for.</param>
+    /// <param name="toVersion">Schema version to leave the data shaped for.</param>
+    /// <param name="upgradeInPlace">
+    /// Whether the caller has permitted migrations that need the file rewritten. Python
+    /// counterpart: the <c>upgradeInPlace</c> argument; without it, an op that declares
+    /// <c>requiresUpgrade()</c> raises <see cref="Errors.UpgradeRequiredException"/>.
+    /// </param>
+    /// <returns>The migrated field dictionary, shaped for <paramref name="toVersion"/>.</returns>
+    /// <remarks>
+    /// Python counterpart: <c>applyMigrationRange</c> in <c>src/versionable/_migration.py</c>. The
+    /// same shape — raw field dictionary in, raw field dictionary out, before any value is
+    /// materialized — because migrations rename, drop, and add wire keys, and doing that after
+    /// materialization would need the old schema's CLR types to still exist.
+    /// </remarks>
+    /// <exception cref="Errors.MigrationException">A migration failed, or the chain has no step for a version in the range.</exception>
+    /// <exception cref="Errors.UpgradeRequiredException">
+    /// A migration needs the file rewritten and <paramref name="upgradeInPlace"/> is
+    /// <see langword="false"/>.
+    /// </exception>
+    IDictionary<string, object?> Apply(
+        IDictionary<string, object?> fields,
+        int fromVersion,
+        int toVersion,
+        bool upgradeInPlace);
 }

@@ -64,7 +64,7 @@ public class YamlGoldenCorpusTests
                 string path = Path.Combine(_goldenRoot, fixture, file);
                 Assert.True(File.Exists(path), $"{fixture}: {file} is missing from the corpus.");
 
-                object loaded = VersionableFile.Load(path);
+                object loaded = VersionableFile.LoadDynamic(path);
                 Assert.Equal(
                     manifest.GetProperty("serializationName").GetString(),
                     VersionableRegistry.TryGetByType(loaded.GetType(), out VersionableMetadata? metadata)

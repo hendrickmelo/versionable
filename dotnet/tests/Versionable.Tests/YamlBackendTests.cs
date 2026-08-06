@@ -77,11 +77,11 @@ public class YamlBackendTests : IDisposable
     public void a_golden_fixture_rewritten_by_csharp_reads_back_the_same(string fixture, string file)
     {
         string source = Path.Combine(GoldenRoot(), fixture, file);
-        object original = VersionableFile.Load(source);
+        object original = VersionableFile.LoadDynamic(source);
 
         string rewritten = Path.Combine(_directory, file);
         VersionableFile.Save(original, rewritten);
-        object reloaded = VersionableFile.Load(rewritten);
+        object reloaded = VersionableFile.LoadDynamic(rewritten);
 
         Assert.Equal(original.GetType(), reloaded.GetType());
 
@@ -124,7 +124,7 @@ public class YamlBackendTests : IDisposable
         string source = Path.Combine(GoldenRoot(), fixture, file);
         string rewritten = Path.Combine(_directory, file);
 
-        VersionableFile.Save(VersionableFile.Load(source), rewritten);
+        VersionableFile.Save(VersionableFile.LoadDynamic(source), rewritten);
 
         Assert.Equal(
             File.ReadAllText(source).ReplaceLineEndings("\n"),
@@ -202,7 +202,7 @@ public class YamlBackendTests : IDisposable
         string path = Path.Combine(_directory, "leaf.yaml");
         VersionableFile.Save(new EngineLeaf("tip", 1.5), path);
 
-        Assert.Equal("tip", Assert.IsType<EngineLeaf>(VersionableFile.Load(path)).Name);
+        Assert.Equal("tip", Assert.IsType<EngineLeaf>(VersionableFile.LoadDynamic(path)).Name);
     }
 
     // ------------------------------------------------------------------
@@ -504,7 +504,7 @@ public class YamlBackendTests : IDisposable
     {
         string path = Path.Combine(_directory, "arrays.yaml");
         VersionableFile.Save(
-            VersionableFile.Load(Path.Combine(GoldenRoot(), "arrays", "arrays.yaml")),
+            VersionableFile.LoadDynamic(Path.Combine(GoldenRoot(), "arrays", "arrays.yaml")),
             path);
 
         string text = File.ReadAllText(path).ReplaceLineEndings("\n");
@@ -595,7 +595,7 @@ public class YamlBackendTests : IDisposable
         // Both fields are at their default, so without the exception the file would be entirely
         // comments and would load as a version-less object of no declared type.
         Assert.StartsWith("# name:", File.ReadAllText(path), StringComparison.Ordinal);
-        Assert.Equal("EngineLeaf", VersionableFile.Load(path).GetType().Name);
+        Assert.Equal("EngineLeaf", VersionableFile.LoadDynamic(path).GetType().Name);
     }
 
     // ------------------------------------------------------------------

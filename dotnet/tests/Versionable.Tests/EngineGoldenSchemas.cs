@@ -133,6 +133,18 @@ internal static class GoldenSchemas
                 VersionableRegistry.Register(metadata);
             }
 
+            // The polymorphism and SkipDefaults fixtures live in their own file but share this
+            // process-wide registry, so a reset has to put them back too.
+            foreach (VersionableMetadata metadata in ParitySchemas.All)
+            {
+                VersionableRegistry.Register(metadata);
+            }
+
+            foreach (VersionableMetadata metadata in ParitySchemas.Unregistered)
+            {
+                VersionableRegistry.RegisterTypeOnly(metadata);
+            }
+
             BuiltinConverters.RegisterAll();
             JsonBackend.RegisterExtensions();
             YamlBackend.RegisterExtensions();
@@ -393,64 +405,27 @@ internal sealed partial class GoldenWorker
     public required int TimeoutMs { get; init; }
 
     /// <summary>
-    /// The migration chain, which the generator wires into
+    /// The migration chain, which the generator composes into
     /// <see cref="VersionableMetadata.Migrations"/>.
     /// </summary>
     /// <remarks>
     /// Python counterpart: <c>GoldenWorker.Migrate</c> in <c>conformance/golden_schemas.py</c> —
-    /// <c>Migration().rename("title", "name").drop("debug")</c> then
-    /// <c>Migration().add("timeout_ms", default=0)</c>. Written imperatively here because the
-    /// declarative <c>Migration</c> builder lands in phase 4; the generator recognises a nested
-    /// <c>Migrate</c> that is itself an <see cref="IMigrationChain"/> and emits
-    /// <c>Migrations = new Migrate()</c>.
+    /// <c>v1 = Migration().rename("title", "name").drop("debug")</c> and
+    /// <c>v2 = Migration().add("timeout_ms", default=0)</c> — transcribed op for op, which is the
+    /// point: the corpus files were written by the Python implementation and are read here through
+    /// the C# builder.
     /// <para>
     /// The v2 step defaults old files to 0 rather than to the schema default of 30000, which is
     /// the whole point of the fixture: a migration decides what a field meant before it existed.
     /// </para>
     /// </remarks>
-    internal sealed class Migrate : IMigrationChain, IMigrationChainExecutor
+    public static class Migrate
     {
-        /// <inheritdoc/>
-        public IReadOnlyList<int> FromVersions { get; } = [1, 2];
+        /// <summary>Takes a version 1 file to version 2.</summary>
+        public static readonly Migration V1 = new Migration().Rename("title", "name").Drop("debug");
 
-        /// <inheritdoc/>
-        public int? MinReversibleVersion => null;
-
-        /// <inheritdoc/>
-        public IDictionary<string, object?> Apply(
-            IDictionary<string, object?> fields,
-            int fromVersion,
-            int toVersion,
-            bool upgradeInPlace)
-        {
-            for (int version = fromVersion; version < toVersion; version++)
-            {
-                switch (version)
-                {
-                    case 1:
-                        if (fields.Remove("title", out object? title))
-                        {
-                            fields["name"] = title;
-                        }
-
-                        fields.Remove("debug");
-                        break;
-
-                    case 2:
-                        if (!fields.ContainsKey("timeout_ms"))
-                        {
-                            fields["timeout_ms"] = 0;
-                        }
-
-                        break;
-
-                    default:
-                        throw new MigrationException($"GoldenWorker has no migration from version {version}.");
-                }
-            }
-
-            return fields;
-        }
+        /// <summary>Takes a version 2 file to version 3.</summary>
+        public static readonly Migration V2 = new Migration().Add("timeout_ms", 0);
     }
 }
 

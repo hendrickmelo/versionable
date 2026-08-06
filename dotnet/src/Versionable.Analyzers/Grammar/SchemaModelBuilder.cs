@@ -30,6 +30,9 @@ internal static class SchemaModelBuilder
     internal const string MigrationAttributeName = "Versionable.Migrations.MigrationAttribute";
     internal const string IgnoreAttributeName = "Versionable.VersionableIgnoreAttribute";
     internal const string MigrateClassName = "Migrate";
+    internal const string MigrationTypeName = "Versionable.Migrations.Migration";
+    internal const string MigrationContextTypeName = "Versionable.Migrations.MigrationContext";
+    internal const string MigrationChainTypeName = "Versionable.Migrations.IMigrationChain";
 
     /// <summary>Builds the model for a <c>[Versionable]</c> type.</summary>
     /// <param name="type">The annotated type.</param>
@@ -80,13 +83,19 @@ internal static class SchemaModelBuilder
 
         ImmutableArray<SchemaField> fields = CollectFields(type, problems);
         model.Fields = fields;
-        model.MigrationVersions = CollectMigrationVersions(type);
         model.MigrateTypeIsChain = MigrateTypeIsChain(type);
+
+        // A Migrate class that is itself a chain owns its version list outright: the members this
+        // would collect are that chain's implementation detail, and its FromVersions is a run-time
+        // value no compile-time check can read.
+        model.Migrations = model.MigrateTypeIsChain
+            ? ImmutableArray<SchemaMigration>.Empty
+            : CollectMigrations(type, problems);
         model.ReferencedTypes = CollectReferencedTypes(fields);
 
         ValidateWireNames(type, fields, problems);
         CheckNullableContext(type, fields, typeLocation, problems);
-        CheckMigrationContiguity(type, model.MigrationVersions, typeLocation, problems);
+        CheckMigrationContiguity(type, model.Migrations, typeLocation, problems);
 
         model.Payload = SchemaHash.ComputePayload(
             fields.Select(field => new KeyValuePair<string, string>(field.WireName, field.CanonicalType)));
@@ -443,6 +452,17 @@ internal static class SchemaModelBuilder
     {
         string declared = memberType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
+        // `default(T)` names the annotation for a reference type, because the generated file is
+        // always `#nullable enable`: `default(Foo)` there is a maybe-null value of a
+        // non-nullable type, which is CS8600 the moment it is converted. The display format
+        // drops the annotation deliberately (it has to keep `typeof(...)` legal), so it is added
+        // back here rather than taken from it. Value types keep their exact spelling — widening
+        // `int` to `int?` would make `= default` mean null instead of 0.
+        string declaredDefault = memberType.IsReferenceType
+            && memberType.NullableAnnotation != NullableAnnotation.NotAnnotated
+                ? declared + "?"
+                : declared;
+
         foreach (SyntaxReference reference in member.DeclaringSyntaxReferences)
         {
             ExpressionSyntax? initializer = reference.GetSyntax() switch
@@ -458,11 +478,11 @@ internal static class SchemaModelBuilder
                 case null:
                     continue;
                 case LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.DefaultLiteralExpression):
-                    return "default(" + declared + ")";
+                    return "default(" + declaredDefault + ")";
                 case LiteralExpressionSyntax literal:
                     return literal.Token.Text;
                 case DefaultExpressionSyntax:
-                    return "default(" + declared + ")";
+                    return "default(" + declaredDefault + ")";
                 case PrefixUnaryExpressionSyntax negation
                     when negation.IsKind(SyntaxKind.UnaryMinusExpression)
                         && negation.Operand is LiteralExpressionSyntax number:
@@ -585,51 +605,187 @@ internal static class SchemaModelBuilder
         }
     }
 
-    private static ImmutableArray<int> CollectMigrationVersions(INamedTypeSymbol type)
+    /// <summary>
+    /// Collects the migrations declared as members of the nested <c>Migrate</c> class, reporting
+    /// members that name themselves migrations but cannot be run as one.
+    /// </summary>
+    /// <remarks>
+    /// Python counterpart: the <c>dir(migrateClass)</c> walk in <c>resolveMigrations</c>
+    /// (<c>src/versionable/_migration.py</c>), which matches <c>vN</c> attributes holding a
+    /// <c>Migration</c> and <c>@migration</c>-decorated functions. Python resolves at load and
+    /// simply ignores a member of the wrong kind; here the generator has to emit a reference to
+    /// each member, so a member that cannot be referenced is reported rather than dropped —
+    /// silently dropping it would turn a typo into a load-time failure on old files only.
+    /// </remarks>
+    private static ImmutableArray<SchemaMigration> CollectMigrations(
+        INamedTypeSymbol type,
+        List<SchemaProblem> problems)
     {
         INamedTypeSymbol? migrate = type.GetTypeMembers(MigrateClassName).FirstOrDefault();
         if (migrate is null)
         {
-            return ImmutableArray<int>.Empty;
+            return ImmutableArray<SchemaMigration>.Empty;
         }
 
-        List<int> versions = new();
+        List<SchemaMigration> migrations = new();
         foreach (ISymbol member in migrate.GetMembers())
         {
-            if (!member.IsStatic)
-            {
-                continue;
-            }
-
             if (member is IMethodSymbol method)
             {
-                AttributeData? attribute = FindAttribute(method, MigrationAttributeName);
-                if (attribute is not null)
-                {
-                    foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
-                    {
-                        if (argument.Key == "FromVersion" && argument.Value.Value is int fromVersion)
-                        {
-                            versions.Add(fromVersion);
-                        }
-                    }
-                }
-
+                CollectImperativeMigration(type, method, migrations, problems);
                 continue;
             }
 
             // Declarative migrations are fields or properties named V1, V2, … — the source
-            // version is in the name, exactly as Python's Migrate.V1 carries it. The builder
-            // type itself lands in phase 4, so the name is all that can be matched on here.
-            if (member is (IFieldSymbol or IPropertySymbol) && TryParseVersionMember(member.Name, out int declarative))
+            // version is in the name, exactly as Python's Migrate.v1 carries it.
+            if (member is IFieldSymbol or IPropertySymbol && TryParseVersionMember(member.Name, out int version))
             {
-                versions.Add(declarative);
+                CollectDeclarativeMigration(type, member, version, migrations, problems);
             }
         }
 
-        versions.Sort();
-        return versions.ToImmutableArray();
+        migrations.Sort((left, right) => left.FromVersion.CompareTo(right.FromVersion));
+        return migrations.ToImmutableArray();
     }
+
+    private static void CollectDeclarativeMigration(
+        INamedTypeSymbol type,
+        ISymbol member,
+        int version,
+        List<SchemaMigration> migrations,
+        List<SchemaProblem> problems)
+    {
+        ITypeSymbol memberType = member is IFieldSymbol field ? field.Type : ((IPropertySymbol)member).Type;
+        Location location = member.Locations.FirstOrDefault() ?? Location.None;
+
+        if (CanonicalTypeRenderer.FullName(memberType) != MigrationTypeName)
+        {
+            // Not a diagnostic about naming: a V-named member of the Migrate class is claiming to
+            // be the migration for that version, and one that is not a Migration leaves the chain
+            // with a hole nothing else reports.
+            problems.Add(new SchemaProblem(
+                VersionableDiagnostics.MigrationChainInvalid,
+                location,
+                type.Name,
+                $"'{MigrateClassName}.{member.Name}' is of type '{memberType.ToDisplayString()}'; a "
+                    + $"declarative migration must be a '{MigrationTypeName}'"));
+            return;
+        }
+
+        if (!member.IsStatic)
+        {
+            problems.Add(new SchemaProblem(
+                VersionableDiagnostics.MigrationChainInvalid,
+                location,
+                type.Name,
+                $"'{MigrateClassName}.{member.Name}' must be static; the chain is read without "
+                    + "constructing anything"));
+            return;
+        }
+
+        if (!IsReachableFromDeclaringType(member))
+        {
+            problems.Add(new SchemaProblem(
+                VersionableDiagnostics.MigrationChainInvalid,
+                location,
+                type.Name,
+                $"'{MigrateClassName}.{member.Name}' is private to '{MigrateClassName}', so the "
+                    + $"metadata generated for '{type.Name}' cannot read it"));
+            return;
+        }
+
+        if (member is IPropertySymbol property && property.GetMethod is null)
+        {
+            problems.Add(new SchemaProblem(
+                VersionableDiagnostics.MigrationChainInvalid,
+                location,
+                type.Name,
+                $"'{MigrateClassName}.{member.Name}' has no getter"));
+            return;
+        }
+
+        migrations.Add(new SchemaMigration(version, member.Name, imperative: false));
+    }
+
+    private static void CollectImperativeMigration(
+        INamedTypeSymbol type,
+        IMethodSymbol method,
+        List<SchemaMigration> migrations,
+        List<SchemaProblem> problems)
+    {
+        AttributeData? attribute = FindAttribute(method, MigrationAttributeName);
+        if (attribute is null)
+        {
+            return;
+        }
+
+        Location location = method.Locations.FirstOrDefault() ?? Location.None;
+        int? fromVersion = null;
+        foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+        {
+            if (argument.Key == "FromVersion" && argument.Value.Value is int declared)
+            {
+                fromVersion = declared;
+            }
+        }
+
+        if (fromVersion is null)
+        {
+            problems.Add(new SchemaProblem(
+                VersionableDiagnostics.MigrationChainInvalid,
+                location,
+                type.Name,
+                $"'{MigrateClassName}.{method.Name}' carries [Migration] without a FromVersion, so "
+                    + "there is no version it migrates from"));
+            return;
+        }
+
+        string signature =
+            $"static void {method.Name}({MigrationContextTypeName} data)";
+        bool shaped = method.IsStatic
+            && !method.IsGenericMethod
+            && method.ReturnsVoid
+            && method.Parameters.Length == 1
+            && method.Parameters[0].RefKind == RefKind.None
+            && CanonicalTypeRenderer.FullName(method.Parameters[0].Type) == MigrationContextTypeName;
+
+        if (!shaped)
+        {
+            problems.Add(new SchemaProblem(
+                VersionableDiagnostics.MigrationChainInvalid,
+                location,
+                type.Name,
+                $"'{MigrateClassName}.{method.Name}' carries [Migration] but is not shaped like one; "
+                    + $"it must be declared '{signature}'"));
+            return;
+        }
+
+        if (!IsReachableFromDeclaringType(method))
+        {
+            problems.Add(new SchemaProblem(
+                VersionableDiagnostics.MigrationChainInvalid,
+                location,
+                type.Name,
+                $"'{MigrateClassName}.{method.Name}' is private to '{MigrateClassName}', so the "
+                    + $"metadata generated for '{type.Name}' cannot call it"));
+            return;
+        }
+
+        migrations.Add(new SchemaMigration(fromVersion.Value, method.Name, imperative: true));
+    }
+
+    /// <summary>
+    /// Whether a member of the nested <c>Migrate</c> class can be referenced from the generated
+    /// part of the declaring type.
+    /// </summary>
+    /// <remarks>
+    /// The generated code is another part of the <c>[Versionable]</c> type, so it sees everything
+    /// that type sees — which is everything except members private to <c>Migrate</c> itself:
+    /// private members of a nested type are accessible within that type, not from the type it is
+    /// nested in.
+    /// </remarks>
+    private static bool IsReachableFromDeclaringType(ISymbol member) =>
+        member.DeclaredAccessibility != Accessibility.Private;
 
     /// <summary>
     /// Whether some base type already has the generated <c>VersionableMetadata</c> member, either
@@ -669,11 +825,15 @@ internal static class SchemaModelBuilder
     /// <c>VersionableMetadata.Migrations</c>.
     /// </summary>
     /// <remarks>
-    /// Structurally disjoint from the declarative form described on <c>IMigrationChain</c>: a
+    /// The two declaration forms are checked in order rather than assumed disjoint. A
     /// <c>static class Migrate</c> holding <c>V1</c>/<c>V2</c> builder members can neither
-    /// implement an interface nor be constructed, so a type can only ever match one of the two
-    /// shapes. That is what lets this land now, before the phase-4 builder, without pre-empting
-    /// how the declarative chain will be composed.
+    /// implement an interface nor be constructed, so that shape can only ever be the composed
+    /// one — but a <c>Migrate</c> that <em>does</em> implement <c>IMigrationChain</c> may also
+    /// hold builder members, and then the chain type wins: it is the more explicit statement, and
+    /// its members are its own implementation detail. <c>Build</c> acts on that by skipping member
+    /// collection and the contiguity check entirely when this returns true, which is also why a
+    /// run-time chain is the one form the analyzer leaves unverified — its
+    /// <c>FromVersions</c> is a run-time value.
     /// </remarks>
     private static bool MigrateTypeIsChain(INamedTypeSymbol type)
     {
@@ -684,7 +844,7 @@ internal static class SchemaModelBuilder
         }
 
         if (!migrate.AllInterfaces.Any(contract =>
-            CanonicalTypeRenderer.FullName(contract) == "Versionable.Migrations.IMigrationChain"))
+            CanonicalTypeRenderer.FullName(contract) == MigrationChainTypeName))
         {
             return false;
         }
@@ -721,14 +881,18 @@ internal static class SchemaModelBuilder
 
     private static void CheckMigrationContiguity(
         INamedTypeSymbol type,
-        ImmutableArray<int> versions,
+        ImmutableArray<SchemaMigration> migrations,
         Location location,
         List<SchemaProblem> problems)
     {
-        if (versions.Length == 0)
+        if (migrations.Length == 0)
         {
             return;
         }
+
+        // Both declaration forms are in here: the check is over the chain, not over one syntax,
+        // because a chain half declarative and half imperative is a chain like any other.
+        ImmutableArray<int> versions = migrations.Select(migration => migration.FromVersion).ToImmutableArray();
 
         List<int> duplicates = versions.GroupBy(version => version)
             .Where(group => group.Count() > 1)
@@ -737,13 +901,18 @@ internal static class SchemaModelBuilder
         if (duplicates.Count > 0)
         {
             problems.Add(new SchemaProblem(
-                VersionableDiagnostics.MigrationChainGap,
+                VersionableDiagnostics.MigrationChainInvalid,
                 location,
                 type.Name,
                 "two migrations declare FromVersion "
                     + string.Join(", ", duplicates.Select(version => version.ToString(CultureInfo.InvariantCulture)))));
         }
 
+        // Bounded by the declared migrations at both ends, deliberately. The gap between the
+        // newest declared migration and Version - 1 is left unchecked because a version bumped
+        // twice before release — or bumped for a change no data needs migrating for — is
+        // legitimate, and the load path refuses the files it actually cannot read anyway. Only
+        // the gaps between two declared migrations are unambiguously a mistake.
         List<int> missing = new();
         for (int version = versions[0]; version < versions[versions.Length - 1]; version++)
         {
@@ -756,7 +925,7 @@ internal static class SchemaModelBuilder
         if (missing.Count > 0)
         {
             problems.Add(new SchemaProblem(
-                VersionableDiagnostics.MigrationChainGap,
+                VersionableDiagnostics.MigrationChainInvalid,
                 location,
                 type.Name,
                 "no migration declared from version "

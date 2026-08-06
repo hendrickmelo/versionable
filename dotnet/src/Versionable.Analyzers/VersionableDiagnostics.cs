@@ -28,8 +28,8 @@ internal static class VersionableDiagnostics
     /// <summary>A declared type cannot be expressed in the canonical type grammar.</summary>
     internal const string UnsupportedType = "VSN0002";
 
-    /// <summary>The migration chain has a gap above the oldest declared migration.</summary>
-    internal const string MigrationChainGap = "VSN0003";
+    /// <summary>The migration chain has a gap above its oldest entry, or a member that cannot be run.</summary>
+    internal const string MigrationChainInvalid = "VSN0003";
 
     /// <summary>Two types reachable from one schema claim the same Serialization Name.</summary>
     internal const string DuplicateSerializationName = "VSN0004";
@@ -76,19 +76,20 @@ internal static class VersionableDiagnostics
         "The canonical type grammar is a cross-language contract, so a construct with no grammar form is "
             + "rejected rather than rendered in a C#-specific way that no other implementation could reproduce.");
 
-    /// <summary>The migration chain skips a version above its oldest entry.</summary>
-    internal static readonly DiagnosticDescriptor MigrationChainGapRule = Rule(
-        MigrationChainGap,
-        "Migration chain is not contiguous",
-        "Migration chain of '{0}' is not contiguous: {1}",
+    /// <summary>The migration chain skips a version above its oldest entry, or declares a member that cannot run.</summary>
+    internal static readonly DiagnosticDescriptor MigrationChainInvalidRule = Rule(
+        MigrationChainInvalid,
+        "Migration chain is not well-formed",
+        "Migration chain of '{0}' is not well-formed: {1}",
         "A load walks migrations one version at a time, so a gap above the oldest declared migration makes "
             + "every older file unreachable. Gaps below the oldest migration are legitimate — they are what "
-            + "MinReversibleVersion reports. Scope limit: this check reads only the declarative members of "
-            + "the nested Migrate class — static V1/V2/... fields or properties, and static methods carrying "
-            + "[Migration(FromVersion = n)]. A Migrate type that is itself an IMigrationChain declares its "
-            + "source versions in a FromVersions array evaluated at run time, which no compile-time check can "
-            + "read, so an imperative chain's contiguity is not verified here. Phase 4 either extends this to "
-            + "the builder-composed chain or documents the imperative form as unchecked.");
+            + "MinReversibleVersion reports. The check covers both declaration forms of the nested Migrate "
+            + "class together, since they compose into one chain: static V1/V2/... fields or properties of "
+            + "type Migration, and static void methods carrying [Migration(FromVersion = n)] and taking a "
+            + "MigrationContext. A member that names itself a migration but cannot be run as one is reported "
+            + "under this id too. Scope limit: a Migrate type that is itself an IMigrationChain computes its "
+            + "FromVersions at run time, which no compile-time check can read, so that form is deliberately "
+            + "unverified.");
 
     /// <summary>Two types claim one Serialization Name.</summary>
     internal static readonly DiagnosticDescriptor DuplicateSerializationNameRule = Rule(
@@ -172,7 +173,7 @@ internal static class VersionableDiagnostics
     internal static readonly ImmutableArray<DiagnosticDescriptor> All = ImmutableArray.Create(
         HashMismatchRule,
         UnsupportedTypeRule,
-        MigrationChainGapRule,
+        MigrationChainInvalidRule,
         DuplicateSerializationNameRule,
         MustBePartialRule,
         UnsupportedLiteralValueRule,

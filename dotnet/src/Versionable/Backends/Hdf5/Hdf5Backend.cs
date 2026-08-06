@@ -27,7 +27,7 @@ namespace Versionable.Backends.Hdf5;
 /// </para>
 /// <para>
 /// <see cref="BackendLoadOptions.MetadataOnly"/> <em>is</em> honored, and not as a courtesy:
-/// <see cref="VersionableFile.Load(string, IVersionableBackend?, VersionableLoadOptions?)"/>
+/// <see cref="VersionableFile.LoadDynamic(string, IVersionableBackend?, VersionableLoadOptions?)"/>
 /// probes the envelope with it before it knows what type to build, so a backend that ignored it
 /// would read every array of every file twice.
 /// </para>

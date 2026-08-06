@@ -136,7 +136,7 @@ dotnet_naming_style.underscore_camel_case.required_prefix = _
 # |---------|---------|----------------------------------------------------------------------|
 # | VSN0001 | error   | Declared Hash disagrees with the computed hash (message = payload)   |
 # | VSN0002 | error   | A field type has no form in the canonical grammar                    |
-# | VSN0003 | error   | The migration chain skips a version above its oldest entry           |
+# | VSN0003 | error   | The migration chain has a gap, or a member that cannot be run        |
 # | VSN0004 | error   | Two reachable types claim one Serialization Name (GRAMMAR §9)        |
 # | VSN0005 | error   | A [Versionable] type, or an enclosing type, is not partial           |
 # | VSN0006 | error   | A [LiteralValues] option is outside the closed member list (§8)      |

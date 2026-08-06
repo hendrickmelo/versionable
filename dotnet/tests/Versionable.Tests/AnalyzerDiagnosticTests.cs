@@ -331,10 +331,11 @@ public class AnalyzerDiagnosticTests
 
             public static class Migrate
             {
-                public static readonly int V1 = 0;
-                public static readonly int V3 = 0;
+                public static readonly Migration V1 = new Migration().Drop("a");
+                public static readonly Migration V3 = new Migration().Drop("b");
             }
-            """));
+            """,
+            extraUsings: "using Versionable.Migrations;"));
 
         Diagnostic diagnostic = Assert.Single(diagnostics, candidate => candidate.Id == "VSN0003");
         Assert.Contains("version 2", diagnostic.GetMessage(), StringComparison.Ordinal);
@@ -352,10 +353,11 @@ public class AnalyzerDiagnosticTests
 
             public static class Migrate
             {
-                public static readonly int V2 = 0;
-                public static readonly int V3 = 0;
+                public static readonly Migration V2 = new Migration().Drop("a");
+                public static readonly Migration V3 = new Migration().Drop("b");
             }
-            """));
+            """,
+            extraUsings: "using Versionable.Migrations;"));
 
         Assert.Empty(diagnostics);
     }
@@ -363,6 +365,8 @@ public class AnalyzerDiagnosticTests
     [Fact]
     public void an_imperative_migration_joins_the_same_chain()
     {
+        // The two forms compose into one chain, so contiguity is checked over both together
+        // rather than per form.
         ImmutableArray<Diagnostic> diagnostics = GrammarTestHarness.Analyze(Fixture(
             """[Versionable(Version = 4, Hash = "6d52fd")]""",
             """
@@ -370,16 +374,143 @@ public class AnalyzerDiagnosticTests
 
             public static class Migrate
             {
-                public static readonly int V1 = 0;
+                public static readonly Migration V1 = new Migration().Drop("a");
 
                 [Migration(FromVersion = 3)]
-                public static void Third() { }
+                public static void Third(MigrationContext data) { }
             }
             """,
             extraUsings: "using Versionable.Migrations;"));
 
         Diagnostic diagnostic = Assert.Single(diagnostics, candidate => candidate.Id == "VSN0003");
         Assert.Contains("version 2", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void a_chain_that_mixes_the_two_forms_contiguously_is_accepted()
+    {
+        ImmutableArray<Diagnostic> diagnostics = GrammarTestHarness.Analyze(Fixture(
+            """[Versionable(Version = 3, Hash = "6d52fd")]""",
+            """
+            public int Value { get; init; }
+
+            public static class Migrate
+            {
+                public static readonly Migration V1 = new Migration().Drop("a");
+
+                [Migration(FromVersion = 2)]
+                public static void Second(MigrationContext data) { }
+            }
+            """,
+            extraUsings: "using Versionable.Migrations;"));
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void a_version_member_that_is_not_a_migration_is_reported()
+    {
+        // The member claims to be the migration for version 1; leaving it out of the chain
+        // silently would turn a mistyped declaration into a load failure on old files only.
+        ImmutableArray<Diagnostic> diagnostics = GrammarTestHarness.Analyze(Fixture(
+            """[Versionable(Version = 2, Hash = "6d52fd")]""",
+            """
+            public int Value { get; init; }
+
+            public static class Migrate
+            {
+                public static readonly int V1 = 0;
+            }
+            """));
+
+        Diagnostic diagnostic = Assert.Single(diagnostics, candidate => candidate.Id == "VSN0003");
+        Assert.Contains("must be a", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void a_migration_member_the_generated_code_cannot_reach_is_reported()
+    {
+        // Private members of a nested type are visible inside that type, not from the type it is
+        // nested in — which is where the generated metadata lives.
+        ImmutableArray<Diagnostic> diagnostics = GrammarTestHarness.Analyze(Fixture(
+            """[Versionable(Version = 2, Hash = "6d52fd")]""",
+            """
+            public int Value { get; init; }
+
+            public static class Migrate
+            {
+                private static readonly Migration V1 = new Migration().Drop("a");
+            }
+            """,
+            extraUsings: "using Versionable.Migrations;"));
+
+        Diagnostic diagnostic = Assert.Single(diagnostics, candidate => candidate.Id == "VSN0003");
+        Assert.Contains("private", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void a_migration_method_of_the_wrong_shape_is_reported()
+    {
+        ImmutableArray<Diagnostic> diagnostics = GrammarTestHarness.Analyze(Fixture(
+            """[Versionable(Version = 2, Hash = "6d52fd")]""",
+            """
+            public int Value { get; init; }
+
+            public static class Migrate
+            {
+                [Migration(FromVersion = 1)]
+                public static void First(int wrong) { }
+            }
+            """,
+            extraUsings: "using Versionable.Migrations;"));
+
+        Diagnostic diagnostic = Assert.Single(diagnostics, candidate => candidate.Id == "VSN0003");
+        Assert.Contains("not shaped like one", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void a_migration_method_without_a_from_version_is_reported()
+    {
+        ImmutableArray<Diagnostic> diagnostics = GrammarTestHarness.Analyze(Fixture(
+            """[Versionable(Version = 2, Hash = "6d52fd")]""",
+            """
+            public int Value { get; init; }
+
+            public static class Migrate
+            {
+                [Migration]
+                public static void First(MigrationContext data) { }
+            }
+            """,
+            extraUsings: "using Versionable.Migrations;"));
+
+        Diagnostic diagnostic = Assert.Single(diagnostics, candidate => candidate.Id == "VSN0003");
+        Assert.Contains("without a FromVersion", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void a_migrate_class_that_is_its_own_chain_is_left_unchecked()
+    {
+        // The documented scope limit: its FromVersions is a run-time value, so the gap between 1
+        // and 3 that a declarative chain would be rejected for cannot be seen here.
+        ImmutableArray<Diagnostic> diagnostics = GrammarTestHarness.Analyze(Fixture(
+            """[Versionable(Version = 4, Hash = "6d52fd")]""",
+            """
+            public int Value { get; init; }
+
+            public sealed class Migrate : IMigrationChain
+            {
+                public IReadOnlyList<int> FromVersions { get; } = new[] { 1, 3 };
+
+                public int? MinReversibleVersion => null;
+
+                public IDictionary<string, object?> Apply(
+                    IDictionary<string, object?> fields, int fromVersion, int toVersion, bool upgradeInPlace) => fields;
+            }
+            """,
+            extraUsings: "using Versionable.Migrations;"));
+
+        Assert.Empty(diagnostics);
     }
 
     [Fact]
