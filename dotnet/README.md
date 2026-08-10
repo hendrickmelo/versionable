@@ -42,6 +42,13 @@ pixi run dotnet-cleanup
 `pixi run cleanup` is the **Python** cleanup task and does not include `dotnet-cleanup`; the .NET SDK is not a pixi
 dependency, so a Python-only checkout would fail on it. Run both before pushing a change that touches each side.
 
+### Porting an existing Python schema
+
+`python -m versionable.tools.to_csharp mypkg.schemas` scaffolds `[Versionable]` declarations from Python classes by
+importing and introspecting them, copying each `hash=` literal over verbatim so the analyzer here validates it on the
+next build. Constructs with no C# spelling become `// TODO` comments citing the grammar section that closes them off.
+See [docs/to-csharp.md](../docs/to-csharp.md) for the mapping table and the limitations.
+
 ### Conformance
 
 The suite reads the golden corpus from `conformance/golden/`. Setting `VERSIONABLE_GOLDEN_ROOT` points it at another
