@@ -63,8 +63,8 @@ Enforced from `.editorconfig`, so they are settled rather than argued:
 - **Every `[Versionable]` type is declared `partial`.** The generator implements `IVersionableMetadataProvider` by
   emitting a second part of the type, and a static abstract member cannot be implemented from outside its declaring type
   — a non-partial type silently drops out of the compile-time path. Reading the generated member also needs a generic
-  constraint: APIs that want it are written `Method<T>(...) where T : IVersionableMetadataProvider`. The diagnostic that
-  catches a missing `partial` lands in task 2b; until then it surfaces as a missing member.
+  constraint: APIs that want it are written `Method<T>(...) where T : IVersionableMetadataProvider`. Declaring a
+  non-partial `[Versionable]` type produces diagnostic `VSN0005` at build time.
 - **Namespace matches folder.** `src/Versionable/Errors/*.cs` is `Versionable.Errors`; anything directly under
   `src/Versionable/` is the root `Versionable` namespace. `IDE0130` fails the build otherwise.
 - **File-scoped namespaces**, Allman braces, explicit types over `var`, braces never optional.

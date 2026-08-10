@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Versionable.Converters;
+using Versionable.Engine;
 using Versionable.Errors;
 using Xunit;
 
@@ -100,6 +101,25 @@ public class ConverterEnumTests
     {
         Assert.Equal(Status.Unknown, EnumConverter.FromWire("retired", typeof(Status)));
         Assert.Equal(Mode.Unset, EnumConverter.FromWire(42, typeof(Mode)));
+    }
+
+    [Fact]
+    public void an_unknown_value_falling_back_raises_a_versionable_log_warning()
+    {
+        List<string> warnings = [];
+        void Capture(string message) => warnings.Add(message);
+        VersionableLog.Warning += Capture;
+        try
+        {
+            EnumConverter.FromWire("retired", typeof(Status));
+        }
+        finally
+        {
+            VersionableLog.Warning -= Capture;
+        }
+
+        Assert.Contains(warnings, message => message.Contains("Unknown", StringComparison.Ordinal)
+            && message.Contains("fallback", StringComparison.Ordinal));
     }
 
     [Fact]

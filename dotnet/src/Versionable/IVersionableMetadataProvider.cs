@@ -10,8 +10,8 @@ namespace Versionable;
 /// by emitting a second part of the type, and a static abstract member cannot be implemented
 /// from outside the type that declares it. A non-partial <c>[Versionable]</c> type therefore
 /// gets no metadata member and drops out of the compile-time path entirely. Declare every
-/// <c>[Versionable]</c> type <c>partial</c>. Diagnosing the omission is the analyzer's job in
-/// task 2b; until then it surfaces as a missing member rather than a clear message.
+/// <c>[Versionable]</c> type <c>partial</c>. The analyzer diagnoses the omission as
+/// <c>VSN0005</c> at build time.
 /// </para>
 /// <para>
 /// This is the reflection-free path required by ADR-0003: where the type is known at compile

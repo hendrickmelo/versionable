@@ -131,8 +131,9 @@ public class Hdf5BackendTests
     /// message internal — so a reader cannot ask a dataset which filters it carries. The C# side
     /// therefore checks layout, chunk shape, and (in
     /// <see cref="the_default_pipeline_compresses_and_the_data_survives_it"/>) file size; naming
-    /// the filters <c>gzip</c> and <c>shuffle</c> is left to the h5py cross-check recorded in the
-    /// task 3c report.
+    /// the filters <c>gzip</c> and <c>shuffle</c> on a C#-written file is left to an out-of-band
+    /// h5py check, since h5py can introspect a dataset's filter pipeline directly and PureHDF
+    /// cannot.
     /// </para>
     /// </remarks>
     [Fact]
@@ -179,7 +180,7 @@ public class Hdf5BackendTests
     /// <remarks>
     /// Size is the only thing available: PureHDF exposes no filter pipeline on a dataset it
     /// reads, and correct data coming back proves only that the filters are symmetric, not that
-    /// they ran. The h5py cross-load recorded in the task 3c report checks the other half — that
+    /// they ran. An out-of-band h5py check against a C#-written file covers the other half — that
     /// the filters are named <c>gzip</c> and <c>shuffle</c>.
     /// </remarks>
     [Fact]

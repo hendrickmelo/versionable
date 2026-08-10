@@ -43,6 +43,8 @@ Also in this release:
 - `conformance/` holds the cross-language contract: the grammar specification, hash vectors, and a golden corpus of
   files with per-fixture manifests. CI reads it from both languages and, on every pull request, has each
   implementation's writers checked against the other's readers.
+- `python -m versionable.tools.to_csharp` scaffolds a C# `Versionable` type from an existing Python one in one shot
+  ([docs/to-csharp.md](docs/to-csharp.md)).
 
 ## 0.2.1 (2026-05-08)
 

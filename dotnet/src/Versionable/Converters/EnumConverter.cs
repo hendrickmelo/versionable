@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Reflection;
+using Versionable.Engine;
 using Versionable.Errors;
 
 namespace Versionable.Converters;
@@ -97,11 +97,8 @@ internal static class EnumConverter
 
         if (map.Fallback is not null)
         {
-            Trace.TraceWarning(
-                "Unknown {0} value {1}, using fallback {2}",
-                enumType.Name,
-                wireValue,
-                map.Fallback);
+            VersionableLog.Warn(
+                $"Unknown {enumType.Name} value {wireValue}, using fallback {map.Fallback}");
             return map.Fallback;
         }
 

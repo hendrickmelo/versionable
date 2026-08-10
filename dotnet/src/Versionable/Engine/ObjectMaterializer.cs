@@ -328,7 +328,8 @@ internal static class ObjectMaterializer
     /// <c>Literal</c> at whatever depth it sits.
     /// <para>
     /// Giving <see cref="FieldDescriptor"/> a depth or path member would let the engine do it
-    /// instead; that is a contract amendment, reported with task 2d rather than assumed here.
+    /// instead; that would be a deliberate contract amendment to <see cref="FieldDescriptor"/>,
+    /// not something to assume here.
     /// </para>
     /// </remarks>
     /// <param name="field">The field being read.</param>

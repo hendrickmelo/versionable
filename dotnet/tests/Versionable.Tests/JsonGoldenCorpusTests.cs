@@ -151,7 +151,7 @@ public class JsonGoldenCorpusTests
     /// <para>
     /// The comparison is the walker's own wire form of both objects rather than the two files'
     /// bytes: a C#-written array carries a C#-written NPZ payload, whose ZIP metadata is allowed to
-    /// differ from numpy's (task 2c), and comparing wire forms compares the values instead of the
+    /// differ from numpy's by design, and comparing wire forms compares the values instead of the
     /// container they arrived in.
     /// </para>
     /// </remarks>

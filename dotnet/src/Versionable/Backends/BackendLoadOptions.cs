@@ -22,7 +22,7 @@ namespace Versionable.Backends;
 /// half an object, and three of the four backends have no lazy mode at all.
 /// </para>
 /// <para>
-/// <b>Consequence for the public API (task 2d).</b> The implementer of <c>Load&lt;T&gt;()</c>
+/// <b>Consequence for the public <c>Load&lt;T&gt;()</c> API.</b> Its implementer
 /// owns the Python-parity default and must translate, not pass through: with no caller
 /// preference and an HDF5 target, it must pass an <em>empty</em> <see cref="Preload"/> set to
 /// reproduce Python's lazy-by-default behavior. Passing <c>new BackendLoadOptions()</c>
