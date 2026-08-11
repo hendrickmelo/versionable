@@ -195,6 +195,7 @@ def load[T: Versionable](
                     fieldMetadata=dcMeta,
                     validateLiterals=meta.validateLiterals,
                     upgradeInPlace=upgradeInPlace,
+                    _path=fieldName,
                 )
         # Use dataclass default
         elif fieldName in dcFields:

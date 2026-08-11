@@ -1,0 +1,13 @@
+{
+  "__versionable__": {
+    "object": "GoldenStdlib",
+    "version": 1,
+    "hash": "c3ff88"
+  },
+  "filePath": "data/run-01.h5",
+  "posixPath": "/var/log/device.log",
+  "windowsPath": "C:\\Devices\\probe.cfg",
+  "amount": "1234.5678",
+  "deviceId": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+  "serialPattern": "^SN-\\d{6}$"
+}

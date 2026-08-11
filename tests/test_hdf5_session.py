@@ -25,7 +25,7 @@ from versionable._hdf5_field import (
     _getHdf5FieldInfo,
     _resolveAppendAxis,
 )
-from versionable.errors import BackendError
+from versionable.errors import BackendError, DtypeMismatchError
 
 # ---------------------------------------------------------------------------
 # Test classes
@@ -990,15 +990,24 @@ class _WithFloat32(
 class TestDtypeInference:
     """On-disk dtype inferred from NDArray type annotations."""
 
-    def test_float64_stored_as_float32(self, tmp_path: object) -> None:
-        """Assigning float64 data to an NDArray[float32] field stores as float32."""
+    def test_int16_stored_as_float32(self, tmp_path: object) -> None:
+        """A safely-castable assignment is stored at the annotated dtype."""
         path = f"{tmp_path}/test.h5"
         with versionable.hdf5.open(_WithFloat32, path) as obj:
-            obj.data = np.arange(10, dtype=np.float64)  # assign float64
+            obj.data = np.arange(10, dtype=np.int16)  # safe: int16 -> float32
             assert obj.data.dtype == np.float32  # stored as float32
 
         with h5py.File(path, "r") as f:
             assert f["data"].dtype == np.float32
+
+    def test_float64_into_float32_raises(self, tmp_path: object) -> None:
+        """An unsafe narrowing assignment raises instead of silently truncating (ADR-0002)."""
+        path = f"{tmp_path}/test.h5"
+        with (
+            versionable.hdf5.open(_WithFloat32, path) as obj,
+            pytest.raises(DtypeMismatchError, match="float64"),
+        ):
+            obj.data = np.arange(10, dtype=np.float64)
 
     def test_matching_dtype_no_cast(self, tmp_path: object) -> None:
         """Assigning float32 data to an NDArray[float32] field stores as-is."""

@@ -1,0 +1,12 @@
+colour: green
+priority: 3
+palette:
+- red
+- blue
+byName:
+  primary: red
+  accent: blue
+__versionable__:
+  object: GoldenEnums
+  version: 1
+  hash: '660511'

@@ -1,0 +1,10 @@
+{
+  "__versionable__": {
+    "object": "GoldenWorker",
+    "version": 1,
+    "hash": "5556c8"
+  },
+  "title": "legacy-worker",
+  "debug": true,
+  "retries": 9
+}

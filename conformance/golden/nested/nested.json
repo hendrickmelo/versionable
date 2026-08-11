@@ -1,0 +1,66 @@
+{
+  "__versionable__": {
+    "object": "GoldenNested",
+    "version": 1,
+    "hash": "705e61"
+  },
+  "label": "assembly",
+  "inner": {
+    "__versionable__": {
+      "object": "GoldenInner",
+      "version": 1,
+      "hash": "e37514"
+    },
+    "x": 1.5,
+    "y": -2.5
+  },
+  "points": [
+    {
+      "__versionable__": {
+        "object": "GoldenInner",
+        "version": 1,
+        "hash": "e37514"
+      },
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "__versionable__": {
+        "object": "GoldenInner",
+        "version": 1,
+        "hash": "e37514"
+      },
+      "x": 1.0,
+      "y": 1.0
+    }
+  ],
+  "byName": {
+    "origin": {
+      "__versionable__": {
+        "object": "GoldenInner",
+        "version": 1,
+        "hash": "e37514"
+      },
+      "x": 0.0,
+      "y": 0.0
+    },
+    "corner": {
+      "__versionable__": {
+        "object": "GoldenInner",
+        "version": 1,
+        "hash": "e37514"
+      },
+      "x": 2.0,
+      "y": 3.0
+    }
+  },
+  "optionalInner": {
+    "__versionable__": {
+      "object": "GoldenInner",
+      "version": 1,
+      "hash": "e37514"
+    },
+    "x": 9.0,
+    "y": 9.0
+  }
+}

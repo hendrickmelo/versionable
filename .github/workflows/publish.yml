@@ -18,7 +18,14 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # The `release` trigger cannot be filtered by tag pattern, and this repository publishes two
+  # packages from two tag series: `vX.Y.Z` here, `dotnet-vX.Y.Z` in publish-nuget.yml (ADR-0004).
+  # Without the guard a .NET release runs this workflow, which seds the whole tag name into
+  # pyproject.toml's version and fails the build — a red PyPI workflow on every .NET release.
+  # `publish` carries the same guard, and `bump-dev-version` is covered transitively by
+  # `needs: publish`.
   build:
+    if: github.event_name != 'release' || !startsWith(github.ref_name, 'dotnet-v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -75,7 +82,7 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
 
   publish:
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' && !startsWith(github.ref_name, 'dotnet-v')
     needs: build
     runs-on: ubuntu-latest
     environment: pypi

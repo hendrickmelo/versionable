@@ -11,6 +11,11 @@ docs/_build/
 *.egg
 
 
+# .NET build output
+dotnet/**/bin/
+dotnet/**/obj/
+*.user
+
 # Example outputs
 examples/*.h5
 

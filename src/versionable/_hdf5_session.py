@@ -23,6 +23,7 @@ except ImportError as e:
 
 import numpy as np
 
+from versionable._arrays import coerceArrayDtype, declaredDtype
 from versionable._base import Versionable, _resolveFields, metadata
 from versionable._dataset_array import DatasetArray
 from versionable._hdf5_backend import (
@@ -49,27 +50,6 @@ logger = logging.getLogger(__name__)
 
 # Cache of dynamically created proxy subclasses
 _proxyClassCache: dict[type, type] = {}
-
-
-def _dtypeFromAnnotation(fieldType: Any) -> np.dtype[Any] | None:
-    """Extract dtype from an NDArray[X] annotation, or None for bare np.ndarray.
-
-    For ``Annotated[NDArray[np.float32], ...]``, unwraps the Annotated layer first.
-    """
-    # Unwrap Annotated
-    if typing.get_origin(fieldType) is typing.Annotated:
-        fieldType = typing.get_args(fieldType)[0]
-
-    # NDArray[np.float32] → origin=ndarray, args=(tuple[Any,...], dtype[float32])
-    if typing.get_origin(fieldType) is not np.ndarray:
-        return None
-    for arg in typing.get_args(fieldType):
-        if typing.get_origin(arg) is np.dtype:
-            inner = typing.get_args(arg)
-            if inner:
-                result: np.dtype[Any] = np.dtype(inner[0])
-                return result
-    return None
 
 
 class Hdf5Session[T: Versionable]:
@@ -215,7 +195,7 @@ class Hdf5Session[T: Versionable]:
             if isinstance(dataset, h5py.Dataset) and isinstance(value, np.ndarray):
                 appendable = _getHdf5FieldInfo(fieldType) or Hdf5FieldInfo()
                 axis = self._resolveAxisFromDataset(dataset, appendable)
-                return DatasetArray(dataset, name, axis, writable=writable)
+                return DatasetArray(dataset, name, axis, writable=writable, declaredDtype=declaredDtype(fieldType))
 
         # list -> TrackedList (read mode returns plain list)
         if isinstance(value, list):
@@ -313,10 +293,8 @@ class Hdf5Session[T: Versionable]:
 
         # All ndarray fields get resizable datasets in sessions
         if isinstance(value, np.ndarray):
-            # Cast to annotated dtype if specified (e.g. NDArray[np.float32])
-            annotatedDtype = _dtypeFromAnnotation(fieldType)
-            if annotatedDtype is not None and value.dtype != annotatedDtype:
-                value = value.astype(annotatedDtype)
+            # Apply the annotated dtype (e.g. NDArray[np.float32]); lossy casts error
+            value = coerceArrayDtype(value, fieldType, fieldPath=name, context="save")
             appendable = _getHdf5FieldInfo(fieldType) or Hdf5FieldInfo()
             self._createResizableDataset(name, value, appendable)
             return
@@ -394,7 +372,7 @@ class Hdf5Session[T: Versionable]:
             if isinstance(dataset, h5py.Dataset) and isinstance(value, (np.ndarray, DatasetArray)):
                 appendable = _getHdf5FieldInfo(fieldType) or Hdf5FieldInfo()
                 axis = _resolveAppendAxis(dataset.shape, appendable)
-                return DatasetArray(dataset, name, axis)
+                return DatasetArray(dataset, name, axis, declaredDtype=declaredDtype(fieldType))
 
         # list -> TrackedList
         if isinstance(value, list) and not isinstance(value, TrackedList):

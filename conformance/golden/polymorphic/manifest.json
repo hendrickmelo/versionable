@@ -1,0 +1,50 @@
+{
+  "fixture": "polymorphic",
+  "serializationName": "GoldenPolymorphic",
+  "schemaHash": "cfb9bf",
+  "version": 1,
+  "note": "A list declared as the base class holding two different subclasses. The reader must resolve each element's concrete class from its envelope, not from the annotation.",
+  "files": {
+    "json": "polymorphic.json",
+    "yaml": "polymorphic.yaml",
+    "toml": "polymorphic.toml",
+    "hdf5": "polymorphic.h5"
+  },
+  "values": {
+    "shapes": [
+      {
+        "$object": {
+          "name": "GoldenCircle",
+          "version": 1,
+          "hash": "8e5e7c",
+          "fields": {
+            "label": "c1",
+            "radius": 2.5
+          }
+        }
+      },
+      {
+        "$object": {
+          "name": "GoldenSquare",
+          "version": 1,
+          "hash": "42fff3",
+          "fields": {
+            "label": "s1",
+            "side": 4.0
+          }
+        }
+      },
+      {
+        "$object": {
+          "name": "GoldenCircle",
+          "version": 1,
+          "hash": "8e5e7c",
+          "fields": {
+            "label": "c2",
+            "radius": 0.5
+          }
+        }
+      }
+    ]
+  }
+}

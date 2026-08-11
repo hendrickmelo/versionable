@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.0 is mandatory for Roslyn components: the compiler loads them
+         into its own process, which may be .NET Framework (MSBuild.exe). -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The canonical grammar renderer and the schema model are internal: they are an
+         implementation detail shared by the analyzer and the generator, not API. The tests
+         drive them directly, because the conformance vectors assert on the rendered string
+         and the payload, not on a diagnostic. -->
+    <InternalsVisibleTo Include="Versionable.Tests" />
+  </ItemGroup>
+
+  <!-- AnalyzerReleases.Shipped.md / .Unshipped.md sit next to this file; the analyzer
+       package's build props pick them up as AdditionalFiles automatically. They are the
+       release-tracking ledger (RS2008) for the diagnostics. -->
+
+  <!-- This project ships no package of its own: the analyzer travels inside the Versionable
+       nupkg (ADR-0003), because a consumer who references the runtime must get the
+       compile-time hash check and the metadata generator, not opt into them separately.
+       Versionable.csproj's _PackVersionableAnalyzer target does the packing. -->
+
+</Project>

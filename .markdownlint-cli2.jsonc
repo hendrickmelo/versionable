@@ -9,6 +9,8 @@
     ".*/**",
     "docs/_build/**",
     "docs/plans/**",
-    "node_modules/**"
+    "node_modules/**",
+    // Not Markdown: the Roslyn release tracker parses these itself (RS2007).
+    "dotnet/src/Versionable.Analyzers/AnalyzerReleases.*.md"
   ]
 }

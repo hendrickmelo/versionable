@@ -19,7 +19,9 @@ from enum import Enum
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Protocol, runtime_checkable
 
+from versionable._arrays import coerceArrayDtype
 from versionable._base import _REGISTRY, Versionable, _resolveFields
+from versionable._hash import setSerializationName
 from versionable._migration import applyMigrationRange
 from versionable._numpy_compat import _np as np
 from versionable._numpy_compat import requireNumpy
@@ -27,6 +29,7 @@ from versionable.errors import (
     BackendError,
     CircularReferenceError,
     ConverterError,
+    DtypeMismatchError,
     UnknownFieldError,
     VersionError,
 )
@@ -84,12 +87,15 @@ class ConverterRegistry:
         deserialize: Any,
         *,
         matchSubclasses: bool = False,
+        name: str | None = None,
     ) -> None:
         conv = _TypeConverter(tp, serialize, deserialize, matchSubclasses=matchSubclasses)
         if matchSubclasses:
             self._subclass.append(conv)
         else:
             self._exact[tp] = conv
+        if name is not None:
+            setSerializationName(tp, name)
 
     def get(self, tp: type) -> _TypeConverter | None:
         """Find a converter for *tp*: exact match first, then subclass match."""
@@ -111,9 +117,20 @@ def registerConverter(
     deserialize: Any,
     *,
     matchSubclasses: bool = False,
+    name: str | None = None,
 ) -> None:
-    """Register a custom type converter."""
-    _registry.register(tp, serialize, deserialize, matchSubclasses=matchSubclasses)
+    """Register a custom type converter.
+
+    Args:
+        tp: The Python type the converter handles.
+        serialize: ``(value) -> primitive``.
+        deserialize: ``(primitive, type) -> value``.
+        matchSubclasses: Also use this converter for subclasses of *tp*.
+        name: Serialization name for *tp* in schema hashes.  Defaults to the
+            bare class name (``datetime``, ``Path``); pass an explicit name to
+            pin a different one.
+    """
+    _registry.register(tp, serialize, deserialize, matchSubclasses=matchSubclasses, name=name)
 
 
 # ---------------------------------------------------------------------------
@@ -240,6 +257,9 @@ def serialize(
     nativeTypes = nativeTypes or set()
     if _visited is None:
         _visited = set()
+
+    # Enforce the dtype the annotation declares before anything writes the array
+    value = coerceArrayDtype(value, fieldType, fieldPath=_path, context="save")
 
     # Try typed value dispatch first
     result = _serializeTyped(value, nativeTypes, _visited, _path)
@@ -371,6 +391,7 @@ def deserialize(
     fieldMetadata: Any | None = None,
     validateLiterals: bool = True,
     upgradeInPlace: bool = False,
+    _path: str = "",
 ) -> Any:
     """Deserialize *data* back to the declared *fieldType*.
 
@@ -379,6 +400,8 @@ def deserialize(
         fieldType: The declared type annotation for the field.
         nativeTypes: Types the backend handles natively (skip conversion).
         fieldMetadata: Optional dataclass field metadata (for literal fallbacks).
+        _path: Field path of *data* relative to the object being loaded, used
+            in dtype-mismatch messages.  Internal; backends need not pass it.
         validateLiterals: Whether to validate ``Literal`` field values at the
             current call site. The enclosing ``Versionable``'s class setting
             governs this; it is reset at each nested ``Versionable`` boundary
@@ -426,18 +449,23 @@ def deserialize(
             fieldMetadata=fieldMetadata,
             validateLiterals=validateLiterals,
             upgradeInPlace=upgradeInPlace,
+            path=_path,
         )
 
     # Resolve the concrete type and dispatch
     concreteType = origin or fieldType
-    return _deserializeConcrete(
+    result = _deserializeConcrete(
         data,
         concreteType,
         args,
         nativeTypes,
         validateLiterals=validateLiterals,
         upgradeInPlace=upgradeInPlace,
+        path=_path,
     )
+    # Enforce the declared dtype on the reconstructed array.  Applies to backends
+    # that hand arrays back natively (HDF5) as well as decoded ones (JSON/YAML).
+    return coerceArrayDtype(result, fieldType, fieldPath=_path, context="load")
 
 
 def _deserializeUnion(
@@ -447,6 +475,7 @@ def _deserializeUnion(
     fieldMetadata: Any | None = None,
     validateLiterals: bool = True,
     upgradeInPlace: bool = False,
+    path: str = "",
 ) -> Any:
     """Deserialize a Union type by trying each member."""
     nonNoneArgs = [a for a in args if a is not type(None)]
@@ -458,6 +487,7 @@ def _deserializeUnion(
             fieldMetadata=fieldMetadata,
             validateLiterals=validateLiterals,
             upgradeInPlace=upgradeInPlace,
+            _path=path,
         )
     for arg in nonNoneArgs:
         try:
@@ -468,7 +498,12 @@ def _deserializeUnion(
                 fieldMetadata=fieldMetadata,
                 validateLiterals=validateLiterals,
                 upgradeInPlace=upgradeInPlace,
+                _path=path,
             )
+        except DtypeMismatchError:
+            # Declared-dtype violations are schema drift, not a wrong union
+            # member — surface them instead of silently trying the next member.
+            raise
         except (TypeError, ValueError, ConverterError):
             continue
     return data
@@ -482,6 +517,7 @@ def _deserializeConcrete(
     *,
     validateLiterals: bool = True,
     upgradeInPlace: bool = False,
+    path: str = "",
 ) -> Any:
     """Deserialize to a concrete (non-union) type."""
     # Backend native types — pass through
@@ -512,7 +548,7 @@ def _deserializeConcrete(
     # cross the boundary. `upgradeInPlace` does propagate (it's a load-time
     # global, not class-scoped) so nested `requiresUpgrade()` ops honor it.
     if isinstance(concreteType, type) and issubclass(concreteType, Versionable):
-        return _deserializeVersionable(data, concreteType, upgradeInPlace=upgradeInPlace)
+        return _deserializeVersionable(data, concreteType, upgradeInPlace=upgradeInPlace, path=path)
 
     # numpy ndarray (both explicit ndarray and npt.NDArray alias)
     if np is not None and (
@@ -523,12 +559,18 @@ def _deserializeConcrete(
     # Collections
     if concreteType in (list, tuple, set, frozenset):
         return _deserializeSequence(
-            data, concreteType, args, nativeTypes, validateLiterals=validateLiterals, upgradeInPlace=upgradeInPlace
+            data,
+            concreteType,
+            args,
+            nativeTypes,
+            validateLiterals=validateLiterals,
+            upgradeInPlace=upgradeInPlace,
+            path=path,
         )
 
     if concreteType is dict:
         return _deserializeDict(
-            data, args, nativeTypes, validateLiterals=validateLiterals, upgradeInPlace=upgradeInPlace
+            data, args, nativeTypes, validateLiterals=validateLiterals, upgradeInPlace=upgradeInPlace, path=path
         )
 
     # Fallback
@@ -543,6 +585,7 @@ def _deserializeSequence(
     *,
     validateLiterals: bool = True,
     upgradeInPlace: bool = False,
+    path: str = "",
 ) -> Any:
     """Deserialize list, tuple, set, or frozenset."""
     elemType = args[0] if args else Any
@@ -553,8 +596,9 @@ def _deserializeSequence(
             nativeTypes=nativeTypes,
             validateLiterals=validateLiterals,
             upgradeInPlace=upgradeInPlace,
+            _path=_appendIndex(path, i),
         )
-        for v in data
+        for i, v in enumerate(data)
     ]
     if concreteType is tuple:
         return tuple(items)
@@ -572,6 +616,7 @@ def _deserializeDict(
     *,
     validateLiterals: bool = True,
     upgradeInPlace: bool = False,
+    path: str = "",
 ) -> dict[str, Any]:
     """Deserialize a dict."""
     keyType = args[0] if args else str
@@ -589,6 +634,7 @@ def _deserializeDict(
             nativeTypes=nativeTypes,
             validateLiterals=validateLiterals,
             upgradeInPlace=upgradeInPlace,
+            _path=_appendKey(path, k),
         )
         for k, v in data.items()
     }
@@ -739,6 +785,7 @@ def _deserializeVersionable(
     cls: type[Versionable],
     *,
     upgradeInPlace: bool = False,
+    path: str = "",
 ) -> Versionable:
     """Deserialize a dict to a Versionable instance.
 
@@ -765,6 +812,8 @@ def _deserializeVersionable(
             and as the polymorphism upper bound (``object`` must resolve to a subclass).
         upgradeInPlace: Forwarded to :func:`applyMigrationRange` so nested
             ``requiresUpgrade()`` migrations honor the root ``load(...)`` flag.
+        path: Field path of this instance relative to the object being loaded,
+            used in dtype-mismatch messages.
 
     Raises:
         VersionError: File version is newer than the resolved class's version.
@@ -838,6 +887,7 @@ def _deserializeVersionable(
                     fieldMetadata=dcMeta,
                     validateLiterals=meta.validateLiterals,
                     upgradeInPlace=upgradeInPlace,
+                    _path=_appendField(path, fieldName),
                 )
         elif fieldName in dcFields:
             dcField = dcFields[fieldName]

@@ -1,0 +1,732 @@
+{
+  "_comment": "Conformance hash vectors for the versionable Canonical Type Grammar. See GRAMMAR.md. Each vector: 'fields' maps wire name -> canonical type string; 'payload' is the ','-joined 'name:canonicalType' pairs with names sorted by Unicode code point and is the authoritative ordered form ('fields' key order is informational only); 'hash' is the first 6 lowercase hex chars of sha256(payload encoded as UTF-8). Optional keys: 'pythonOnly' marks constructs with no C# equivalent; 'mustMatch'/'mustDiffer' name vectors whose hash must equal / must not equal this one's. An implementation passes by rendering each field's native type to the canonical string, rebuilding the payload, and reproducing the hash.",
+  "grammarVersion": 1,
+  "vectors": [
+    {
+      "name": "no-fields",
+      "note": "A schema with no fields hashes the empty payload.",
+      "fields": {},
+      "payload": "",
+      "hash": "e3b0c4"
+    },
+    {
+      "name": "single-field",
+      "note": "Smallest non-empty payload.",
+      "fields": {
+        "value": "int"
+      },
+      "payload": "value:int",
+      "hash": "da39fe"
+    },
+    {
+      "name": "simple-scalars",
+      "note": "Two scalars, already in sorted order.",
+      "fields": {
+        "count": "int",
+        "label": "str"
+      },
+      "payload": "count:int,label:str",
+      "hash": "3c53d8"
+    },
+    {
+      "name": "field-name-sorting",
+      "note": "Fields declared out of order; sort is by Unicode code point (ordinal), so 'Mid' precedes 'alpha' precedes 'zeta'.",
+      "fields": {
+        "zeta": "int",
+        "alpha": "str",
+        "Mid": "bool"
+      },
+      "payload": "Mid:bool,alpha:str,zeta:int",
+      "hash": "0ed89c"
+    },
+    {
+      "name": "field-name-sorting-case",
+      "note": "Ordinal sort puts all ASCII uppercase before all lowercase; a culture-aware sort would produce a different payload and a different hash.",
+      "fields": {
+        "b": "int",
+        "B": "int",
+        "a": "int",
+        "A": "int"
+      },
+      "payload": "A:int,B:int,a:int,b:int",
+      "hash": "869b91"
+    },
+    {
+      "name": "worked-example",
+      "note": "The worked example in GRAMMAR.md.",
+      "fields": {
+        "label": "str",
+        "count": "int",
+        "tags": "set[str]"
+      },
+      "payload": "count:int,label:str,tags:set[str]",
+      "hash": "fe82a7"
+    },
+    {
+      "name": "all-scalars",
+      "note": "Every scalar token exactly once. Includes a standalone 'None' field; C# has no type whose sole value is null.",
+      "pythonOnly": true,
+      "fields": {
+        "a": "int",
+        "b": "float",
+        "c": "str",
+        "d": "bool",
+        "e": "bytes",
+        "f": "complex",
+        "g": "None"
+      },
+      "payload": "a:int,b:float,c:str,d:bool,e:bytes,f:complex,g:None",
+      "hash": "2e79e2"
+    },
+    {
+      "name": "bool-is-not-int",
+      "note": "bool is its own token; it never collapses to int.",
+      "fields": {
+        "flag": "bool"
+      },
+      "payload": "flag:bool",
+      "hash": "c8d9eb"
+    },
+    {
+      "name": "scalar-width-erased",
+      "note": "C# long/int/short/byte all render 'int'; float/double both render 'float' (ADR-0002). Python int/float render the same tokens.",
+      "fields": {
+        "big": "int",
+        "small": "int",
+        "precise": "float",
+        "rough": "float"
+      },
+      "payload": "big:int,precise:float,rough:float,small:int",
+      "hash": "807b4e"
+    },
+    {
+      "name": "complex-and-bytes",
+      "note": "C# byte[] renders 'bytes' (carve-out from the array rule); System.Numerics.Complex renders 'complex'.",
+      "fields": {
+        "blob": "bytes",
+        "z": "complex"
+      },
+      "payload": "blob:bytes,z:complex",
+      "hash": "dae15d"
+    },
+    {
+      "name": "list-of-int",
+      "note": "C#: List<int> / int[].",
+      "fields": {
+        "items": "list[int]"
+      },
+      "payload": "items:list[int]",
+      "hash": "f8b612"
+    },
+    {
+      "name": "dict-str-float",
+      "note": "Type arguments are separated by ', ' (comma + one space).",
+      "fields": {
+        "table": "dict[str, float]"
+      },
+      "payload": "table:dict[str, float]",
+      "hash": "d88c0d"
+    },
+    {
+      "name": "set-of-str",
+      "note": "C#: HashSet<string>.",
+      "fields": {
+        "tags": "set[str]"
+      },
+      "payload": "tags:set[str]",
+      "hash": "88a301"
+    },
+    {
+      "name": "frozenset-of-int",
+      "note": "C#: FrozenSet<int>.",
+      "fields": {
+        "ids": "frozenset[int]"
+      },
+      "payload": "ids:frozenset[int]",
+      "hash": "dc8ad7"
+    },
+    {
+      "name": "tuple-mixed",
+      "note": "Tuple arguments are order-significant. C#: (int, string, double).",
+      "fields": {
+        "row": "tuple[int, str, float]"
+      },
+      "payload": "row:tuple[int, str, float]",
+      "hash": "3847e4",
+      "mustDiffer": [
+        "tuple-mixed-reordered"
+      ]
+    },
+    {
+      "name": "tuple-mixed-reordered",
+      "note": "Same members as tuple-mixed in a different order; must hash differently.",
+      "fields": {
+        "row": "tuple[str, int, float]"
+      },
+      "payload": "row:tuple[str, int, float]",
+      "hash": "b0fe85",
+      "mustDiffer": [
+        "tuple-mixed"
+      ]
+    },
+    {
+      "name": "tuple-variadic",
+      "note": "Homogeneous variadic tuple: the trailing '...' is the literal three-character token '...', legal only as the second and last tuple argument. Python tuple[int, ...]; no C# equivalent.",
+      "pythonOnly": true,
+      "fields": {
+        "row": "tuple[int, ...]"
+      },
+      "payload": "row:tuple[int, ...]",
+      "hash": "177e64"
+    },
+    {
+      "name": "tuple-single",
+      "note": "One-element tuple.",
+      "fields": {
+        "pair": "tuple[int]"
+      },
+      "payload": "pair:tuple[int]",
+      "hash": "34887e"
+    },
+    {
+      "name": "nested-containers",
+      "note": "Containers nest without special-casing.",
+      "fields": {
+        "matrix": "list[list[float]]",
+        "index": "dict[str, list[int]]"
+      },
+      "payload": "index:dict[str, list[int]],matrix:list[list[float]]",
+      "hash": "69d8d2"
+    },
+    {
+      "name": "deep-nesting",
+      "note": "Three levels of nesting.",
+      "fields": {
+        "grid": "list[dict[str, tuple[int, float]]]"
+      },
+      "payload": "grid:list[dict[str, tuple[int, float]]]",
+      "hash": "a08dec"
+    },
+    {
+      "name": "container-of-serialization-name",
+      "note": "Serialization Names appear inside containers unchanged.",
+      "fields": {
+        "nodes": "list[Node]",
+        "byStatus": "dict[Status, int]",
+        "flags": "set[Status]"
+      },
+      "payload": "byStatus:dict[Status, int],flags:set[Status],nodes:list[Node]",
+      "hash": "baa841"
+    },
+    {
+      "name": "optional-int",
+      "note": "Python Optional[int] / int | None; C# int?. 'None' sorts before 'int' because 'N' (U+004E) < 'i' (U+0069).",
+      "fields": {
+        "value": "Union[None, int]"
+      },
+      "payload": "value:Union[None, int]",
+      "hash": "3621d6"
+    },
+    {
+      "name": "union-sorting",
+      "note": "Declared as Union[str, int, bool]; members are sorted by their rendered canonical strings, so declaration order is irrelevant.",
+      "csharpDeclarable": false,
+      "fields": {
+        "value": "Union[bool, int, str]"
+      },
+      "payload": "value:Union[bool, int, str]",
+      "hash": "aa4154"
+    },
+    {
+      "name": "union-none-not-first",
+      "note": "None is NOT pinned to the front: 'Decimal' < 'None' ordinally. C#: decimal?.",
+      "fields": {
+        "value": "Union[Decimal, None]"
+      },
+      "payload": "value:Union[Decimal, None]",
+      "hash": "2aed1f"
+    },
+    {
+      "name": "union-none-middle",
+      "note": "'None' lands in the middle: Decimal < None < Path.",
+      "csharpDeclarable": false,
+      "fields": {
+        "value": "Union[Decimal, None, Path]"
+      },
+      "payload": "value:Union[Decimal, None, Path]",
+      "hash": "70861c"
+    },
+    {
+      "name": "union-nested",
+      "note": "Union members may themselves be containers; they sort by their full rendered string ('None' < 'list[int]' < 'str').",
+      "csharpDeclarable": false,
+      "fields": {
+        "value": "Union[None, list[int], str]"
+      },
+      "payload": "value:Union[None, list[int], str]",
+      "hash": "1512e6"
+    },
+    {
+      "name": "union-in-container",
+      "note": "C#: Dictionary<string, double?>.",
+      "fields": {
+        "lookup": "dict[str, Union[None, float]]"
+      },
+      "payload": "lookup:dict[str, Union[None, float]]",
+      "hash": "2f0b65"
+    },
+    {
+      "name": "union-of-serialization-names",
+      "note": "Serialization Names take part in union sorting like any other token.",
+      "csharpDeclarable": false,
+      "fields": {
+        "node": "Union[Leaf, Node, None]"
+      },
+      "payload": "node:Union[Leaf, Node, None]",
+      "hash": "ee8d0e"
+    },
+    {
+      "name": "enum-bare-name",
+      "note": "Enums render their bare Serialization Name (ADR-0001) - NOT 'mypkg.config.Status'.",
+      "fields": {
+        "status": "Status"
+      },
+      "payload": "status:Status",
+      "hash": "1c5587"
+    },
+    {
+      "name": "enum-explicit-name",
+      "note": "An enum whose class is named Status but which declares the Serialization Name 'DeviceStatus'; the declared name is what hashes.",
+      "fields": {
+        "status": "DeviceStatus"
+      },
+      "payload": "status:DeviceStatus",
+      "hash": "9a47c8"
+    },
+    {
+      "name": "versionable-name",
+      "note": "A nested Versionable renders its Serialization Name.",
+      "fields": {
+        "config": "DeviceConfig"
+      },
+      "payload": "config:DeviceConfig",
+      "hash": "77ba5b"
+    },
+    {
+      "name": "versionable-forward-ref",
+      "note": "Self-referential schema; forward references render the referenced name.",
+      "fields": {
+        "children": "list[Node]",
+        "parent": "Union[Node, None]"
+      },
+      "payload": "children:list[Node],parent:Union[Node, None]",
+      "hash": "f1fda1"
+    },
+    {
+      "name": "datetime-family",
+      "note": "Bare names, NOT 'datetime.datetime' / 'datetime.date' / ... . C#: DateTime|DateTimeOffset, DateOnly, TimeOnly, TimeSpan.",
+      "fields": {
+        "created": "datetime",
+        "day": "date",
+        "clock": "time",
+        "elapsed": "timedelta"
+      },
+      "payload": "clock:time,created:datetime,day:date,elapsed:timedelta",
+      "hash": "52c419"
+    },
+    {
+      "name": "stdlib-converters",
+      "note": "Bare names, NOT 'pathlib.Path' / 'decimal.Decimal' / 'uuid.UUID' / 're.Pattern'. C#: FilePath, decimal, Guid, Regex.",
+      "fields": {
+        "path": "Path",
+        "amount": "Decimal",
+        "id": "UUID",
+        "pattern": "Pattern"
+      },
+      "payload": "amount:Decimal,id:UUID,path:Path,pattern:Pattern",
+      "hash": "ed5251"
+    },
+    {
+      "name": "pure-paths",
+      "note": "Pure path variants keep their distinct bare names (no C# equivalent in v1).",
+      "pythonOnly": true,
+      "fields": {
+        "posix": "PurePosixPath",
+        "windows": "PureWindowsPath"
+      },
+      "payload": "posix:PurePosixPath,windows:PureWindowsPath",
+      "hash": "72b789"
+    },
+    {
+      "name": "ndarray-bare",
+      "note": "Un-parameterized array: dtype is dynamic. Python np.ndarray; no C# equivalent (Tensor<T> is always typed).",
+      "pythonOnly": true,
+      "fields": {
+        "data": "ndarray"
+      },
+      "payload": "data:ndarray",
+      "hash": "6062ef"
+    },
+    {
+      "name": "ndarray-float64",
+      "note": "Python NDArray[np.float64]; C# Tensor<double>.",
+      "fields": {
+        "data": "ndarray[float64]"
+      },
+      "payload": "data:ndarray[float64]",
+      "hash": "9ffa65",
+      "mustMatch": [
+        "ndarray-shape-erased"
+      ],
+      "mustDiffer": [
+        "ndarray-float32"
+      ]
+    },
+    {
+      "name": "ndarray-float32",
+      "note": "Same field name as ndarray-float64 with a narrower dtype; the hash MUST differ (ADR-0002).",
+      "fields": {
+        "data": "ndarray[float32]"
+      },
+      "payload": "data:ndarray[float32]",
+      "hash": "3023aa",
+      "mustDiffer": [
+        "ndarray-float64",
+        "ndarray-shape-erased"
+      ]
+    },
+    {
+      "name": "ndarray-int32",
+      "note": "C# Tensor<int> - note the array dtype is NOT width-erased, unlike scalar int.",
+      "fields": {
+        "counts": "ndarray[int32]"
+      },
+      "payload": "counts:ndarray[int32]",
+      "hash": "c37d8e",
+      "mustDiffer": [
+        "ndarray-int64"
+      ]
+    },
+    {
+      "name": "ndarray-int64",
+      "note": "C# Tensor<long>; distinct from ndarray[int32].",
+      "fields": {
+        "counts": "ndarray[int64]"
+      },
+      "payload": "counts:ndarray[int64]",
+      "hash": "ad4511",
+      "mustDiffer": [
+        "ndarray-int32"
+      ]
+    },
+    {
+      "name": "ndarray-uint8",
+      "note": "C# Tensor<byte>. Not to be confused with byte[], which renders 'bytes'.",
+      "fields": {
+        "image": "ndarray[uint8]"
+      },
+      "payload": "image:ndarray[uint8]",
+      "hash": "307e78"
+    },
+    {
+      "name": "ndarray-bool",
+      "note": "C# Tensor<bool>.",
+      "fields": {
+        "mask": "ndarray[bool]"
+      },
+      "payload": "mask:ndarray[bool]",
+      "hash": "407795"
+    },
+    {
+      "name": "ndarray-complex128",
+      "note": "C# Tensor<System.Numerics.Complex>.",
+      "fields": {
+        "spectrum": "ndarray[complex128]"
+      },
+      "payload": "spectrum:ndarray[complex128]",
+      "hash": "1feec4"
+    },
+    {
+      "name": "ndarray-float16",
+      "note": "C# Tensor<Half>.",
+      "fields": {
+        "weights": "ndarray[float16]"
+      },
+      "payload": "weights:ndarray[float16]",
+      "hash": "06bac5"
+    },
+    {
+      "name": "ndarray-shape-erased",
+      "note": "Declared in Python as np.ndarray[tuple[int, int, int], np.dtype[np.float64]] (a 3-D array). Shape is erased, so this deliberately has the same payload and hash as ndarray-float64.",
+      "fields": {
+        "data": "ndarray[float64]"
+      },
+      "payload": "data:ndarray[float64]",
+      "hash": "9ffa65",
+      "mustMatch": [
+        "ndarray-float64"
+      ],
+      "mustDiffer": [
+        "ndarray-float32"
+      ]
+    },
+    {
+      "name": "ndarray-in-container",
+      "note": "Arrays nest inside containers unchanged.",
+      "fields": {
+        "frames": "list[ndarray[uint8]]",
+        "byName": "dict[str, ndarray[float64]]"
+      },
+      "payload": "byName:dict[str, ndarray[float64]],frames:list[ndarray[uint8]]",
+      "hash": "40c2fb"
+    },
+    {
+      "name": "ndarray-optional",
+      "note": "'None' < 'ndarray[float64]' ordinally.",
+      "fields": {
+        "data": "Union[None, ndarray[float64]]"
+      },
+      "payload": "data:Union[None, ndarray[float64]]",
+      "hash": "23df9c"
+    },
+    {
+      "name": "literal-strings",
+      "note": "No 'typing.' prefix; string members are single-quoted.",
+      "fields": {
+        "mode": "Literal['fast', 'slow']"
+      },
+      "payload": "mode:Literal['fast', 'slow']",
+      "hash": "08e2ae",
+      "mustDiffer": [
+        "literal-strings-reordered"
+      ]
+    },
+    {
+      "name": "literal-strings-reordered",
+      "note": "Literal members are order-significant; must hash differently from literal-strings.",
+      "fields": {
+        "mode": "Literal['slow', 'fast']"
+      },
+      "payload": "mode:Literal['slow', 'fast']",
+      "hash": "23d37e",
+      "mustDiffer": [
+        "literal-strings"
+      ]
+    },
+    {
+      "name": "literal-ints",
+      "note": "Integer members are rendered bare (unquoted).",
+      "fields": {
+        "level": "Literal[1, 2, 3]"
+      },
+      "payload": "level:Literal[1, 2, 3]",
+      "hash": "7f9ad1"
+    },
+    {
+      "name": "literal-str-one",
+      "note": "Disambiguation pair (1 of 2): the string '1'.",
+      "fields": {
+        "value": "Literal['1']"
+      },
+      "payload": "value:Literal['1']",
+      "hash": "7696a1",
+      "mustDiffer": [
+        "literal-int-one"
+      ]
+    },
+    {
+      "name": "literal-int-one",
+      "note": "Disambiguation pair (2 of 2): the integer 1. MUST differ from literal-str-one.",
+      "fields": {
+        "value": "Literal[1]"
+      },
+      "payload": "value:Literal[1]",
+      "hash": "24682e",
+      "mustDiffer": [
+        "literal-str-one"
+      ]
+    },
+    {
+      "name": "literal-mixed",
+      "note": "Mixed string and integer members in declaration order.",
+      "fields": {
+        "tag": "Literal['auto', 0, 'off', 1]"
+      },
+      "payload": "tag:Literal['auto', 0, 'off', 1]",
+      "hash": "fd54e6"
+    },
+    {
+      "name": "literal-negative-int",
+      "note": "Negative integers keep their leading minus sign.",
+      "fields": {
+        "offset": "Literal[-1, 0, 1]"
+      },
+      "payload": "offset:Literal[-1, 0, 1]",
+      "hash": "48ff77"
+    },
+    {
+      "name": "literal-single-member",
+      "note": "One-member Literal.",
+      "fields": {
+        "kind": "Literal['only']"
+      },
+      "payload": "kind:Literal['only']",
+      "hash": "8bdbc1"
+    },
+    {
+      "name": "literal-optional",
+      "note": "'Literal[...]' < 'None' ordinally ('L' < 'N'), so None comes second.",
+      "fields": {
+        "mode": "Union[Literal['fast', 'slow'], None]"
+      },
+      "payload": "mode:Union[Literal['fast', 'slow'], None]",
+      "hash": "efe012"
+    },
+    {
+      "name": "annotated-unwrapped",
+      "note": "Declared as Annotated[float, 'dB'] and Annotated[str, Field(...)]; Annotated metadata is ignored, so this hashes as plain float/str.",
+      "fields": {
+        "gain": "float",
+        "note": "str"
+      },
+      "payload": "gain:float,note:str",
+      "hash": "882ea3"
+    },
+    {
+      "name": "annotated-nested",
+      "note": "Declared as list[Annotated[float, 'volts']]; unwrapping happens at any depth.",
+      "fields": {
+        "samples": "list[float]"
+      },
+      "payload": "samples:list[float]",
+      "hash": "998215"
+    },
+    {
+      "name": "realistic-measurement",
+      "note": "A realistic multi-field schema exercising most of the grammar at once.",
+      "fields": {
+        "name": "str",
+        "acquiredAt": "datetime",
+        "samples": "ndarray[float64]",
+        "sampleRate_Hz": "float",
+        "mode": "Literal['fast', 'slow']",
+        "status": "Status",
+        "operator": "Union[None, str]",
+        "tags": "set[str]",
+        "calibration": "Union[Calibration, None]"
+      },
+      "payload": "acquiredAt:datetime,calibration:Union[Calibration, None],mode:Literal['fast', 'slow'],name:str,operator:Union[None, str],sampleRate_Hz:float,samples:ndarray[float64],status:Status,tags:set[str]",
+      "hash": "a9eaff"
+    },
+    {
+      "name": "realistic-device-config",
+      "note": "A second realistic schema, converter-heavy.",
+      "fields": {
+        "deviceId": "UUID",
+        "firmwarePath": "Path",
+        "timeout": "timedelta",
+        "limits": "dict[str, tuple[float, float]]",
+        "channels": "list[ChannelConfig]",
+        "serialPattern": "Pattern",
+        "price": "Decimal",
+        "raw": "bytes"
+      },
+      "payload": "channels:list[ChannelConfig],deviceId:UUID,firmwarePath:Path,limits:dict[str, tuple[float, float]],price:Decimal,raw:bytes,serialPattern:Pattern,timeout:timedelta",
+      "hash": "6d37e3"
+    },
+    {
+      "name": "literal-bool",
+      "note": "Boolean Literal members render 'True'/'False'. Python checks bool before int (bool subclasses int), so Literal[True] never renders '1'.",
+      "fields": {
+        "flag": "Literal[True, False]"
+      },
+      "payload": "flag:Literal[True, False]",
+      "hash": "d03b74",
+      "mustDiffer": [
+        "literal-bool-vs-int"
+      ]
+    },
+    {
+      "name": "literal-bool-vs-int",
+      "note": "Companion to literal-bool: the integers 1 and 0 are distinct from True/False.",
+      "fields": {
+        "flag": "Literal[1, 0]"
+      },
+      "payload": "flag:Literal[1, 0]",
+      "hash": "ad973b",
+      "mustDiffer": [
+        "literal-bool"
+      ]
+    },
+    {
+      "name": "literal-none-member",
+      "note": "A None member inside Literal renders the bare 'None' token (this is a Literal member, not a Union member — no sorting applies).",
+      "pythonOnly": true,
+      "fields": {
+        "opt": "Literal['a', None]"
+      },
+      "payload": "opt:Literal['a', None]",
+      "hash": "2772ac"
+    },
+    {
+      "name": "literal-enum-member",
+      "note": "Enum-valued Literal members render '<SerializationName>.<MEMBER_NAME>'. Python-only; C# [LiteralValues] takes strings/ints.",
+      "pythonOnly": true,
+      "fields": {
+        "mode": "Literal[Status.ACTIVE, Status.IDLE]"
+      },
+      "payload": "mode:Literal[Status.ACTIVE, Status.IDLE]",
+      "hash": "0169f1"
+    },
+    {
+      "name": "literal-mixin-enum-member",
+      "note": "Precedence lock (GRAMMAR.md section 8): the member is an instance of a str-mixin enum, so it is both an enum member and a string. Enum member is tested FIRST, so this renders 'Colour.RED', not 'red'. Source: class Colour(str, Enum) with RED = 'red', GREEN = 'green'; field annotated Literal[Colour.RED, Colour.GREEN]. A value-first implementation would emit the payload \"colour:Literal['red', 'green']\" and the hash fb5ba6 - a different, legitimate schema. Python-only; C# [LiteralValues] takes strings/ints.",
+      "pythonOnly": true,
+      "fields": {
+        "colour": "Literal[Colour.RED, Colour.GREEN]"
+      },
+      "payload": "colour:Literal[Colour.RED, Colour.GREEN]",
+      "hash": "c9230b"
+    },
+    {
+      "name": "literal-escapes",
+      "note": "Escaping inside single-quoted string members: backslash -> \\\\ and single quote -> \\'. Source values are: it's  and  a\\b .",
+      "fields": {
+        "quote": "Literal['it\\'s']",
+        "backslash": "Literal['a\\\\b']"
+      },
+      "payload": "backslash:Literal['a\\\\b'],quote:Literal['it\\'s']",
+      "hash": "5bb872"
+    },
+    {
+      "name": "sort-by-name-not-pair",
+      "note": "Sort-key trap: pairs are ordered by wire NAME, not by the assembled 'name:type' string. Sorting names gives 'a' < 'a1' -> a:str,a1:int. Sorting pairs would give 'a1:int' < 'a:str' (because '1' U+0031 < ':' U+003A) -> the wrong payload and a different hash. Applies to any name that is a prefix of another whose next character sorts below ':'.",
+      "fields": {
+        "a1": "int",
+        "a": "str"
+      },
+      "payload": "a:str,a1:int",
+      "hash": "479c1a"
+    },
+    {
+      "name": "parameterized-non-container",
+      "note": "Declared as re.Pattern[str] and MyBox[int] (C#: Regex, MyBox<int>). Type parameters on types outside the closed parameterized set are dropped, so both render as bare Serialization Names.",
+      "fields": {
+        "rx": "Pattern",
+        "box": "MyBox"
+      },
+      "payload": "box:MyBox,rx:Pattern",
+      "hash": "25ae4b"
+    },
+    {
+      "name": "non-ascii-utf8",
+      "note": "Non-ASCII wire name and Literal string values. The payload is hashed as UTF-8 bytes, never UTF-16 — C# must use Encoding.UTF8.GetBytes. All characters are in the BMP, so ordinal and code-point ordering agree.",
+      "fields": {
+        "größe": "int",
+        "label": "Literal['café', '日本語']"
+      },
+      "payload": "größe:int,label:Literal['café', '日本語']",
+      "hash": "993fd4"
+    }
+  ]
+}

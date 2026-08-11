@@ -1,0 +1,69 @@
+{
+  "fixture": "enums",
+  "serializationName": "GoldenEnums",
+  "schemaHash": "660511",
+  "version": 1,
+  "note": "Enums hash by bare Serialization Name but wire as their member value, so a string-valued and an integer-valued enum look different on disk.",
+  "files": {
+    "json": "enums.json",
+    "yaml": "enums.yaml",
+    "toml": "enums.toml",
+    "hdf5": "enums.h5"
+  },
+  "values": {
+    "colour": {
+      "$enum": {
+        "type": "GoldenColour",
+        "member": "GREEN",
+        "value": "green"
+      }
+    },
+    "priority": {
+      "$enum": {
+        "type": "GoldenPriority",
+        "member": "HIGH",
+        "value": 3
+      }
+    },
+    "palette": [
+      {
+        "$enum": {
+          "type": "GoldenColour",
+          "member": "RED",
+          "value": "red"
+        }
+      },
+      {
+        "$enum": {
+          "type": "GoldenColour",
+          "member": "BLUE",
+          "value": "blue"
+        }
+      }
+    ],
+    "byName": {
+      "$dict": [
+        [
+          "accent",
+          {
+            "$enum": {
+              "type": "GoldenColour",
+              "member": "BLUE",
+              "value": "blue"
+            }
+          }
+        ],
+        [
+          "primary",
+          {
+            "$enum": {
+              "type": "GoldenColour",
+              "member": "RED",
+              "value": "red"
+            }
+          }
+        ]
+      ]
+    }
+  }
+}

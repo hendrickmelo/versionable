@@ -1,0 +1,136 @@
+name: Publish to NuGet
+
+# The .NET half of the release story; publish.yml is the PyPI half. The two packages share a
+# major.minor "generation" and are tagged separately — `vX.Y.Z` for Python, `dotnet-vX.Y.Z` here
+# (ADR-0004). GitHub cannot filter a `release` trigger by tag pattern, so every job carries the
+# prefix check and a release tagged `vX.Y.Z` runs nothing.
+#
+# There is no post-release version-bump job, unlike publish.yml. Python's version lives in
+# pyproject.toml and has to be moved back to a dev value after a tag; the C# version lives only in
+# the tag, and Versionable.csproj carries a `0.0.0-dev` placeholder that the build below replaces.
+
+on:
+  release:
+    types: [published]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (e.g., 0.3.0-preview.1). Builds the package without publishing it."
+        required: true
+
+# Nothing here writes to the repository: the version comes from the tag, not from a committed
+# file, so there is no post-release bump commit to make (publish.yml has one; this does not).
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    if: github.event_name != 'release' || startsWith(github.ref_name, 'dotnet-v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Set version from tag or input
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version || '' }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            # PRs prove the package still builds; the version is irrelevant and must not look real.
+            VERSION="0.0.0-ci.${RUN_NUMBER}"
+          elif [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="${GITHUB_REF_NAME#dotnet-v}"
+          fi
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+([.a-zA-Z0-9-]+)?$'; then
+            echo "::error::Invalid version format: $VERSION"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building version: $VERSION"
+
+      # ADR-0004: same generation means interchangeable files and feature equivalence, and the
+      # generation is the major.minor both packages share. A C# tag whose generation has drifted
+      # from pyproject.toml's would publish that promise falsely, so it stops here.
+      - name: Check the generation matches the Python package
+        if: github.event_name == 'release'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          CSHARP_GENERATION=$(echo "$VERSION" | cut -d. -f1,2)
+          PYTHON_VERSION=$(grep -m1 '^version = ' pyproject.toml | sed 's/.*"\(.*\)"/\1/')
+          PYTHON_GENERATION=$(echo "$PYTHON_VERSION" | cut -d. -f1,2)
+          if [ "$CSHARP_GENERATION" != "$PYTHON_GENERATION" ]; then
+            echo "::error::generation mismatch — this tag is $CSHARP_GENERATION but pyproject.toml is on $PYTHON_GENERATION ($PYTHON_VERSION). Per ADR-0004 the two packages share major.minor; release the matching Python generation first, or retag."
+            exit 1
+          fi
+          echo "generation $CSHARP_GENERATION matches pyproject.toml ($PYTHON_VERSION)"
+
+      # Build and test before packing. A package is not worth producing from a tree whose suite
+      # fails, and the analyzer that ships inside the package is the thing the suite exercises most.
+      - name: Build and test
+        working-directory: dotnet
+        run: |
+          dotnet build -c Release -warnaserror
+          dotnet test -c Release --no-build
+
+      # Versionable.csproj packs Versionable.Analyzers.dll into analyzers/dotnet/cs (ADR-0003) and
+      # fails the pack if it is missing, so a consumer always gets the compile-time hash check and
+      # the metadata generator with the runtime.
+      - name: Pack
+        working-directory: dotnet
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: >
+          dotnet pack src/Versionable/Versionable.csproj
+          -c Release
+          -p:Version="$VERSION"
+          -o "$GITHUB_WORKSPACE/nupkg"
+
+      - name: Show package contents
+        run: |
+          for package in "$GITHUB_WORKSPACE"/nupkg/*.nupkg; do
+            echo "== $package"
+            unzip -l "$package"
+          done
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: nupkg
+          path: nupkg/
+
+  publish:
+    if: github.event_name == 'release' && startsWith(github.ref_name, 'dotnet-v')
+    needs: build
+    runs-on: ubuntu-latest
+    environment: nuget
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: nupkg
+          path: nupkg/
+
+      # The .snupkg alongside each .nupkg is uploaded with it; it is not pushed separately.
+      - name: Push to NuGet
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: >
+          dotnet nuget push "nupkg/*.nupkg"
+          --source https://api.nuget.org/v3/index.json
+          --api-key "$NUGET_API_KEY"
+          --skip-duplicate

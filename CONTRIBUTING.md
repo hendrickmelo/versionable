@@ -111,7 +111,7 @@ from versionable._hash import computeHash
 - Tests live in `tests/` and use pytest
 - Test file names match `test_*.py`
 - Use `snake_case` for all identifiers in test files
-- Hardcode schema hashes as string literals (e.g., `hash="74a182"`) — don't call `computeHash()` in tests
+- Hardcode schema hashes as string literals (e.g., `hash="a2f240"`) — don't call `computeHash()` in tests
 
 ## Pull Requests
 

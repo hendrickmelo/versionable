@@ -1,0 +1,94 @@
+{
+  "fixture": "nested",
+  "serializationName": "GoldenNested",
+  "schemaHash": "705e61",
+  "version": 1,
+  "note": "A nested Versionable standalone, in a list, in a dict, and as an Optional. Each nested object carries its own __versionable__ envelope.",
+  "files": {
+    "json": "nested.json",
+    "yaml": "nested.yaml",
+    "toml": "nested.toml",
+    "hdf5": "nested.h5"
+  },
+  "values": {
+    "label": "assembly",
+    "inner": {
+      "$object": {
+        "name": "GoldenInner",
+        "version": 1,
+        "hash": "e37514",
+        "fields": {
+          "x": 1.5,
+          "y": -2.5
+        }
+      }
+    },
+    "points": [
+      {
+        "$object": {
+          "name": "GoldenInner",
+          "version": 1,
+          "hash": "e37514",
+          "fields": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        }
+      },
+      {
+        "$object": {
+          "name": "GoldenInner",
+          "version": 1,
+          "hash": "e37514",
+          "fields": {
+            "x": 1.0,
+            "y": 1.0
+          }
+        }
+      }
+    ],
+    "byName": {
+      "$dict": [
+        [
+          "corner",
+          {
+            "$object": {
+              "name": "GoldenInner",
+              "version": 1,
+              "hash": "e37514",
+              "fields": {
+                "x": 2.0,
+                "y": 3.0
+              }
+            }
+          }
+        ],
+        [
+          "origin",
+          {
+            "$object": {
+              "name": "GoldenInner",
+              "version": 1,
+              "hash": "e37514",
+              "fields": {
+                "x": 0.0,
+                "y": 0.0
+              }
+            }
+          }
+        ]
+      ]
+    },
+    "optionalInner": {
+      "$object": {
+        "name": "GoldenInner",
+        "version": 1,
+        "hash": "e37514",
+        "fields": {
+          "x": 9.0,
+          "y": 9.0
+        }
+      }
+    }
+  }
+}

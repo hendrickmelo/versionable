@@ -1,0 +1,162 @@
+{
+  "fixture": "arrays",
+  "serializationName": "GoldenArrays",
+  "schemaHash": "b76a00",
+  "version": 1,
+  "note": "Five hash-significant dtypes, a 2-D array (shape is erased from the hash but preserved on disk), and arrays nested in a list and a dict. HDF5 uses the default gzip level 4 + shuffle.",
+  "files": {
+    "json": "arrays.json",
+    "yaml": "arrays.yaml",
+    "toml": "arrays.toml",
+    "hdf5": "arrays.h5"
+  },
+  "values": {
+    "signal": {
+      "$ndarray": {
+        "dtype": "float64",
+        "shape": [
+          4
+        ],
+        "data": [
+          0.5,
+          -1.25,
+          2.0,
+          3.75
+        ]
+      }
+    },
+    "weights": {
+      "$ndarray": {
+        "dtype": "float32",
+        "shape": [
+          3
+        ],
+        "data": [
+          0.5,
+          0.25,
+          0.125
+        ]
+      }
+    },
+    "counts": {
+      "$ndarray": {
+        "dtype": "int32",
+        "shape": [
+          3
+        ],
+        "data": [
+          -2,
+          0,
+          7
+        ]
+      }
+    },
+    "image": {
+      "$ndarray": {
+        "dtype": "uint8",
+        "shape": [
+          3
+        ],
+        "data": [
+          0,
+          128,
+          255
+        ]
+      }
+    },
+    "mask": {
+      "$ndarray": {
+        "dtype": "bool",
+        "shape": [
+          3
+        ],
+        "data": [
+          true,
+          false,
+          true
+        ]
+      }
+    },
+    "matrix": {
+      "$ndarray": {
+        "dtype": "float64",
+        "shape": [
+          2,
+          3
+        ],
+        "data": [
+          [
+            1.0,
+            2.0,
+            3.0
+          ],
+          [
+            4.0,
+            5.0,
+            6.0
+          ]
+        ]
+      }
+    },
+    "traces": [
+      {
+        "$ndarray": {
+          "dtype": "float64",
+          "shape": [
+            2
+          ],
+          "data": [
+            1.0,
+            2.0
+          ]
+        }
+      },
+      {
+        "$ndarray": {
+          "dtype": "float64",
+          "shape": [
+            3
+          ],
+          "data": [
+            3.0,
+            4.0,
+            5.0
+          ]
+        }
+      }
+    ],
+    "channels": {
+      "$dict": [
+        [
+          "ch0",
+          {
+            "$ndarray": {
+              "dtype": "float64",
+              "shape": [
+                2
+              ],
+              "data": [
+                0.25,
+                0.5
+              ]
+            }
+          }
+        ],
+        [
+          "ch1",
+          {
+            "$ndarray": {
+              "dtype": "float64",
+              "shape": [
+                1
+              ],
+              "data": [
+                0.75
+              ]
+            }
+          }
+        ]
+      ]
+    }
+  }
+}

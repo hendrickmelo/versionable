@@ -1,0 +1,28 @@
+{
+  "fixture": "scalars",
+  "serializationName": "GoldenScalars",
+  "schemaHash": "c51ec9",
+  "version": 1,
+  "note": "Every scalar token with a C# counterpart. 'ratio' and 'phase' use exactly representable binary fractions so no backend's float formatting can round-trip lossily.",
+  "files": {
+    "json": "scalars.json",
+    "yaml": "scalars.yaml",
+    "toml": "scalars.toml",
+    "hdf5": "scalars.h5"
+  },
+  "values": {
+    "text": "probe-A",
+    "count": -42,
+    "ratio": 9.8125,
+    "enabled": true,
+    "phase": {
+      "$complex": [
+        1.5,
+        -2.25
+      ]
+    },
+    "blob": {
+      "$bytes": "AAH+/w=="
+    }
+  }
+}

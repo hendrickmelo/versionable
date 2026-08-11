@@ -144,7 +144,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 @dataclass
-class Experiment(Versionable, version=1, hash="536849"):
+class Experiment(Versionable, version=1, hash="f94ba1"):
     name: str
     traces: NDArray[np.float64] = field(default_factory=lambda: np.empty((0, 1024)))
 

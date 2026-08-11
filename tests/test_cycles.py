@@ -61,7 +61,7 @@ class _Node(Versionable, version=1, hash="b54495", register=False):
 
 
 @dataclass
-class _Person(Versionable, version=1, hash="130ace", register=False):
+class _Person(Versionable, version=1, hash="a51071", register=False):
     name: str
     partner: _Person | None = None
 

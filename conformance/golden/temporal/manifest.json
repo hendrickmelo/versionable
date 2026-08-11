@@ -1,0 +1,30 @@
+{
+  "fixture": "temporal",
+  "serializationName": "GoldenTemporal",
+  "schemaHash": "3856a2",
+  "version": 1,
+  "note": "Naive and offset-aware datetimes, microsecond precision, and a timedelta wired as total seconds.",
+  "files": {
+    "json": "temporal.json",
+    "yaml": "temporal.yaml",
+    "toml": "temporal.toml",
+    "hdf5": "temporal.h5"
+  },
+  "values": {
+    "naive": {
+      "$datetime": "2026-08-05T14:30:15.123456"
+    },
+    "aware": {
+      "$datetime": "2026-08-05T14:30:15.123456-05:00"
+    },
+    "day": {
+      "$date": "2026-08-05"
+    },
+    "clock": {
+      "$time": "23:59:58.500000"
+    },
+    "elapsed": {
+      "$timedeltaSeconds": 90061.5
+    }
+  }
+}

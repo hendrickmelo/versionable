@@ -33,6 +33,7 @@ from versionable._base import (
     metadata,
     registeredClasses,
 )
+from versionable._hash import setSerializationName
 from versionable._hdf5_field import Hdf5FieldInfo
 from versionable._json_backend import JsonBackend
 from versionable._migration import Migration, MigrationContext, migration
@@ -44,9 +45,11 @@ from versionable.errors import (
     BackendError,
     CircularReferenceError,
     ConverterError,
+    DtypeMismatchError,
     HashMismatchError,
     MigrationError,
     UnknownFieldError,
+    UnsupportedTypeError,
     UpgradeRequiredError,
     VersionableError,
     VersionError,
@@ -77,6 +80,7 @@ __all__ = [
     "BackendError",
     "CircularReferenceError",
     "ConverterError",
+    "DtypeMismatchError",
     "HashMismatchError",
     "Hdf5Backend",
     "Hdf5FieldInfo",
@@ -86,6 +90,7 @@ __all__ = [
     "MigrationError",
     "TomlBackend",
     "UnknownFieldError",
+    "UnsupportedTypeError",
     "UpgradeRequiredError",
     "VersionError",
     "Versionable",
@@ -105,4 +110,5 @@ __all__ = [
     "registerConverter",
     "registeredClasses",
     "save",
+    "setSerializationName",
 ]

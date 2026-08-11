@@ -1,0 +1,10 @@
+naive = "2026-08-05T14:30:15.123456"
+aware = "2026-08-05T14:30:15.123456-05:00"
+day = "2026-08-05"
+clock = "23:59:58.500000"
+elapsed = 90061.5
+
+[__versionable__]
+object = "GoldenTemporal"
+version = 1
+hash = "3856a2"

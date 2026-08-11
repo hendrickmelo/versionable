@@ -1,0 +1,19 @@
+{
+  "fixture": "literals",
+  "serializationName": "GoldenLiterals",
+  "schemaHash": "2085b2",
+  "version": 1,
+  "note": "Literal member kinds: string, integer, boolean, and a mixed set where the chosen value is the integer 1 rather than the string 'off'.",
+  "files": {
+    "json": "literals.json",
+    "yaml": "literals.yaml",
+    "toml": "literals.toml",
+    "hdf5": "literals.h5"
+  },
+  "values": {
+    "mode": "slow",
+    "level": 3,
+    "flag": false,
+    "tag": 1
+  }
+}

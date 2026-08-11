@@ -34,7 +34,7 @@ from .conftest import Inner, SimpleConfig, WithNested
 class WithArray(
     Versionable,
     version=1,
-    hash="c0dc53",
+    hash="ea75aa",
     register=False,
 ):
     name: str

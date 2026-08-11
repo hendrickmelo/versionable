@@ -198,14 +198,14 @@ matrix so that existing v1 files load correctly into the new schema without any 
 ```python
 # v1 — timestamps were the first column of raw_data
 @dataclass
-class Recording(Versionable, version=1, hash="c3a812"):
+class Recording(Versionable, version=1, hash="8b5f0d"):
     name: str
     raw_data: npt.NDArray[np.float64]  # shape (N, M) — first column is timestamps
 
 
 # v2 — timestamps promoted to their own field
 @dataclass
-class Recording(Versionable, version=2, hash="d0155b"):
+class Recording(Versionable, version=2, hash="38f7fd"):
     name: str
     timestamps: npt.NDArray[np.float64]  # new in v2; extracted from the first column of raw_data
     raw_data: npt.NDArray[np.float64]    # still present — derive keeps the source field by default

@@ -1,0 +1,31 @@
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <!-- Runtime library. JSON is in-box (System.Text.Json); the rest back one backend each. -->
+  <ItemGroup>
+    <PackageVersion Include="YamlDotNet" Version="18.1.0" />
+    <PackageVersion Include="Tomlyn" Version="2.10.1" />
+    <PackageVersion Include="PureHDF" Version="2.1.4" />
+    <PackageVersion Include="PureHDF.Filters.Blosc2" Version="2.1.4" />
+    <PackageVersion Include="System.Numerics.Tensors" Version="10.0.10" />
+  </ItemGroup>
+
+  <!-- Roslyn component. 4.8.0 is the Roslyn of the earliest .NET 8 SDK; pinning it low
+       keeps the shipped analyzer loadable by every .NET 8+ toolchain. Raising it raises
+       the minimum SDK required of package consumers. -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
+  </ItemGroup>
+
+  <!-- Tests. -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+</Project>

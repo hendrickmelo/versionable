@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from versionable._arrays import coerceToDtype
 from versionable.errors import BackendError
 
 if TYPE_CHECKING:
@@ -32,7 +33,7 @@ class DatasetArray:
     Not thread-safe — HDF5 does not support concurrent writes by default.
     """
 
-    __slots__ = ("_axis", "_closed", "_dataset", "_fieldName", "_writable")
+    __slots__ = ("_axis", "_closed", "_dataset", "_declaredDtype", "_fieldName", "_writable")
 
     def __init__(
         self,
@@ -41,11 +42,15 @@ class DatasetArray:
         axis: int,
         *,
         writable: bool = True,
+        declaredDtype: Any = None,
     ) -> None:
         self._dataset = dataset
         self._fieldName = fieldName
         self._axis = axis
         self._writable = writable
+        # Dtype declared by the field annotation, enforced on append.  None for
+        # a bare ``np.ndarray`` field, whose on-disk dtype is incidental.
+        self._declaredDtype = declaredDtype
         self._closed = False
 
     def _checkOpen(self) -> None:
@@ -61,6 +66,7 @@ class DatasetArray:
         """Append data along the append axis, resizing the dataset."""
         self._checkWritable()
         self._validateShape(data)
+        data = coerceToDtype(data, self._declaredDtype, fieldPath=self._fieldName, context="save")
         axis = self._axis
         currentSize = self._dataset.shape[axis]
         newSlices = data.shape[axis] if data.ndim > axis else 1

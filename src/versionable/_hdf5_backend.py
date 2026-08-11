@@ -36,6 +36,7 @@ except ImportError as e:
 
 import numpy as np
 
+from versionable._arrays import coerceArrayDtype, declaredDtype, resolveCast
 from versionable._backend import Backend, registerBackend
 from versionable._base import Versionable, _resolveFields, metadata
 from versionable._hdf5_compression import DEFAULT_COMPRESSION, Hdf5Compression
@@ -193,6 +194,7 @@ def _writeValue(
 
     # np.ndarray → dataset with compression
     if isinstance(value, np.ndarray):
+        value = coerceArrayDtype(value, fieldType, fieldPath=path, context="save")
         group.create_dataset(name, data=value, **datasetKwargs)
         return
 
@@ -422,7 +424,7 @@ def _readFields(
                 elif ctx.preloadAll or key in ctx.preloadSet:
                     fields[key] = item[()]
                 else:
-                    fields[key] = LazyArray(ctx.path, datasetPath)
+                    fields[key] = LazyArray(ctx.path, datasetPath, _lazyCastDtype(item.dtype, fieldType, key))
                     lazyFields.add(key)
             else:
                 fields[key] = _readDataset(item, fieldType)
@@ -676,6 +678,36 @@ def _isArrayCollectionField(fieldType: Any) -> bool:
     return False
 
 
+def _lazyCastDtype(storedDtype: Any, fieldType: Any, fieldPath: str) -> Any:
+    """Check a dataset's stored dtype against its annotation before it is read.
+
+    HDF5 dataset dtypes live in the header, so a file whose array dtype drifted
+    unsafely from the schema fails at ``load()`` rather than on first attribute
+    access.  Returns the declared dtype, which the sentinel applies when the
+    array is materialized, or ``None`` when the field declares none.
+    """
+    declared = declaredDtype(fieldType)
+    resolveCast(storedDtype, declared, fieldPath=fieldPath, context="load")
+    return declared
+
+
+def _lazyCollectionDtype(group: h5py.Group, keys: list[str], elemType: Any, groupPath: str) -> Any:
+    """Check every element dataset in a lazy array collection against *elemType*.
+
+    Returns the *declared* dtype rather than a per-file cast target: elements of
+    one collection can be stored with different dtypes, so the sentinel has to
+    decide element by element whether a cast is needed.
+    """
+    declared = declaredDtype(elemType)
+    if declared is None:
+        return None
+    for key in keys:
+        item = group[key]
+        if isinstance(item, h5py.Dataset):
+            resolveCast(item.dtype, declared, fieldPath=f"{groupPath}/{key}", context="load")
+    return declared
+
+
 def _makeLazyCollection(path: Path, group: h5py.Group, fieldType: Any) -> Any:
     """Create a LazyArrayList or LazyArrayDict for an array collection group."""
     from versionable._lazy import LazyArrayDict, LazyArrayList
@@ -687,12 +719,14 @@ def _makeLazyCollection(path: Path, group: h5py.Group, fieldType: Any) -> Any:
     args = typing.get_args(fieldType)
     if origin is list:
         keys = sorted(group.keys(), key=int)
-        return LazyArrayList(path, groupPath, keys)
+        elemDtype = _lazyCollectionDtype(group, keys, args[0] if args else None, groupPath)
+        return LazyArrayList(path, groupPath, keys, elemDtype)
     if origin is dict:
         keyType = args[0] if args else str
         hdf5Keys = list(group.keys())
         decodedKeys = [_strToKey(k, keyType) for k in hdf5Keys]
-        return LazyArrayDict(path, groupPath, decodedKeys, hdf5Keys=hdf5Keys)
+        valueDtype = _lazyCollectionDtype(group, hdf5Keys, args[1] if len(args) > 1 else None, groupPath)
+        return LazyArrayDict(path, groupPath, decodedKeys, hdf5Keys=hdf5Keys, declaredDtype=valueDtype)
     # Shouldn't get here — _isArrayCollectionField guards the call
     return _readGroup(group, fieldType)
 
