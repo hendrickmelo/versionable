@@ -2,7 +2,7 @@
 
 Versioned persistence for Python 3.12+ dataclasses: files carry a version number and a schema hash, and load across schema changes through declarative migrations. Pixi for the environment; pip-installable through hatchling for consumers.
 
-<!-- conventions:begin source=personal_preferences/agents/conventions.md — edit the source, then run scripts/sync-conventions.sh -->
+<!-- conventions:begin source=personal_preferences/agents/AGENTS.md — edit the block there, then run scripts/sync-conventions.sh -->
 ## Conventions
 
 ### Commits
