@@ -51,7 +51,7 @@ Versioned persistence for Python 3.12+ dataclasses: files carry a version number
 
 ## Build and checks
 
-- `pixi run -e default cleanup` is the cleanup task (ruff format and lint, mypy, pyright, prettier, markdownlint, nb-clean). The `-e default` is required: `pyright` exists in three environments, so the bare task name is ambiguous and pixi refuses to run it. `pixi run test` runs pytest. `pixi run -e default ci` is the check-only form, and `pixi run ci-all` also runs the `minimal` environment without HDF5, which CI tests.
+- `pixi run cleanup` is the cleanup task (ruff format and lint, mypy, pyright, prettier, markdownlint, nb-clean). `pixi run test` runs pytest. `pixi run ci-all` is the check-only form across the `default` and `minimal` (no HDF5) environments, the same matrix CI runs. `ci` has a different body per environment, so run it with `-e`; a bare task name with two bodies is ambiguous and pixi refuses it outside a terminal. That is why the minimal pyright task is named `pyright-minimal` rather than overriding `pyright`.
 - Never exclude a source file from pyright or mypy in `pyproject.toml`; fix the type error. When a suppression is unavoidable (broken third-party stubs), use the narrowest scope: an inline `# pyright: ignore[ruleCode]` with a comment saying why, or a file-level `# pyright: ruleCode=false` only when every line in the file hits the same stub issue.
 
 ## Schema hashes
