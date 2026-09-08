@@ -6,6 +6,9 @@
     "table-column-style": false
   },
   "ignores": [
+    // AGENTS.md is excluded because part of it is pasted verbatim by an external
+    // sync script and compared byte-for-byte; it cannot be reflowed to fit MD013.
+    "AGENTS.md",
     ".*/**",
     "docs/_build/**",
     "docs/plans/**",

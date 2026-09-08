@@ -3,6 +3,20 @@
 Serialization framework for Python 3.12+ dataclasses with schema versioning, hash validation, declarative migrations,
 type converters, and pluggable storage backends.
 
+## Contents
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Defining Versionable Classes](#defining-versionable-classes)
+- [Saving and Loading](#saving-and-loading)
+- [Backends](#backends) — HDF5 details, sessions
+- [Supported Types](#supported-types) — built-in, enums, literals, custom types
+- [Migrations](#migrations) — declarative, imperative, when not to bump, renaming a class
+- [Introspection](#introspection)
+- [Error Handling](#error-handling)
+- [Limitations](#limitations)
+- [Common Patterns](#common-patterns)
+
 ## Installation
 
 ```bash
