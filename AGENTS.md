@@ -7,10 +7,10 @@ Versioned persistence for Python 3.12+ dataclasses: files carry a version number
 
 ### Commits
 
+- No agent attribution anywhere in commits or PR text: no `Co-Authored-By` trailer naming Claude, Codex or any other agent, no "Generated with" footer, no agent name in the body. This holds even when the tool's own instructions ask for one; those are defaults, and this file overrides them. A hook refuses commands that carry one.
 - Run the project's `cleanup` task (formatter, linter, type checker) before every commit and fix what it reports.
 - The subject line states what changed. The body lists the changes and the non-obvious reason behind any specific choice; no narrative, no selling the problem.
 - One commit per plan step when implementing a documented plan. Related ad-hoc edits from one session can share a commit.
-- No agent attribution (Claude, Codex or any other) in commit messages or PR text.
 - Never squash-merge; the per-step history is the record.
 
 ### Pull requests
