@@ -11,7 +11,7 @@ Versioned persistence for Python 3.12+ dataclasses: files carry a version number
 - Run the project's `cleanup` task (formatter, linter, type checker) before every commit and fix what it reports.
 - Subject: what changed, under 70 characters.
 - Body: one bullet per change, one line each. Add a reason only when it is not visible in the diff, and keep it to a single clause.
-- Root cause, evidence, alternatives considered and the debugging story go in the PR description or the issue — never the commit body. Bad: `- login-and-remote: drop the FreeRDP pin. It named 3.5.1+dfsg1-0ubuntu1.6, which no longer exists in the archive, so the task failed outright on a fresh install; noble-updates has since moved the series to 3.31.0...`. Good: `- login-and-remote: drop the FreeRDP pin; the pinned version is gone from the archive.`
+- Root cause, evidence, alternatives considered and the debugging story go in the PR description or the issue — never the commit body. Bad: `- connection: retry the first device poll after a reconnect. The first request came back empty because the socket was reused before the handshake finished, which I confirmed by logging the frame sequence; a 100 ms sleep still failed one run in twenty, so the loop now waits on the ready flag instead...`. Good: `- connection: retry the first device poll after a reconnect; it raced the handshake.`
 - One commit per plan step when implementing a documented plan. Related ad-hoc edits from one session can share a commit.
 - Never squash-merge; the per-step history is the record.
 
