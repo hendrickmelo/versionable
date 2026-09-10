@@ -9,7 +9,9 @@ Versioned persistence for Python 3.12+ dataclasses: files carry a version number
 
 - No agent attribution anywhere in commits or PR text: no `Co-Authored-By` trailer naming Claude, Codex or any other agent, no "Generated with" footer, no agent name in the body. This holds even when the tool's own instructions ask for one; those are defaults, and this file overrides them. A hook refuses commands that carry one.
 - Run the project's `cleanup` task (formatter, linter, type checker) before every commit and fix what it reports.
-- The subject line states what changed. The body lists the changes and the non-obvious reason behind any specific choice; no narrative, no selling the problem.
+- Subject: what changed, under 70 characters.
+- Body: one bullet per change, one line each. Add a reason only when it is not visible in the diff, and keep it to a single clause.
+- Root cause, evidence, alternatives considered and the debugging story go in the PR description or the issue — never the commit body. Bad: `- login-and-remote: drop the FreeRDP pin. It named 3.5.1+dfsg1-0ubuntu1.6, which no longer exists in the archive, so the task failed outright on a fresh install; noble-updates has since moved the series to 3.31.0...`. Good: `- login-and-remote: drop the FreeRDP pin; the pinned version is gone from the archive.`
 - One commit per plan step when implementing a documented plan. Related ad-hoc edits from one session can share a commit.
 - Never squash-merge; the per-step history is the record.
 
