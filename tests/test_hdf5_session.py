@@ -19,13 +19,13 @@ import numpy.typing as npt
 import versionable
 import versionable.hdf5
 from versionable import Hdf5FieldInfo, Versionable
-from versionable._dataset_array import DatasetArray
 from versionable._hdf5_field import (
     _computeChunkSize,
     _getHdf5FieldInfo,
     _resolveAppendAxis,
 )
 from versionable.errors import BackendError
+from versionable.hdf5 import DatasetArray
 
 # ---------------------------------------------------------------------------
 # Test classes

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Literal, overload
 
 from versionable._base import Versionable
+from versionable._dataset_array import DatasetArray as DatasetArray
 from versionable._hdf5_compression import BLOSC_DEFAULT as BLOSC_DEFAULT
 from versionable._hdf5_compression import DEFAULT_COMPRESSION as DEFAULT_COMPRESSION
 from versionable._hdf5_compression import GZIP_DEFAULT as GZIP_DEFAULT
