@@ -92,6 +92,7 @@ __all__ = [
     "ZSTD_BEST",
     "ZSTD_DEFAULT",
     "ZSTD_FAST",
+    "DatasetArray",
     "Hdf5Compression",
     "Hdf5Session",
     "SessionMode",

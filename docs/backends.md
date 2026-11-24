@@ -459,9 +459,9 @@ from `versionable.hdf5` to narrow the field first:
 ```python
 from versionable.hdf5 import DatasetArray
 
-with versionable.hdf5.open(Experiment, "run001.h5") as exp:
-    assert isinstance(exp.timestamps, DatasetArray)
-    exp.timestamps.append(chunk.time)
+with versionable.hdf5.open(Experiment, "run001.h5", mode="resume") as exp:
+    assert isinstance(exp.waveform, DatasetArray)
+    exp.waveform.append(chunk.raw)
 ```
 
 #### Session Modes
