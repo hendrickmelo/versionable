@@ -209,6 +209,7 @@ from versionable import MigrationContext, migration
 
 class Migrate:
     @migration(fromVersion=2)
+    @staticmethod
     def from_v2(ctx: MigrationContext) -> None:
         ctx["computed"] = ctx.pop("source") * 2
 ```

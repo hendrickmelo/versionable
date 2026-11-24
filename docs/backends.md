@@ -453,6 +453,17 @@ exp = versionable.load(Experiment, "run001.h5")
 All ndarray fields in a session are backed by resizable HDF5 datasets and wrapped with `DatasetArray`. Every ndarray
 supports `.append()`, element writes (write-through to disk), `.resize()`, and numpy interop — no annotation required.
 
+The class still declares those fields as ndarrays, so a type checker rejects `.append()` on them. Import `DatasetArray`
+from `versionable.hdf5` to narrow the field first:
+
+```python
+from versionable.hdf5 import DatasetArray
+
+with versionable.hdf5.open(Experiment, "run001.h5", mode="resume") as exp:
+    assert isinstance(exp.waveform, DatasetArray)
+    exp.waveform.append(chunk.raw)
+```
+
 #### Session Modes
 
 | Mode                 | Behavior                                              |

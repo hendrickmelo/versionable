@@ -362,6 +362,7 @@ from versionable import MigrationContext, migration
 
 class Migrate:
     @migration(fromVersion=2)
+    @staticmethod
     def from_v2(ctx: MigrationContext) -> None:
         raw = ctx.pop("rawData")
         ctx["timestamps"] = [row[0] for row in raw]

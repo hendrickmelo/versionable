@@ -206,6 +206,38 @@ class TestEndToEndMigration:
         assert loaded.name == "old-config"
         assert loaded.count == 42  # Filled by migration
 
+    def test_loadWithStaticmethodMigration(self, tmp_path: Path) -> None:
+        """An imperative migration declared as a staticmethod, the form type checkers accept, runs on load."""
+
+        @dataclass
+        class Config(Versionable, version=2, name="MigStaticConfig", register=True):
+            name: str
+            count: int = 0
+
+            class Migrate:
+                @migration(fromVersion=1)
+                @staticmethod
+                def fromV1(ctx: MigrationContext) -> None:
+                    ctx["count"] = len(ctx["name"])
+
+        p = tmp_path / "old.json"
+        p.write_text(
+            json.dumps(
+                {
+                    "__versionable__": {
+                        "object": "MigStaticConfig",
+                        "version": 1,
+                        "hash": "",
+                    },
+                    "name": "old-config",
+                }
+            )
+        )
+
+        loaded = versionable.load(Config, p)
+        assert loaded.name == "old-config"
+        assert loaded.count == len("old-config")
+
     def test_loadWithRename(self, tmp_path: Path) -> None:
         @dataclass
         class Doc(Versionable, version=2, name="MigDoc", register=True):
