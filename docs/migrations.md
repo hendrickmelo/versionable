@@ -262,12 +262,16 @@ class WorkerConfig(Versionable, version=3, hash="beb912"):
         v1 = Migration().rename("title", "name")
 
         @migration(fromVersion=2)
+        @staticmethod
         def from_v2(ctx: MigrationContext) -> None:
             # "aggressive" mode stored retries as a multiplier — convert back to absolute count
             if ctx["mode"] == "aggressive":
                 ctx["retries"] = ctx["retries"] * 10
             ctx.drop("mode")  # mode no longer exists in v3
 ```
+
+Declare the function a `@staticmethod` under `@migration`. It runs the same either way, but without it pyright and
+pyrefly read `ctx` as the `Migrate` class's `self` and reject its annotation.
 
 `MigrationContext` behaves like a mutable dict over the raw deserialized data. Read and write fields by key; call
 `ctx.drop(key)` to remove a field that was deleted in the new version.

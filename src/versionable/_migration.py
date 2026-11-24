@@ -200,8 +200,12 @@ def migration(fromVersion: int) -> Callable[[Callable[[MigrationContext], None]]
 
         class Migrate:
             @migration(fromVersion=1)
+            @staticmethod
             def from_v1(ctx: MigrationContext) -> None:
                 ctx['new_field'] = ctx.pop('old_field') * 2
+
+    ``@staticmethod`` is optional at runtime, but without it pyright and pyrefly read ``ctx`` as ``self`` of
+    ``Migrate`` and reject its annotation.
     """
 
     def decorator(fn: Callable[[MigrationContext], None]) -> _ImperativeMigration:
