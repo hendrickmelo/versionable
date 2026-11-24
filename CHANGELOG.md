@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- `DatasetArray` is importable from `versionable.hdf5`, so session code can narrow an ndarray field to it before calling
+  `.append()` or `.resize()` without reaching into a private module.
+- The docs declare imperative migrations as `@staticmethod` under `@migration`. Without it pyright and pyrefly read
+  `ctx` as the `Migrate` class's `self` and reject its annotation; the function runs the same either way.
+
 ## 0.2.1 (2026-05-08)
 
 - Nested `Versionable` dataclasses with a field named `object`, `version`, `hash`, `format`, `format_be`, or
